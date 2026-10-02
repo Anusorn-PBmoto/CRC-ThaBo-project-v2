@@ -1,0 +1,6 @@
+{
+  "name": "CRC ThaBo - ระบบนับสต็อกยางและคลังสินค้า",
+  "description": "ระบบนับสต็อกด่วนและจัดการคลังยางเรเดียล Tubeless เชื่อมต่อ Firebase แสดงผลแบบเรียลไทม์ CRC ThaBo project",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

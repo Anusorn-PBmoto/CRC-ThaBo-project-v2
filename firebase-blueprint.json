@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "tire": {
+      "title": "Tire",
+      "description": "Motorcycle tire inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "brand": { "type": "string", "maxLength": 50 },
+        "size": { "type": "string", "maxLength": 50 },
+        "rim": { "type": "string", "maxLength": 10 },
+        "systemQty": { "type": "number" },
+        "actualQty": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "checked", "discrepancy"] },
+        "category": { "type": "string", "maxLength": 50 },
+        "location": { "type": "string", "maxLength": 100 },
+        "zone": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 200 },
+        "minStock": { "type": "number" },
+        "isOem": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["brand", "size", "rim", "systemQty", "actualQty", "status"]
+    },
+    "auditSession": {
+      "title": "AuditSession",
+      "description": "Quick audit session record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string", "maxLength": 50 },
+        "zone": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "enum": ["in_progress", "completed"] },
+        "totalItems": { "type": "number" },
+        "checkedItems": { "type": "number" },
+        "discrepancyCount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["code", "zone", "status"]
+    },
+    "auditLog": {
+      "title": "AuditLog",
+      "description": "Log record for tire audit and stock adjustment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tireId": { "type": "string", "maxLength": 100 },
+        "tireName": { "type": "string", "maxLength": 100 },
+        "brand": { "type": "string", "maxLength": 50 },
+        "diff": { "type": "number" },
+        "previousQty": { "type": "number" },
+        "newQty": { "type": "number" },
+        "action": { "type": "string", "maxLength": 50 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "note": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["tireId", "tireName", "brand", "diff", "action", "timestamp"]
+    },
+    "transaction": {
+      "title": "Transaction",
+      "description": "Buy/Sell record for automatic stock cutting and restocking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["sale", "purchase"] },
+        "tireId": { "type": "string", "maxLength": 100 },
+        "tireName": { "type": "string", "maxLength": 100 },
+        "brand": { "type": "string", "maxLength": 50 },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "totalPrice": { "type": "number" },
+        "customerOrSupplier": { "type": "string", "maxLength": 100 },
+        "note": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["type", "tireId", "tireName", "quantity", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/tires/{tireId}": {
+      "schema": { "$ref": "#/entities/tire" },
+      "description": "Tire inventory catalog and audit counts"
+    },
+    "/audit_sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/auditSession" },
+      "description": "Audit session summaries"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/auditLog" },
+      "description": "Audit logs and transaction records"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/transaction" },
+      "description": "Buy and sell transactions with auto stock deduction"
+    }
+  }
+}
