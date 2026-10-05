@@ -202,6 +202,7 @@ export function subscribeToTires(
           zone: data.zone || 'ห้องยางชั้น 2',
           description: data.description || '',
           minStock: typeof data.minStock === 'number' ? data.minStock : 2,
+          barcode: data.barcode || undefined,
           imageUrl: data.imageUrl || '',
           updatedAt: data.updatedAt || new Date().toISOString(),
           isOem: Boolean(data.isOem),

@@ -243,21 +243,58 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
               >
                 {/* Top Row: Brand & Size + Status */}
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-slate-100 tracking-wide">
-                      {tire.brand} {tire.size}
-                    </h3>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#1b2b46] text-blue-300 border border-blue-500/30">
-                      {tire.rim}&quot;
-                    </span>
-                    {tire.isOem && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-600/40">
-                        {tire.oemLabel || 'OEM ศูนย์'}
-                      </span>
+                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                    {tire.imageUrl && (
+                      <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 flex-shrink-0 flex items-center justify-center shadow-inner">
+                        <img
+                          src={tire.imageUrl}
+                          alt={`${tire.brand} ${tire.size}`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                        />
+                      </div>
                     )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h3 className="text-sm font-bold text-slate-100 tracking-wide">
+                          {tire.brand} {tire.size}
+                        </h3>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#1b2b46] text-blue-300 border border-blue-500/30">
+                          {tire.rim}&quot;
+                        </span>
+                        {tire.isOem && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-600/40">
+                            {tire.oemLabel || 'OEM ศูนย์'}
+                          </span>
+                        )}
+                        {tire.barcode && (
+                          <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                            <ScanBarcode className="w-2.5 h-2.5" />
+                            <span>{tire.barcode}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Subtitle: System quantity & location */}
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-300 font-medium">
+                          ระบบ: {tire.systemQty} เส้น
+                        </span>
+                        <span>•</span>
+                        <span>{tire.location}</span>
+                        {tire.description && (
+                          <>
+                            <span>•</span>
+                            <span className="text-slate-500 truncate max-w-[150px]">
+                              {tire.description}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                     {/* Status badge */}
                     {isChecked ? (
                       <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
@@ -320,23 +357,6 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
-
-                {/* Subtitle: System quantity & location */}
-                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-slate-300 font-medium">
-                    ระบบ: {tire.systemQty} เส้น
-                  </span>
-                  <span>•</span>
-                  <span>{tire.location}</span>
-                  {tire.description && (
-                    <>
-                      <span>•</span>
-                      <span className="text-slate-500 truncate max-w-[150px]">
-                        {tire.description}
-                      </span>
-                    </>
-                  )}
                 </div>
 
                 {/* Count and Stepper Row */}

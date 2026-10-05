@@ -14,6 +14,7 @@ export interface TireItem {
   description: string; // e.g. "ยางสปอร์ต สกู๊ตเตอร์", "Vespa Sprint / Grand Filano หน้า"
   minStock: number;
   price?: number; // Standard selling price in THB
+  barcode?: string; // Barcode / QR Code
   isOem?: boolean;
   oemLabel?: string; // e.g. "OEM ศูนย์"
   imageUrl?: string;

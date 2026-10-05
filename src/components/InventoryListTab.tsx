@@ -343,26 +343,52 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                     >
                       {/* Top Row: Title, Badge, Edit/Trash */}
                       <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
                           {isMultiSelectMode && (
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleSelect(tire.id)}
-                              className="w-4 h-4 rounded text-amber-500 bg-slate-850 border-slate-700 focus:ring-0"
+                              className="w-4 h-4 rounded text-amber-500 bg-slate-850 border-slate-700 focus:ring-0 flex-shrink-0"
                             />
                           )}
-                          <h4 className="text-sm font-bold text-slate-100">
-                            {tire.size}
-                          </h4>
-                          {tire.isOem && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-600/40">
-                              {tire.oemLabel || 'OEM ศูนย์'}
-                            </span>
+
+                          {tire.imageUrl && (
+                            <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 flex-shrink-0 flex items-center justify-center shadow-inner">
+                              <img
+                                src={tire.imageUrl}
+                                alt={`${tire.brand} ${tire.size}`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                              />
+                            </div>
                           )}
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h4 className="text-sm font-bold text-slate-100">
+                                {tire.size}
+                              </h4>
+                              {tire.isOem && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-600/40">
+                                  {tire.oemLabel || 'OEM ศูนย์'}
+                                </span>
+                              )}
+                              {tire.barcode && (
+                                <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                  <ScanBarcode className="w-2.5 h-2.5" />
+                                  <span>{tire.barcode}</span>
+                                </span>
+                              )}
+                            </div>
+                            {/* Subtitle / Vehicle description */}
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">
+                              {tire.description || `${tire.brand} ขอบ ${tire.rim} นิ้ว`}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
                           {/* Stock Quantity Badge */}
                           {isZero ? (
                             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-950/80 border border-rose-500/40 text-rose-400 flex items-center gap-1">
@@ -400,11 +426,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                           </button>
                         </div>
                       </div>
-
-                      {/* Subtitle / Vehicle description */}
-                      <p className="text-xs text-slate-400 mt-1">
-                        {tire.description || `${tire.brand} ขอบ ${tire.rim} นิ้ว`}
-                      </p>
 
                       {/* Location & Action row */}
                       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-800/60 text-xs">
