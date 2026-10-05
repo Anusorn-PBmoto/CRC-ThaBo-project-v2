@@ -48,7 +48,38 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // If fewer than 70 items (e.g. only 1 item after sale), recover the full 80-item catalog
+          // while preserving the user's updated stock (e.g. 0 qty for the sold tire)!
+          if (parsed.length < 70) {
+            const recovered = defaultTiresList.map((defaultTire) => {
+              const userTire = parsed.find(
+                (p: TireItem) =>
+                  p.id === defaultTire.id ||
+                  (p.brand.toLowerCase() === defaultTire.brand.toLowerCase() &&
+                    p.size.toLowerCase() === defaultTire.size.toLowerCase())
+              );
+              return userTire ? { ...defaultTire, ...userTire } : defaultTire;
+            });
+            parsed.forEach((p: TireItem) => {
+              if (
+                !recovered.some(
+                  (r) =>
+                    r.id === p.id ||
+                    (r.brand.toLowerCase() === p.brand.toLowerCase() &&
+                      r.size.toLowerCase() === p.size.toLowerCase())
+                )
+              ) {
+                recovered.push(p);
+              }
+            });
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(recovered));
+            } catch {}
+            return recovered;
+          }
+          return parsed;
+        }
       }
     } catch (e) {
       console.warn('Failed reading tires from localStorage', e);
@@ -145,13 +176,33 @@ export default function App() {
       try {
         // Attach real-time listeners immediately
         unsubscribeTires = subscribeToTires(
-          (data) => {
-            if (data && data.length > 0) {
-              persistTires(data);
+          (remoteData) => {
+            if (remoteData && remoteData.length > 0) {
+              persistTires((prevTires) => {
+                // If remote has the full catalog (>= 70 items), use it directly
+                if (remoteData.length >= 70) {
+                  return remoteData;
+                }
+                // If remote only has a partial subset of updated items (e.g. 1-10 items),
+                // smart-merge them into the full list so we NEVER lose the rest of the tires!
+                const baseList = prevTires.length >= 70 ? prevTires : defaultTiresList;
+                const updated = [...baseList];
+                for (const remoteItem of remoteData) {
+                  const idx = updated.findIndex(
+                    (t) =>
+                      t.id === remoteItem.id ||
+                      (t.brand.toLowerCase() === remoteItem.brand.toLowerCase() &&
+                        t.size.toLowerCase() === remoteItem.size.toLowerCase())
+                  );
+                  if (idx >= 0) {
+                    updated[idx] = { ...updated[idx], ...remoteItem };
+                  } else {
+                    updated.push(remoteItem);
+                  }
+                }
+                return updated;
+              });
               setIsOnline(true);
-            } else {
-              // Remote collection is empty, seed initial data to Firestore in background
-              seedTiresIfEmpty(tires).catch(console.warn);
             }
           },
           (err) => {
