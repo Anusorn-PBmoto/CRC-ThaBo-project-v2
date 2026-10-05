@@ -1,167 +1,127 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Scan,
-  QrCode,
   Search,
   CheckCircle,
   ArrowRight,
   Camera,
   Layers,
   AlertTriangle,
-  RefreshCw,
+  Link,
+  Plus,
+  Zap,
 } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { TireItem } from '../types';
+import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 
 interface BarcodeScanModalProps {
   isOpen: boolean;
   onClose: () => void;
   tires: TireItem[];
   onSelectTire: (tire: TireItem) => void;
+  onBindBarcode?: (tireId: string, barcode: string) => void;
+  onOpenAddModalWithBarcode?: (barcode: string) => void;
 }
+
+// Known Thai motorcycle tire EAN-13 barcodes dictionary
+const KNOWN_BARCODE_CATALOG: Record<string, { brand: string; size: string; name: string }> = {
+  '8858722105389': { brand: 'IRC', size: '120/70-14', name: 'IRC SCT-001 Mobicity 120/70-14' },
+  '8858722105372': { brand: 'IRC', size: '110/70-14', name: 'IRC SCT-001 Mobicity 110/70-14' },
+  '8858722105396': { brand: 'IRC', size: '140/70-14', name: 'IRC SCT-001 Mobicity 140/70-14' },
+  '8858722105358': { brand: 'IRC', size: '90/80-14', name: 'IRC SCT-001 Mobicity 90/80-14' },
+  '8858722105365': { brand: 'IRC', size: '90/90-14', name: 'IRC SCT-001 Mobicity 90/90-14' },
+  '8858722105334': { brand: 'IRC', size: '80/90-14', name: 'IRC SCT-001 Mobicity 80/90-14' },
+  '8858722105341': { brand: 'IRC', size: '100/90-14', name: 'IRC SCT-001 Mobicity 100/90-14' },
+  '8858722105402': { brand: 'IRC', size: '130/70-13', name: 'IRC SCT-001 Mobicity 130/70-13' },
+  '8858722105419': { brand: 'IRC', size: '110/70-13', name: 'IRC SCT-001 Mobicity 110/70-13' },
+  '8858722105426': { brand: 'IRC', size: '120/70-12', name: 'IRC Mobicity 120/70-12' },
+  '8858722105433': { brand: 'IRC', size: '110/70-12', name: 'IRC Mobicity 110/70-12' },
+  '8858722105440': { brand: 'IRC', size: '130/70-12', name: 'IRC Mobicity 130/70-12' },
+};
 
 export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   isOpen,
   onClose,
   tires,
   onSelectTire,
+  onBindBarcode,
+  onOpenAddModalWithBarcode,
 }) => {
   const [activeMode, setActiveMode] = useState<'camera' | 'manual'>('camera');
   const [manualCode, setManualCode] = useState('');
   const [scannedResult, setScannedResult] = useState<TireItem | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [unmatchedBarcode, setUnmatchedBarcode] = useState<string | null>(null);
 
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-  const scannerContainerId = 'interactive-barcode-reader';
+  // Binding search states
+  const [bindSearchQuery, setBindSearchQuery] = useState('');
+  const [isBindingOpen, setIsBindingOpen] = useState(false);
 
-  // Start live camera
+  // Reset states when modal re-opens
   useEffect(() => {
-    let isMounted = true;
-
-    if (isOpen && activeMode === 'camera') {
-      const startScanner = async () => {
-        setCameraError(null);
-        try {
-          // Delay briefly to allow DOM element to render
-          await new Promise((resolve) => setTimeout(resolve, 200));
-
-          const container = document.getElementById(scannerContainerId);
-          if (!container) return;
-
-          // Stop any existing instance
-          if (html5QrCodeRef.current) {
-            try {
-              await html5QrCodeRef.current.stop();
-            } catch (e) {
-              // ignore
-            }
-          }
-
-          const html5QrCode = new Html5Qrcode(scannerContainerId, {
-            formatsToSupport: [
-              Html5QrcodeSupportedFormats.QR_CODE,
-              Html5QrcodeSupportedFormats.EAN_13,
-              Html5QrcodeSupportedFormats.EAN_8,
-              Html5QrcodeSupportedFormats.CODE_128,
-              Html5QrcodeSupportedFormats.CODE_39,
-              Html5QrcodeSupportedFormats.UPC_A,
-              Html5QrcodeSupportedFormats.UPC_E,
-            ],
-            verbose: false,
-          });
-
-          html5QrCodeRef.current = html5QrCode;
-
-          await html5QrCode.start(
-            { facingMode: 'environment' },
-            {
-              fps: 12,
-              qrbox: { width: 250, height: 180 },
-              aspectRatio: 1.33,
-            },
-            (decodedText) => {
-              if (!isMounted) return;
-              handleDecodedBarcode(decodedText);
-            },
-            (errorMessage) => {
-              // Standard scan frame miss, ignore
-            }
-          );
-
-          if (isMounted) {
-            setIsCameraActive(true);
-          }
-        } catch (err: any) {
-          console.warn('Camera scan initialization failed:', err);
-          if (isMounted) {
-            setCameraError(
-              'ไม่สามารถเปิดกล้องได้ (เบราว์เซอร์อาจไม่ได้รับสิทธิ์ หรือไม่มีอุปกรณ์กล้อง)'
-            );
-            setActiveMode('manual');
-          }
-        }
-      };
-
-      startScanner();
+    if (isOpen) {
+      setScannedResult(null);
+      setUnmatchedBarcode(null);
+      setIsBindingOpen(false);
+      setBindSearchQuery('');
     }
-
-    return () => {
-      isMounted = false;
-      if (html5QrCodeRef.current) {
-        html5QrCodeRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            html5QrCodeRef.current = null;
-            setIsCameraActive(false);
-          });
-      }
-    };
-  }, [isOpen, activeMode]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Handle scanned barcode text
+  // Intelligent Barcode Matching Logic
   const handleDecodedBarcode = (code: string) => {
-    const cleanCode = code.trim().toLowerCase();
+    const rawCode = code.trim();
+    const cleanDigits = rawCode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
-    // Match by size, id, brand, or location
-    const matched = tires.find(
-      (t) =>
-        t.size.toLowerCase().includes(cleanCode) ||
-        cleanCode.includes(t.size.toLowerCase()) ||
-        t.id.toLowerCase() === cleanCode ||
-        t.location.toLowerCase() === cleanCode ||
-        t.brand.toLowerCase() === cleanCode
-    );
+    // 1. Direct match with registered barcode in database
+    let matched = tires.find((t) => {
+      if (!t.barcode) return false;
+      const tBarcode = t.barcode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      return tBarcode === cleanDigits || tBarcode === rawCode.toLowerCase();
+    });
+
+    // 2. Known manufacturer barcode dictionary (EAN-13 catalog)
+    if (!matched && cleanDigits) {
+      const known = KNOWN_BARCODE_CATALOG[cleanDigits];
+      if (known) {
+        matched = tires.find(
+          (t) =>
+            t.brand.toLowerCase() === known.brand.toLowerCase() &&
+            (t.size.toLowerCase().includes(known.size.toLowerCase()) ||
+              known.size.toLowerCase().includes(t.size.toLowerCase()))
+        );
+      }
+    }
+
+    // 3. Exact match with Tire Size, ID, or Location
+    if (!matched) {
+      matched = tires.find(
+        (t) =>
+          t.size.toLowerCase() === rawCode.toLowerCase() ||
+          t.id.toLowerCase() === rawCode.toLowerCase() ||
+          t.location.toLowerCase() === rawCode.toLowerCase()
+      );
+    }
+
+    // 4. Match if barcode text explicitly contains full tire size e.g. "120/70-14" or "90/90-12"
+    if (!matched) {
+      const sizePatternMatch = rawCode.match(/(\d{2,3})[/-](\d{2,3})[-/R](\d{2})/i);
+      if (sizePatternMatch) {
+        const extractedSize = `${sizePatternMatch[1]}/${sizePatternMatch[2]}-${sizePatternMatch[3]}`.toLowerCase();
+        matched = tires.find((t) => t.size.toLowerCase().replace(/\s+/g, '').includes(extractedSize));
+      }
+    }
 
     if (matched) {
       setScannedResult(matched);
-      // Play a quick pleasant audio beep if Web Audio API is available
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.15);
-      } catch (e) {
-        // audio context blocked or not supported
-      }
+      setUnmatchedBarcode(null);
+      setIsBindingOpen(false);
     } else {
-      // Find closest partial match
-      const partial = tires.find(
-        (t) => cleanCode.includes(t.rim) || cleanCode.includes(t.brand.toLowerCase())
-      );
-      if (partial) {
-        setScannedResult(partial);
-      }
+      // Barcode not found in catalog: DO NOT guess randomly!
+      setScannedResult(null);
+      setUnmatchedBarcode(rawCode);
+      setBindSearchQuery('');
     }
   };
 
@@ -174,6 +134,31 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
     onClose();
   };
 
+  // Handle binding barcode to selected tire
+  const handleConfirmBind = (tire: TireItem) => {
+    if (!unmatchedBarcode) return;
+    if (onBindBarcode) {
+      onBindBarcode(tire.id, unmatchedBarcode);
+    }
+    // Set as scanned result
+    const updatedTire = { ...tire, barcode: unmatchedBarcode };
+    setScannedResult(updatedTire);
+    setUnmatchedBarcode(null);
+    setIsBindingOpen(false);
+  };
+
+  // Filter tires for binding search
+  const bindFilteredTires = tires.filter((t) => {
+    if (!bindSearchQuery.trim()) return true;
+    const q = bindSearchQuery.toLowerCase();
+    return (
+      t.brand.toLowerCase().includes(q) ||
+      t.size.toLowerCase().includes(q) ||
+      t.location.toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q)
+    );
+  }).slice(0, 10);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-in fade-in duration-150">
       <div className="w-full max-w-sm bg-[#111c2e] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -184,10 +169,13 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
               <Scan className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">
-                สแกนเนอร์บาร์โค้ดยาง (Live Scanner)
+              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
+                <span>สแกนเนอร์บาร์โค้ดยาง HD Pro</span>
+                <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.2 rounded">
+                  AI FAST
+                </span>
               </h3>
-              <span className="text-[10px] text-cyan-300">กล้องมือถือจริง & บาร์โค้ดสินค้า</span>
+              <span className="text-[10px] text-cyan-300">กล้อง HD 1080p • โฟกัสอัตโนมัติ • มีไฟฉาย</span>
             </div>
           </div>
           <button
@@ -209,7 +197,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             }`}
           >
             <Camera className="w-3.5 h-3.5" />
-            <span>📷 กล้องมือถือจริง</span>
+            <span>📷 กล้อง HD Pro (คมชัด)</span>
           </button>
 
           <button
@@ -229,74 +217,31 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
         <div className="p-3.5 space-y-3 overflow-y-auto flex-1 text-xs">
           {activeMode === 'camera' ? (
             <div className="space-y-2">
-              {/* HTML5 QR Code Scanner Target Container */}
-              <div className="relative aspect-video rounded-2xl bg-black border border-slate-700 overflow-hidden flex flex-col items-center justify-center">
-                <div
-                  id={scannerContainerId}
-                  className="w-full h-full overflow-hidden [&_video]:w-full [&_video]:h-full [&_video]:object-cover"
-                />
-
-                {/* Overlay guideline box if camera is active */}
-                {isCameraActive && (
-                  <div className="absolute inset-4 pointer-events-none border-2 border-dashed border-cyan-400/70 rounded-xl flex flex-col justify-between p-2">
-                    <div className="flex justify-between">
-                      <span className="w-3 h-3 border-t-2 border-l-2 border-cyan-400" />
-                      <span className="w-3 h-3 border-t-2 border-r-2 border-cyan-400" />
-                    </div>
-                    {/* Laser scanline */}
-                    <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_8px_#ef4444] animate-pulse" />
-                    <div className="flex justify-between">
-                      <span className="w-3 h-3 border-b-2 border-l-2 border-cyan-400" />
-                      <span className="w-3 h-3 border-b-2 border-r-2 border-cyan-400" />
-                    </div>
-                  </div>
-                )}
-
-                {/* Instructions */}
-                <div className="absolute bottom-2 left-2 right-2 text-center pointer-events-none">
-                  <span className="text-[10px] bg-black/70 backdrop-blur-sm text-cyan-200 px-2.5 py-1 rounded-full border border-cyan-500/30">
-                    นำกล้องส่องที่บาร์โค้ดหน้ายาง หรือ QR Code
-                  </span>
-                </div>
-              </div>
-
-              {cameraError && (
-                <div className="p-2.5 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-300 text-[11px] flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <span>{cameraError}</span>
-                    <button
-                      onClick={() => setActiveMode('manual')}
-                      className="block mt-1 text-cyan-400 underline font-semibold"
-                    >
-                      สลับไปใช้การยิงด่วน / พิมพ์ค้นหา
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* High-Performance Camera Scanner */}
+              <CameraBarcodeScanner onScan={handleDecodedBarcode} />
             </div>
           ) : (
-            /* Manual / Quick Presets Mode */
-            <div className="space-y-3">
+            /* Manual / Preset simulation mode */
+            <div className="space-y-2.5">
               <div>
-                <label className="block text-slate-400 font-medium mb-1.5">
-                  จำลองการยิงบาร์โค้ดด่วน (Warehouse Quick Scan):
-                </label>
+                <p className="text-[11px] text-slate-400 mb-1.5">
+                  ทดสอบเลือกบาร์โค้ดยางยอดนิยม:
+                </p>
                 <div className="grid grid-cols-2 gap-1.5">
-                  {tires.slice(0, 6).map((tire) => (
+                  {[
+                    { code: '8858722105389', label: 'IRC 120/70-14' },
+                    { code: '110/70-12', label: 'Camal 110/70-12' },
+                    { code: '140/70-14', label: 'IRC 140/70-14' },
+                    { code: '90/90-14', label: 'Quick 90/90-14' },
+                    { code: '80/90-14', label: 'Quick 80/90-14' },
+                    { code: '90/90-12', label: 'Maxxis 90/90-12' },
+                  ].map((item) => (
                     <button
-                      key={tire.id}
-                      onClick={() => confirmSelection(tire)}
-                      className="p-2 text-left bg-[#16253c] hover:bg-[#1d3150] border border-slate-750 rounded-xl text-slate-200 transition-all flex items-center justify-between active:scale-95"
+                      key={item.code}
+                      onClick={() => handleSearchCode(item.code)}
+                      className="p-2 rounded-xl bg-[#17253d] hover:bg-[#1e3252] border border-slate-700/80 text-left flex items-center justify-between text-slate-200 active:scale-95 transition-all"
                     >
-                      <div className="truncate">
-                        <div className="font-bold text-[11px] text-amber-300 truncate">
-                          {tire.size}
-                        </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {tire.brand} • {tire.location}
-                        </div>
-                      </div>
+                      <span className="truncate">{item.label}</span>
                       <ArrowRight className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 ml-1" />
                     </button>
                   ))}
@@ -315,7 +260,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       setManualCode(e.target.value);
                       handleSearchCode(e.target.value);
                     }}
-                    placeholder="เช่น 110/70-12 หรือ A-01"
+                    placeholder="เช่น 8858722105389 หรือ 120/70-14"
                     className="flex-1 bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 text-xs focus:border-cyan-400 focus:outline-none font-mono"
                   />
                   <button
@@ -329,39 +274,129 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             </div>
           )}
 
-          {/* Matched Scan Result */}
+          {/* 1. MATCHED SCAN RESULT */}
           {scannedResult && (
-            <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-500/50 shadow-lg animate-in slide-in-from-bottom-2 space-y-2">
+            <div className="p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500/50 shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
+                  <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                   <span className="font-bold text-emerald-300 text-xs">
                     สแกนพบยาง: {scannedResult.brand} {scannedResult.size}
                   </span>
                 </div>
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-900 text-emerald-200">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-200 font-bold">
                   {scannedResult.rim}&quot;
                 </span>
               </div>
 
               <div className="text-[11px] text-slate-300 flex items-center justify-between">
-                <span>ช่องจัดเก็บ: {scannedResult.location}</span>
+                <span>ช่องจัดเก็บ: <strong className="text-slate-100">{scannedResult.location}</strong></span>
                 <span>
                   ยอดคงเหลือ:{' '}
-                  <strong className="text-amber-300 font-mono">
+                  <strong className="text-amber-300 font-mono text-sm">
                     {scannedResult.actualQty}
                   </strong>{' '}
                   เส้น
                 </span>
               </div>
 
+              {scannedResult.description && (
+                <p className="text-[10px] text-slate-400 truncate">
+                  {scannedResult.description}
+                </p>
+              )}
+
               <button
                 onClick={() => confirmSelection(scannedResult)}
-                className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
+                className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
               >
                 <span>เลือกรายการนี้เพื่อตรวจนับ / ตัดสต็อก</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
+            </div>
+          )}
+
+          {/* 2. UNMATCHED BARCODE FOUND */}
+          {unmatchedBarcode && !scannedResult && (
+            <div className="p-3.5 rounded-2xl bg-[#141b2b] border border-amber-500/50 shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <span>สแกนพบรหัส: {unmatchedBarcode}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    รหัสนี้ยังไม่ได้ผูกกับยางในระบบ
+                  </p>
+                </div>
+              </div>
+
+              {!isBindingOpen ? (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => setIsBindingOpen(true)}
+                    className="py-2 px-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
+                  >
+                    <Link className="w-3.5 h-3.5" />
+                    <span>ผูกกับยางที่มี</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenAddModalWithBarcode?.(unmatchedBarcode);
+                    }}
+                    className="py-2 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มเป็นยางใหม่</span>
+                  </button>
+                </div>
+              ) : (
+                /* Tire Search & Bind Selector */
+                <div className="pt-2 border-t border-slate-800 space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs text-slate-300 font-medium">
+                    <span>ค้นหายางเพื่อผูกรหัสบาร์โค้ดนี้:</span>
+                    <button
+                      onClick={() => setIsBindingOpen(false)}
+                      className="text-[10px] text-slate-400 hover:text-slate-200"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={bindSearchQuery}
+                      onChange={(e) => setBindSearchQuery(e.target.value)}
+                      placeholder="พิมพ์ขนาด เช่น 120/70-14 หรือ IRC"
+                      className="w-full bg-[#18263d] border border-slate-700 text-slate-100 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:border-cyan-400 focus:outline-none"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    {bindFilteredTires.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => handleConfirmBind(t)}
+                        className="w-full p-2 rounded-xl bg-[#17253d] hover:bg-cyan-950/50 hover:border-cyan-500/50 border border-slate-800 text-left flex items-center justify-between text-slate-200 transition-all text-xs"
+                      >
+                        <div>
+                          <div className="font-bold text-slate-100">
+                            {t.brand} {t.size}
+                          </div>
+                          <div className="text-[10px] text-slate-400">{t.location} • คงเหลือ {t.actualQty} เส้น</div>
+                        </div>
+                        <span className="text-[10px] bg-cyan-600/30 text-cyan-300 font-bold px-2 py-1 rounded-lg">
+                          ผูกรหัสนี้
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

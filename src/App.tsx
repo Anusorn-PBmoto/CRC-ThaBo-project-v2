@@ -78,7 +78,23 @@ export default function App() {
             } catch {}
             return recovered;
           }
-          return parsed;
+
+          // Enrich existing tires with known barcodes if missing (e.g. IRC 120/70-14 barcode)
+          const enriched = parsed.map((tire: TireItem) => {
+            if (!tire.barcode) {
+              const matchedDefault = defaultTiresList.find(
+                (d) =>
+                  d.brand.toLowerCase() === tire.brand.toLowerCase() &&
+                  d.size.toLowerCase() === tire.size.toLowerCase()
+              );
+              if (matchedDefault?.barcode) {
+                return { ...tire, barcode: matchedDefault.barcode };
+              }
+            }
+            return tire;
+          });
+
+          return enriched;
         }
       }
     } catch (e) {
@@ -554,6 +570,18 @@ export default function App() {
     }
   };
 
+  // Bind scanned barcode to tire
+  const handleBindBarcode = async (tireId: string, newBarcode: string) => {
+    persistTires((prev) =>
+      prev.map((t) => (t.id === tireId ? { ...t, barcode: newBarcode, updatedAt: new Date().toISOString() } : t))
+    );
+    try {
+      await updateTireItem(tireId, { barcode: newBarcode });
+    } catch (e) {
+      console.warn('Failed to save barcode to tire:', e);
+    }
+  };
+
   // Counts for Badges
   const discrepancyCount = tires.filter((t) => t.actualQty !== t.systemQty).length;
   const lowStockCount = tires.filter((t) => t.actualQty <= (t.minStock || 2)).length;
@@ -682,6 +710,11 @@ export default function App() {
           if (currentTab !== 'buysell') {
             setCurrentTab('audit');
           }
+        }}
+        onBindBarcode={handleBindBarcode}
+        onOpenAddModalWithBarcode={() => {
+          setEditingTire(null);
+          setIsAddEditOpen(true);
         }}
       />
 

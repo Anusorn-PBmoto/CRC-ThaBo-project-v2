@@ -3,7 +3,6 @@ import {
   X,
   Plus,
   Save,
-  Image as ImageIcon,
   Camera,
   ScanBarcode,
   Upload,
@@ -11,12 +10,10 @@ import {
   Trash2,
   RefreshCw,
   Sparkles,
-  AlertCircle,
-  FileImage,
   ExternalLink,
 } from 'lucide-react';
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { TireItem } from '../types';
+import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 
 interface AddEditTireModalProps {
   isOpen: boolean;
@@ -137,9 +134,6 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
   // Barcode scanner states
   const [isScanning, setIsScanning] = useState(false);
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
-  const [scanErrorMsg, setScanErrorMsg] = useState<string | null>(null);
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
-  const scannerContainerId = 'modal-barcode-camera-viewport';
 
   // File upload refs
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -181,90 +175,10 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
     }
     setIsScanning(false);
     setScanSuccessMsg(null);
-    setScanErrorMsg(null);
   }, [initialTire, isOpen]);
 
-  // Clean up scanner on unmount or close
-  useEffect(() => {
-    return () => {
-      if (html5QrCodeRef.current) {
-        html5QrCodeRef.current.stop().catch(() => {});
-        html5QrCodeRef.current = null;
-      }
-    };
-  }, []);
-
-  // Stop camera when scan mode closes
-  const stopScanner = async () => {
-    if (html5QrCodeRef.current) {
-      try {
-        await html5QrCodeRef.current.stop();
-      } catch (e) {
-        // ignore
-      }
-      html5QrCodeRef.current = null;
-    }
-    setIsScanning(false);
-  };
-
-  // Start live barcode scanner
-  const startScanner = async () => {
-    setIsScanning(true);
-    setScanSuccessMsg(null);
-    setScanErrorMsg(null);
-
-    // Wait for DOM element
-    await new Promise((r) => setTimeout(r, 200));
-
-    try {
-      const container = document.getElementById(scannerContainerId);
-      if (!container) return;
-
-      if (html5QrCodeRef.current) {
-        try {
-          await html5QrCodeRef.current.stop();
-        } catch {}
-      }
-
-      const qrScanner = new Html5Qrcode(scannerContainerId, {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-        ],
-        verbose: false,
-      });
-
-      html5QrCodeRef.current = qrScanner;
-
-      await qrScanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 12,
-          qrbox: { width: 250, height: 160 },
-          aspectRatio: 1.4,
-        },
-        (decodedText) => {
-          handleScannedBarcode(decodedText);
-        },
-        () => {}
-      );
-    } catch (err: any) {
-      console.warn('Scanner error:', err);
-      setScanErrorMsg('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การใช้งานกล้องในเบราว์เซอร์');
-    }
-  };
-
   // Handle scanned barcode text
-  const handleScannedBarcode = async (decodedText: string) => {
-    try {
-      navigator.vibrate?.([60, 40, 60]);
-    } catch {}
-
+  const handleScannedBarcode = (decodedText: string) => {
     const parsed = parseBarcode(decodedText);
     setBarcode(parsed.barcode);
 
@@ -279,7 +193,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
     }
 
     setScanSuccessMsg(`สแกนสำเร็จ: ${parsed.barcode}`);
-    await stopScanner();
+    setIsScanning(false);
     setTimeout(() => setScanSuccessMsg(null), 4000);
   };
 
@@ -297,7 +211,6 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
       alert('ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsUploadingImage(false);
-      // Reset input
       e.target.value = '';
     }
   };
@@ -332,7 +245,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
         },
         initialTire ? initialTire.id : undefined
       );
-      await stopScanner();
+      setIsScanning(false);
       onClose();
     } finally {
       setIsSubmitting(false);
@@ -357,7 +270,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
           </div>
           <button
             onClick={() => {
-              stopScanner();
+              setIsScanning(false);
               onClose();
             }}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
@@ -379,7 +292,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
                   <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
                     <span>แสกนบาร์โค้ดจากยาง</span>
                     <span className="text-[9px] bg-amber-400/20 text-amber-300 font-semibold px-1.5 py-0.5 rounded">
-                      ด่วน
+                      กล้อง HD Pro
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400">สแกนรหัส EAN-13 หรือ QR ฉลากเพื่อเติมข้อมูลอัตโนมัติ</p>
@@ -387,7 +300,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
               </div>
               <button
                 type="button"
-                onClick={startScanner}
+                onClick={() => setIsScanning(true)}
                 className="py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-sm transition-all flex-shrink-0"
               >
                 <Camera className="w-3.5 h-3.5" />
@@ -395,33 +308,23 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
               </button>
             </div>
           ) : (
-            <div className="p-3 rounded-2xl bg-[#090f1a] border border-amber-500/50 space-y-2.5 animate-in fade-in">
+            <div className="space-y-2 animate-in fade-in">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
                   <Camera className="w-3.5 h-3.5 animate-pulse" />
-                  <span>กำลังสแกนบาร์โค้ด... นำกล้องส่องที่ฉลากยาง</span>
+                  <span>กำลังสแกน... นำกล้องส่องที่ฉลากยาง</span>
                 </span>
                 <button
                   type="button"
-                  onClick={stopScanner}
-                  className="text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800"
+                  onClick={() => setIsScanning(false)}
+                  className="text-xs text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
                 >
                   ปิดกล้อง
                 </button>
               </div>
 
-              {/* Html5Qrcode Scanner viewport */}
-              <div
-                id={scannerContainerId}
-                className="w-full aspect-[4/3] bg-black rounded-xl overflow-hidden border border-slate-700 relative"
-              />
-
-              {scanErrorMsg && (
-                <div className="p-2 bg-rose-950/70 border border-rose-500/40 rounded-lg text-rose-300 text-[11px] flex items-center gap-1.5">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />
-                  <span>{scanErrorMsg}</span>
-                </div>
-              )}
+              {/* High-Performance Camera Barcode Scanner */}
+              <CameraBarcodeScanner onScan={handleScannedBarcode} />
             </div>
           )}
 
@@ -743,7 +646,7 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                stopScanner();
+                setIsScanning(false);
                 onClose();
               }}
               className="flex-1 py-2.5 rounded-xl bg-[#17253d] hover:bg-[#203252] text-slate-300 font-medium active:scale-95 transition-all text-xs"
