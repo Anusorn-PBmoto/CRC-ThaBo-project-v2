@@ -12,6 +12,7 @@ import {
   Layers,
   ChevronRight,
   ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import { TireItem, AuditSession } from '../types';
 
@@ -23,6 +24,7 @@ interface QuickAuditTabProps {
   onOpenScanner: () => void;
   onSaveAudit: () => void;
   onEditTire: (tire: TireItem) => void;
+  onDeleteTire?: (tire: TireItem) => void;
   onRestoreInitialData?: () => void;
 }
 
@@ -34,6 +36,7 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
   onOpenScanner,
   onSaveAudit,
   onEditTire,
+  onDeleteTire,
   onRestoreInitialData,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -301,6 +304,18 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                             <span>รีเซ็ตตามระบบ</span>
                             <RotateCcw className="w-3 h-3" />
                           </button>
+                          {onDeleteTire && (
+                            <button
+                              onClick={() => {
+                                onDeleteTire(tire);
+                                setActiveMenuTireId(null);
+                              }}
+                              className="w-full px-3 py-1.5 text-left hover:bg-rose-950/40 flex items-center justify-between text-rose-400 border-t border-slate-700/60"
+                            >
+                              <span>ลบรายการยาง</span>
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

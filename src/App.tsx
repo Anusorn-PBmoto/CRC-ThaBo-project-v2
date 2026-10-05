@@ -16,8 +16,8 @@ import {
   restoreAllInitialTires,
   db,
 } from './firebase';
-import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { TireItem, AuditSession, AuditLog, Transaction } from './types';
+import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
 import { INITIAL_TIRES } from './initialData';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -147,18 +147,32 @@ export default function App() {
 
   const activeSession = sessions[0] || null;
 
-  // Stepper quantity update
+  // Stepper quantity update (Instant optimistic UI + background sync)
   const handleUpdateQty = async (tire: TireItem, newQty: number) => {
+    const safeQty = Math.max(0, newQty);
+    const diff = safeQty - tire.systemQty;
+    const status: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
+
+    // 1. Instant optimistic update so UI changes immediately!
+    setTires((prev) =>
+      prev.map((t) =>
+        t.id === tire.id
+          ? { ...t, actualQty: safeQty, status, updatedAt: new Date().toISOString() }
+          : t
+      )
+    );
+
+    // 2. Persist to Firestore
     try {
       await updateTireActualQty(
         tire.id,
-        newQty,
+        safeQty,
         tire.systemQty,
         `${tire.brand} ${tire.size}`,
         tire.brand
       );
     } catch (error) {
-      console.error('Failed to update quantity:', error);
+      console.warn('Failed to sync quantity to Firestore:', error);
     }
   };
 
@@ -166,9 +180,28 @@ export default function App() {
   const handleSaveTire = async (tireData: Omit<TireItem, 'id'>, id?: string) => {
     try {
       if (id) {
+        // Optimistic update
+        setTires((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, ...tireData, updatedAt: new Date().toISOString() } : t
+          )
+        );
         await updateTireItem(id, tireData);
       } else {
-        await addNewTire(tireData);
+        // Optimistic add with unique ID
+        const tempId = `tire-${Date.now()}`;
+        const newTire: TireItem = {
+          ...tireData,
+          id: tempId,
+        };
+        setTires((prev) => [newTire, ...prev]);
+
+        const realId = await addNewTire(tireData);
+        if (realId && realId !== tempId) {
+          setTires((prev) =>
+            prev.map((t) => (t.id === tempId ? { ...t, id: realId } : t))
+          );
+        }
       }
       setIsAddEditOpen(false);
       setEditingTire(null);
@@ -180,6 +213,8 @@ export default function App() {
   // Delete Tire
   const handleDeleteTire = async (tire: TireItem) => {
     if (window.confirm(`ยืนยันการลบ ${tire.brand} ${tire.size} ออกจากระบบ?`)) {
+      // Optimistic delete
+      setTires((prev) => prev.filter((t) => t.id !== tire.id));
       try {
         await deleteTireItem(tire.id);
       } catch (error) {
@@ -194,34 +229,92 @@ export default function App() {
       const checkedCount = tires.filter((t) => t.status === 'checked').length;
       const discrepancyCount = tires.filter((t) => t.actualQty !== t.systemQty).length;
 
-      if (activeSession) {
-        await saveAuditSession(activeSession.id, {
-          totalItems: tires.length,
-          checkedItems: checkedCount,
-          discrepancyCount,
-          status: 'completed',
-        });
-      }
+      const sessionId = activeSession?.id || `AUD-${Date.now()}`;
+      const sessionCode = activeSession?.code || `AUD-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`;
 
-      // If user chose to sync system stock to actual counts
+      const savedSession: AuditSession = {
+        id: sessionId,
+        code: sessionCode,
+        zone: 'ห้องยางชั้น 2',
+        title: 'คลังยางเรเดียล Tubeless • บันทึกผลนับสต็อก',
+        status: 'completed',
+        totalItems: tires.length,
+        checkedItems: checkedCount,
+        discrepancyCount: syncToSystem ? 0 : discrepancyCount,
+        createdAt: activeSession?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 1. Optimistic update session
+      setSessions((prev) => [savedSession, ...prev.filter((s) => s.id !== sessionId)]);
+
+      // 2. Optimistic audit log
+      const newLog: AuditLog = {
+        id: `log-${Date.now()}`,
+        tireId: 'audit-session',
+        tireName: 'สรุปการนับสต็อกห้องยางชั้น 2',
+        brand: 'CRC ThaBo',
+        diff: syncToSystem ? 0 : discrepancyCount,
+        previousQty: tires.length,
+        newQty: checkedCount,
+        action: 'บันทึกปิดรอบตรวจนับ',
+        timestamp: new Date().toISOString(),
+        note: `ตรวจเสร็จ ${checkedCount}/${tires.length} รายการ (พบยอดต่าง ${discrepancyCount} รายการ)${syncToSystem ? ' • ปรับยอดสต็อกในระบบให้ตรงกับยอดนับจริงแล้ว' : ''}`,
+      };
+      setLogs((prev) => [newLog, ...prev]);
+
+      // 3. If user chose to sync system stock to actual counts:
       if (syncToSystem) {
-        for (const tire of tires) {
-          if (tire.actualQty !== tire.systemQty) {
-            await updateTireItem(tire.id, {
-              systemQty: tire.actualQty,
-              status: 'checked',
-            });
-          }
+        setTires((prev) =>
+          prev.map((tire) => ({
+            ...tire,
+            systemQty: tire.actualQty,
+            status: 'checked',
+            updatedAt: new Date().toISOString(),
+          }))
+        );
+
+        // Batch update to Firestore
+        try {
+          const batch = writeBatch(db);
+          tires.forEach((tire) => {
+            if (tire.actualQty !== tire.systemQty) {
+              const tireRef = doc(db, 'tires', tire.id);
+              batch.set(
+                tireRef,
+                {
+                  systemQty: tire.actualQty,
+                  status: 'checked',
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true }
+              );
+            }
+          });
+          await batch.commit();
+        } catch (err) {
+          console.warn('Batch stock sync warning:', err);
         }
       }
+
+      // 4. Save session to Firestore
+      saveAuditSession(sessionId, {
+        code: sessionCode,
+        zone: 'ห้องยางชั้น 2',
+        title: 'คลังยางเรเดียล Tubeless • บันทึกผลนับสต็อก',
+        totalItems: tires.length,
+        checkedItems: checkedCount,
+        discrepancyCount: syncToSystem ? 0 : discrepancyCount,
+        status: 'completed',
+      }).catch(console.warn);
 
       setIsAuditConfirmOpen(false);
 
       // Trigger celebratory confetti
       confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.7 },
+        particleCount: 100,
+        spread: 75,
+        origin: { y: 0.65 },
         colors: ['#f59e0b', '#10b981', '#38bdf8', '#fbbf24'],
       });
     } catch (error) {
@@ -280,7 +373,71 @@ export default function App() {
     customerOrSupplier: string,
     note?: string
   ) => {
-    await executeTransaction(type, items, customerOrSupplier, note);
+    // 1. Instant optimistic update of tire stocks in UI
+    setTires((prevTires) => {
+      let updated = [...prevTires];
+      for (const item of items) {
+        const delta = type === 'sale' ? -item.quantity : item.quantity;
+        updated = updated.map((t) => {
+          if (t.id === item.tire.id) {
+            const nextSystemQty = Math.max(0, t.systemQty + delta);
+            const nextActualQty = Math.max(0, t.actualQty + delta);
+            const diff = nextActualQty - nextSystemQty;
+            const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
+            return {
+              ...t,
+              systemQty: nextSystemQty,
+              actualQty: nextActualQty,
+              status: nextStatus,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return t;
+        });
+      }
+      return updated;
+    });
+
+    // 2. Optimistic update of transactions list
+    const newTransactions: Transaction[] = items.map((item, idx) => ({
+      id: `tx-${Date.now()}-${idx}`,
+      type,
+      tireId: item.tire.id,
+      tireName: `${item.tire.brand} ${item.tire.size}`,
+      brand: item.tire.brand,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.quantity * item.unitPrice,
+      customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
+      note: note?.trim() || '',
+      createdAt: new Date().toISOString(),
+    }));
+    setTransactions((prev) => [...newTransactions, ...prev]);
+
+    // 3. Optimistic update of audit logs
+    const newLogs: AuditLog[] = items.map((item, idx) => {
+      const delta = type === 'sale' ? -item.quantity : item.quantity;
+      return {
+        id: `log-tx-${Date.now()}-${idx}`,
+        tireId: item.tire.id,
+        tireName: `${item.tire.brand} ${item.tire.size}`,
+        brand: item.tire.brand,
+        diff: delta,
+        previousQty: item.tire.actualQty,
+        newQty: Math.max(0, item.tire.actualQty + delta),
+        action: type === 'sale' ? `ตัดสต็อกขายออก (-${item.quantity} เส้น)` : `รับเข้าคลัง (+${item.quantity} เส้น)`,
+        timestamp: new Date().toISOString(),
+        note: `${type === 'sale' ? 'ขายให้: ' : 'รับจาก: '}${customerOrSupplier.trim() || 'หน้าร้าน'} ${note ? `(${note})` : ''}`,
+      };
+    });
+    setLogs((prev) => [...newLogs, ...prev]);
+
+    // 4. Background persist to Firestore safely
+    try {
+      await executeTransaction(type, items, customerOrSupplier, note);
+    } catch (err) {
+      console.warn('executeTransaction Firestore sync warning:', err);
+    }
   };
 
   // Counts for Badges
@@ -334,6 +491,7 @@ export default function App() {
                   setEditingTire(tire);
                   setIsAddEditOpen(true);
                 }}
+                onDeleteTire={handleDeleteTire}
                 onRestoreInitialData={handleRestoreAllData}
               />
             )}

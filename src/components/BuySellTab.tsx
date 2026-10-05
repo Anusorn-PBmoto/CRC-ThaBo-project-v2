@@ -53,6 +53,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   const [note, setNote] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Available brands
   const brands = useMemo(() => {
@@ -188,13 +189,15 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           : `รับเข้าคลังและเพิ่มสต็อก ${totalQuantity} เส้น สำเร็จ!`;
 
       setSuccessMessage(message);
+      setErrorMessage(null);
       setCart([]);
       setCustomer('');
       setNote('');
       setTimeout(() => setSuccessMessage(null), 3500);
     } catch (error) {
       console.error('Transaction execution failed:', error);
-      alert('เกิดข้อผิดพลาดในการตัดสต็อก กรุณาลองใหม่อีกครั้ง');
+      setErrorMessage('เกิดข้อผิดพลาดในการตัดสต็อก กรุณาลองใหม่อีกครั้ง');
+      setTimeout(() => setErrorMessage(null), 4000);
     } finally {
       setIsProcessing(false);
     }
@@ -234,6 +237,14 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 rounded-2xl flex items-center gap-2 text-emerald-300 text-xs font-semibold animate-in fade-in">
           <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
           <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Error Notification Banner */}
+      {errorMessage && (
+        <div className="p-3 bg-rose-950/90 border border-rose-500/50 rounded-2xl flex items-center gap-2 text-rose-300 text-xs font-semibold animate-in fade-in">
+          <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <span>{errorMessage}</span>
         </div>
       )}
 

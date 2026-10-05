@@ -126,14 +126,15 @@ export const AddEditTireModal: React.FC<AddEditTireModalProps> = ({
                 className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 focus:border-amber-400 focus:outline-none"
               >
                 <option value="Camal">Camal</option>
+                <option value="Fujiyama">Fujiyama</option>
                 <option value="Deestone">Deestone</option>
-                <option value="Quick">Quick</option>
-                <option value="IRC">IRC</option>
                 <option value="Exella">Exella</option>
+                <option value="IRC">IRC</option>
+                <option value="Quick">Quick</option>
                 <option value="Michelin">Michelin</option>
                 <option value="Maxxis">Maxxis</option>
                 <option value="Pirelli">Pirelli</option>
-                <option value="Vee Rubber">Vee Rubber</option>
+                <option value="Veerubber">Veerubber</option>
               </select>
             </div>
 
