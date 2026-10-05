@@ -32,14 +32,98 @@ import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
 import { ProfileModal } from './components/ProfileModal';
 
+const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_tires_v5';
+const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_v5';
+const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_v5';
+const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_v5';
+
+const defaultTiresList: TireItem[] = INITIAL_TIRES.map((t, idx) => ({
+  ...t,
+  id: `crc-tire-${idx + 1}`,
+}));
+
 export default function App() {
-  const [tires, setTires] = useState<TireItem[]>([]);
-  const [sessions, setSessions] = useState<AuditSession[]>([]);
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [tires, setTires] = useState<TireItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed reading tires from localStorage', e);
+    }
+    return defaultTiresList;
+  });
+
+  const [sessions, setSessions] = useState<AuditSession[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_SESSIONS);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [logs, setLogs] = useState<AuditLog[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_LOGS);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [transactions, setTransactions] = useState<Transaction[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TRANSACTIONS);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
   const [currentTab, setCurrentTab] = useState<TabType>('audit');
   const [isOnline, setIsOnline] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Sync state helpers to guarantee localStorage is always updated
+  const persistTires = (updater: TireItem[] | ((prev: TireItem[]) => TireItem[])) => {
+    setTires((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const persistTransactions = (updater: Transaction[] | ((prev: Transaction[]) => Transaction[])) => {
+    setTransactions((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_TRANSACTIONS, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const persistSessions = (updater: AuditSession[] | ((prev: AuditSession[]) => AuditSession[])) => {
+    setSessions((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_SESSIONS, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const persistLogs = (updater: AuditLog[] | ((prev: AuditLog[]) => AuditLog[])) => {
+    setLogs((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_LOGS, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Modals
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
@@ -58,67 +142,48 @@ export default function App() {
     let unsubscribeTransactions: (() => void) | undefined;
 
     const initFirebase = async () => {
-      const fallbackList: TireItem[] = INITIAL_TIRES.map((t, idx) => ({
-        ...t,
-        id: `local-tire-${idx + 1}`,
-      }));
-
-      // Fallback timer so UI NEVER hangs if network is delayed
-      const safetyTimer = setTimeout(() => {
-        setIsLoading((loading) => {
-          if (loading) {
-            console.warn('Initial connection taking time, rendering local tire catalog');
-            setTires((prev) => (prev.length > 0 ? prev : fallbackList));
-            return false;
-          }
-          return false;
-        });
-      }, 900);
-
       try {
         // Attach real-time listeners immediately
         unsubscribeTires = subscribeToTires(
           (data) => {
-            clearTimeout(safetyTimer);
             if (data && data.length > 0) {
-              setTires(data);
-              setIsLoading(false);
+              persistTires(data);
               setIsOnline(true);
-
-              // Auto-sync 80 CSV items if Firestore had previous count (e.g. 74) or unsynced
-              if (data.length !== INITIAL_TIRES.length && !localStorage.getItem('crc_csv_v3_synced')) {
-                localStorage.setItem('crc_csv_v3_synced', 'true');
-                restoreAllInitialTires().catch(console.warn);
-              }
             } else {
-              // Remote collection empty, display fallback right away and seed in background
-              setTires(fallbackList);
-              setIsLoading(false);
-              setIsOnline(true);
-              seedTiresIfEmpty(true).catch(console.warn);
+              // Remote collection is empty, seed initial data to Firestore in background
+              seedTiresIfEmpty(tires).catch(console.warn);
             }
           },
           (err) => {
-            console.warn('Tires listener error:', err);
-            clearTimeout(safetyTimer);
-            setTires((prev) => (prev.length > 0 ? prev : fallbackList));
-            setIsLoading(false);
+            console.warn('Tires listener note:', err);
             setIsOnline(false);
           }
         );
 
         unsubscribeSessions = subscribeToAuditSessions(
-          (data) => setSessions(data),
+          (data) => {
+            if (data && data.length > 0) {
+              persistSessions(data);
+            }
+          },
           (err) => console.warn('Sessions listener error:', err)
         );
 
         unsubscribeLogs = subscribeToAuditLogs(
-          (data) => setLogs(data),
+          (data) => {
+            if (data && data.length > 0) {
+              persistLogs(data);
+            }
+          },
           (err) => console.warn('Logs listener error:', err)
         );
 
         unsubscribeTransactions = subscribeToTransactions(
-          (data) => setTransactions(data),
+          (data) => {
+            if (data && data.length > 0) {
+              persistTransactions(data);
+            }
+          },
           (err) => console.warn('Transactions listener error:', err)
         );
 
@@ -127,11 +192,7 @@ export default function App() {
           setIsOnline(connected);
         });
       } catch (error) {
-        console.error('Firebase initialization error:', error);
-        clearTimeout(safetyTimer);
-        setTires((prev) => (prev.length > 0 ? prev : fallbackList));
-        setIsLoading(false);
-        setIsOnline(false);
+        console.warn('Firebase initialization note (offline mode active):', error);
       }
     };
 
@@ -147,14 +208,14 @@ export default function App() {
 
   const activeSession = sessions[0] || null;
 
-  // Stepper quantity update (Instant optimistic UI + background sync)
+  // Stepper quantity update (Instant optimistic UI + local storage + background sync)
   const handleUpdateQty = async (tire: TireItem, newQty: number) => {
     const safeQty = Math.max(0, newQty);
     const diff = safeQty - tire.systemQty;
     const status: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
-    // 1. Instant optimistic update so UI changes immediately!
-    setTires((prev) =>
+    // 1. Instant optimistic update + localStorage persist
+    persistTires((prev) =>
       prev.map((t) =>
         t.id === tire.id
           ? { ...t, actualQty: safeQty, status, updatedAt: new Date().toISOString() }
@@ -181,7 +242,7 @@ export default function App() {
     try {
       if (id) {
         // Optimistic update
-        setTires((prev) =>
+        persistTires((prev) =>
           prev.map((t) =>
             t.id === id ? { ...t, ...tireData, updatedAt: new Date().toISOString() } : t
           )
@@ -189,16 +250,16 @@ export default function App() {
         await updateTireItem(id, tireData);
       } else {
         // Optimistic add with unique ID
-        const tempId = `tire-${Date.now()}`;
+        const tempId = `crc-new-${Date.now()}`;
         const newTire: TireItem = {
           ...tireData,
           id: tempId,
         };
-        setTires((prev) => [newTire, ...prev]);
+        persistTires((prev) => [newTire, ...prev]);
 
         const realId = await addNewTire(tireData);
         if (realId && realId !== tempId) {
-          setTires((prev) =>
+          persistTires((prev) =>
             prev.map((t) => (t.id === tempId ? { ...t, id: realId } : t))
           );
         }
@@ -213,8 +274,8 @@ export default function App() {
   // Delete Tire
   const handleDeleteTire = async (tire: TireItem) => {
     if (window.confirm(`ยืนยันการลบ ${tire.brand} ${tire.size} ออกจากระบบ?`)) {
-      // Optimistic delete
-      setTires((prev) => prev.filter((t) => t.id !== tire.id));
+      // Optimistic delete + localStorage persist
+      persistTires((prev) => prev.filter((t) => t.id !== tire.id));
       try {
         await deleteTireItem(tire.id);
       } catch (error) {
@@ -246,7 +307,7 @@ export default function App() {
       };
 
       // 1. Optimistic update session
-      setSessions((prev) => [savedSession, ...prev.filter((s) => s.id !== sessionId)]);
+      persistSessions((prev) => [savedSession, ...prev.filter((s) => s.id !== sessionId)]);
 
       // 2. Optimistic audit log
       const newLog: AuditLog = {
@@ -261,11 +322,11 @@ export default function App() {
         timestamp: new Date().toISOString(),
         note: `ตรวจเสร็จ ${checkedCount}/${tires.length} รายการ (พบยอดต่าง ${discrepancyCount} รายการ)${syncToSystem ? ' • ปรับยอดสต็อกในระบบให้ตรงกับยอดนับจริงแล้ว' : ''}`,
       };
-      setLogs((prev) => [newLog, ...prev]);
+      persistLogs((prev) => [newLog, ...prev]);
 
       // 3. If user chose to sync system stock to actual counts:
       if (syncToSystem) {
-        setTires((prev) =>
+        persistTires((prev) =>
           prev.map((tire) => ({
             ...tire,
             systemQty: tire.actualQty,
@@ -326,6 +387,7 @@ export default function App() {
   const handleResetSampleData = async () => {
     try {
       await restoreAllInitialTires();
+      persistTires(defaultTiresList);
       confetti({
         particleCount: 80,
         spread: 70,
@@ -336,10 +398,11 @@ export default function App() {
     }
   };
 
-  // Restore all 74 tires
+  // Restore all 80 tires
   const handleRestoreAllData = async () => {
     try {
       await restoreAllInitialTires();
+      persistTires(defaultTiresList);
       confetti({
         particleCount: 80,
         spread: 70,
@@ -373,8 +436,8 @@ export default function App() {
     customerOrSupplier: string,
     note?: string
   ) => {
-    // 1. Instant optimistic update of tire stocks in UI
-    setTires((prevTires) => {
+    // 1. Instant optimistic update of tire stocks in UI + localStorage
+    persistTires((prevTires) => {
       let updated = [...prevTires];
       for (const item of items) {
         const delta = type === 'sale' ? -item.quantity : item.quantity;
@@ -398,7 +461,7 @@ export default function App() {
       return updated;
     });
 
-    // 2. Optimistic update of transactions list
+    // 2. Optimistic update of transactions list + localStorage
     const newTransactions: Transaction[] = items.map((item, idx) => ({
       id: `tx-${Date.now()}-${idx}`,
       type,
@@ -412,9 +475,9 @@ export default function App() {
       note: note?.trim() || '',
       createdAt: new Date().toISOString(),
     }));
-    setTransactions((prev) => [...newTransactions, ...prev]);
+    persistTransactions((prev) => [...newTransactions, ...prev]);
 
-    // 3. Optimistic update of audit logs
+    // 3. Optimistic update of audit logs + localStorage
     const newLogs: AuditLog[] = items.map((item, idx) => {
       const delta = type === 'sale' ? -item.quantity : item.quantity;
       return {
@@ -430,7 +493,7 @@ export default function App() {
         note: `${type === 'sale' ? 'ขายให้: ' : 'รับจาก: '}${customerOrSupplier.trim() || 'หน้าร้าน'} ${note ? `(${note})` : ''}`,
       };
     });
-    setLogs((prev) => [...newLogs, ...prev]);
+    persistLogs((prev) => [...newLogs, ...prev]);
 
     // 4. Background persist to Firestore safely
     try {

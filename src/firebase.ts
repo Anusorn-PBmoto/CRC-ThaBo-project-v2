@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -24,6 +24,11 @@ const app = initializeApp(firebaseConfig);
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+
+// Authenticate anonymously so Firestore security context is always valid
+signInAnonymously(auth).catch((err) => {
+  console.warn('Anonymous auth note (app continues offline/local):', err);
+});
 
 export enum OperationType {
   CREATE = 'create',
@@ -86,42 +91,47 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-// Seed initial tires if collection is empty or forced
-export async function seedTiresIfEmpty(force: boolean = false): Promise<void> {
+// Seed initial tires only if remote collection is empty
+export async function seedTiresIfEmpty(customTires?: TireItem[]): Promise<void> {
   const tiresCol = 'tires';
   try {
     const snap = await getDocs(collection(db, tiresCol));
-    if (snap.empty || force) {
-      console.log('Batch seeding 80 initial tires from CSV to Firestore...');
+    if (snap.empty) {
+      console.log('Seeding initial tires to Firestore...');
       const batch = writeBatch(db);
-      for (const tire of INITIAL_TIRES) {
-        const newRef = doc(collection(db, tiresCol));
-        batch.set(newRef, {
-          ...tire,
-          id: newRef.id,
-        });
+      const itemsToSeed: TireItem[] =
+        customTires && customTires.length > 0
+          ? customTires
+          : INITIAL_TIRES.map((t, idx) => ({
+              ...t,
+              id: `crc-tire-${idx + 1}`,
+            }));
+
+      for (const item of itemsToSeed) {
+        const newRef = doc(db, tiresCol, item.id);
+        batch.set(newRef, item, { merge: true });
       }
       await batch.commit();
 
       // Create initial active session if missing
       const sessionsSnap = await getDocs(collection(db, 'audit_sessions'));
       if (sessionsSnap.empty) {
-        const sessionRef = doc(collection(db, 'audit_sessions'));
+        const sessionRef = doc(db, 'audit_sessions', 'AUD-SESSION-01');
         const initialSession: AuditSession = {
-          id: sessionRef.id,
+          id: 'AUD-SESSION-01',
           code: 'AUD-2410-09',
           zone: 'ห้องยางชั้น 2',
           title: 'คลังยางเรเดียล Tubeless • รอบเช้า',
           status: 'in_progress',
-          totalItems: INITIAL_TIRES.length,
-          checkedItems: INITIAL_TIRES.filter((t) => t.systemQty > 0).length,
+          totalItems: itemsToSeed.length,
+          checkedItems: itemsToSeed.filter((t) => t.systemQty > 0).length,
           discrepancyCount: 0,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        await setDoc(sessionRef, initialSession);
+        await setDoc(sessionRef, initialSession, { merge: true });
       }
-      console.log(`Seeding of ${INITIAL_TIRES.length} tires completed successfully!`);
+      console.log(`Seeding of ${itemsToSeed.length} tires completed successfully!`);
     }
   } catch (error) {
     console.warn('Failed to seed initial tires:', error);
@@ -138,11 +148,13 @@ export async function restoreAllInitialTires(): Promise<void> {
     await deleteBatch.commit();
 
     const insertBatch = writeBatch(db);
-    for (const tire of INITIAL_TIRES) {
-      const newRef = doc(collection(db, tiresCol));
+    for (let i = 0; i < INITIAL_TIRES.length; i++) {
+      const tire = INITIAL_TIRES[i];
+      const tireId = `crc-tire-${i + 1}`;
+      const newRef = doc(db, tiresCol, tireId);
       insertBatch.set(newRef, {
         ...tire,
-        id: newRef.id,
+        id: tireId,
       });
     }
     await insertBatch.commit();
@@ -151,10 +163,14 @@ export async function restoreAllInitialTires(): Promise<void> {
     const sessionSnap = await getDocs(collection(db, 'audit_sessions'));
     if (!sessionSnap.empty) {
       const sessionDoc = sessionSnap.docs[0];
-      await updateDoc(sessionDoc.ref, {
-        totalItems: INITIAL_TIRES.length,
-        updatedAt: new Date().toISOString(),
-      });
+      await setDoc(
+        sessionDoc.ref,
+        {
+          totalItems: INITIAL_TIRES.length,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     }
   } catch (error) {
     console.error('Failed to restore initial tires:', error);
