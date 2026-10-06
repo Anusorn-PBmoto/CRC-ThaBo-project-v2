@@ -19,12 +19,12 @@ export const Header: React.FC<HeaderProps> = ({
   subtitle = 'ระบบสต็อกอะไหล่ • CRC ThaBo',
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-[#0e1626]/95 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
+    <header className="sticky top-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-b border-[#3A4750] px-4 py-3">
       <div className="max-w-md mx-auto flex items-center justify-between">
         {/* Left: App Logo & Zone */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 p-[1.5px] shadow-lg shadow-amber-500/20 flex-shrink-0">
-            <div className="w-full h-full bg-[#111c30] rounded-[10px] flex items-center justify-center text-amber-400">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F6C90E] to-[#DDA600] p-[1.5px] shadow-lg shadow-[#F6C90E]/20 flex-shrink-0">
+            <div className="w-full h-full bg-[#252C33] rounded-[10px] flex items-center justify-center text-[#F6C90E]">
               <svg className="w-6 h-6 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="9" />
                 <circle cx="12" cy="12" r="3.5" />
@@ -42,16 +42,16 @@ export const Header: React.FC<HeaderProps> = ({
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-wider text-amber-400 leading-tight">
+              <h1 className="text-lg font-bold tracking-wider text-[#F6C90E] leading-tight">
                 CRC THABO
               </h1>
               {activeZone && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#3A4750] border border-[#475662] text-[#EEEEEE]">
                   {activeZone}
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
+            <p className="text-[11px] text-[#A0ABB5] leading-tight mt-0.5">
               {subtitle}
             </p>
           </div>
@@ -65,9 +65,9 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={onOpenAppSheet}
               aria-label="บันทึก AppSheet CSV"
               title="ฐานข้อมูล AppSheet (crc-thano-project-v2.csv)"
-              className="h-9 px-2.5 rounded-lg bg-[#142922] hover:bg-[#1a382e] text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+              className="h-9 px-2.5 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] border border-[#475662] flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
             >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <FileSpreadsheet className="w-4 h-4 text-[#F6C90E]" />
               <span className="text-[10px] font-bold tracking-tight">AppSheet</span>
             </button>
           )}
@@ -77,9 +77,9 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenScanner}
             aria-label="สแกนเนอร์กล้อง / บาร์โค้ด"
             title="เปิดกล้องสแกนบาร์โค้ด"
-            className="w-9 h-9 rounded-lg bg-[#18253b] hover:bg-[#20314d] text-slate-200 border border-slate-700/60 flex items-center justify-center transition-all active:scale-95 shadow-sm"
+            className="w-9 h-9 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] border border-[#475662] flex items-center justify-center transition-all active:scale-95 shadow-sm"
           >
-            <QrCode className="w-4 h-4 text-cyan-400" />
+            <QrCode className="w-4 h-4 text-[#F6C90E]" />
           </button>
 
           {/* Profile / Connection status button */}
@@ -87,11 +87,11 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onOpenProfile}
             aria-label="ข้อมูลผู้ใช้งานและระบบ"
             title="โปรไฟล์และสถานะ Firebase"
-            className="w-9 h-9 rounded-lg bg-[#f59e0b] hover:bg-amber-400 text-slate-950 flex items-center justify-center transition-all active:scale-95 shadow-md shadow-amber-500/20 relative"
+            className="w-9 h-9 rounded-lg bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold flex items-center justify-center transition-all active:scale-95 shadow-md shadow-[#F6C90E]/20 relative"
           >
-            <User className="w-4 h-4" />
+            <User className="w-4 h-4 text-[#252C33]" />
             <span
-              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#0e1626] ${
+              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#20262D] ${
                 isOnline ? 'bg-emerald-500' : 'bg-rose-500'
               }`}
               title={isOnline ? 'Firebase เรียลไทม์ออนไลน์' : 'ออฟไลน์'}

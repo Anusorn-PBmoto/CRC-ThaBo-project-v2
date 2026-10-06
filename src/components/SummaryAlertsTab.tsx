@@ -38,19 +38,19 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
   // Generate PO order text
   const generatePOText = () => {
     const lines = [
-      '📋 [ใบสั่งซื้อยางเรเดียล Tubeless - CRC THABO]',
-      `วันที่: ${new Date().toLocaleDateString('th-TH')} | ห้องยางชั้น 2`,
+      '📋 [ใบสั่งซื้ออะไหล่มอเตอร์ไซค์ - CRC THABO]',
+      `วันที่: ${new Date().toLocaleDateString('th-TH')} | คลังอะไหล่`,
       '--------------------------------',
     ];
 
     const needs = [...outOfStockItems, ...lowStockItems];
     if (needs.length === 0) {
-      lines.push('ไม่มีรายการยางที่ต้องสั่งเพิ่มในขณะนี้');
+      lines.push('ไม่มีรายการอะไหล่ที่ต้องสั่งเพิ่มในขณะนี้');
     } else {
       needs.forEach((item, idx) => {
         const orderQty = Math.max(5, (item.minStock || 3) * 2 - item.actualQty);
         lines.push(
-          `${idx + 1}. ${item.brand} ${item.size} (${item.rim}") - สั่ง ${orderQty} เส้น [คงเหลือ: ${item.actualQty}]`
+          `${idx + 1}. ${item.name || `${item.brand} ${item.size}`} - สั่ง ${orderQty} ${item.unit || 'ชิ้น'} [คงเหลือ: ${item.actualQty}]`
         );
       });
     }
@@ -68,37 +68,37 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
   };
 
   return (
-    <div className="pb-28 pt-2 px-3 space-y-3.5 max-w-md mx-auto">
+    <div className="pb-28 pt-2 px-3 space-y-3.5 max-w-md mx-auto font-['Prompt',sans-serif]">
       {/* 1. Header Card */}
-      <div className="bg-[#121c2e] border border-slate-800 rounded-2xl p-4 shadow-md">
+      <div className="bg-[#3A4750] border border-[#475662] rounded-2xl p-4 shadow-md">
         <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-[#252C33] text-[#F6C90E] border border-[#475662] flex items-center justify-center">
             <AlertTriangle className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-100">
+            <h2 className="text-sm font-bold text-[#EEEEEE]">
               สรุปยอดความคลาดเคลื่อน & แจ้งเตือนสินค้า
             </h2>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-[#A0ABB5]">
               ตรวจสอบสต็อกที่ไม่ตรงระบบ และรายการที่ต้องเติมเข้าคลัง
             </p>
           </div>
         </div>
 
         {/* Quick summary grid */}
-        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-800/80">
-          <div className="bg-[#16243b] border border-slate-750 rounded-xl p-2.5">
-            <div className="text-[11px] text-slate-400">คลาดเคลื่อนจากการนับ</div>
-            <div className="text-xl font-bold font-mono text-amber-400 mt-0.5">
+        <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[#475662]">
+          <div className="bg-[#252C33] border border-[#475662] rounded-xl p-2.5">
+            <div className="text-[11px] text-[#A0ABB5]">คลาดเคลื่อนจากการนับ</div>
+            <div className="text-xl font-bold font-mono text-[#F6C90E] mt-0.5">
               {discrepancyItems.length}{' '}
-              <span className="text-xs font-normal text-slate-300">รายการ</span>
+              <span className="text-xs font-normal text-[#EEEEEE]">รายการ</span>
             </div>
           </div>
-          <div className="bg-[#16243b] border border-slate-750 rounded-xl p-2.5">
-            <div className="text-[11px] text-slate-400">ต้องสั่งซื้อเพิ่ม (PO)</div>
+          <div className="bg-[#252C33] border border-[#475662] rounded-xl p-2.5">
+            <div className="text-[11px] text-[#A0ABB5]">ต้องสั่งซื้อเพิ่ม (PO)</div>
             <div className="text-xl font-bold font-mono text-rose-400 mt-0.5">
               {outOfStockItems.length + lowStockItems.length}{' '}
-              <span className="text-xs font-normal text-slate-300">รุ่น</span>
+              <span className="text-xs font-normal text-[#EEEEEE]">รุ่น</span>
             </div>
           </div>
         </div>
@@ -108,15 +108,15 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
-            <h3 className="text-xs font-bold text-slate-200 tracking-wider">
+            <span className="w-2 h-2 rounded-full bg-[#F6C90E]" />
+            <h3 className="text-xs font-bold text-[#EEEEEE] tracking-wider">
               รายการคลาดเคลื่อนจากการนับล่าสุด ({discrepancyItems.length})
             </h3>
           </div>
           {discrepancyItems.length > 0 && (
             <button
               onClick={onSyncAllSystemStock}
-              className="text-[11px] text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1"
+              className="text-[11px] text-[#F6C90E] hover:text-[#E5B800] font-bold flex items-center gap-1"
             >
               <RotateCw className="w-3 h-3" />
               <span>ปรับสต็อกตามที่นับ</span>
@@ -125,12 +125,12 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
         </div>
 
         {discrepancyItems.length === 0 ? (
-          <div className="bg-[#131e31] border border-emerald-500/20 rounded-2xl p-4 text-center">
+          <div className="bg-[#3A4750] border border-emerald-500/30 rounded-2xl p-4 text-center">
             <CheckCheck className="w-8 h-8 text-emerald-400 mx-auto mb-1.5" />
             <p className="text-xs font-semibold text-emerald-300">
               ยอดนับตรงกับระบบ 100%
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-[11px] text-[#A0ABB5] mt-0.5">
               ไม่มีสินค้าที่คลาดเคลื่อนในการตรวจนับรอบปัจจุบัน
             </p>
           </div>
@@ -141,20 +141,22 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
               return (
                 <div
                   key={tire.id}
-                  className="bg-[#131e31] border border-amber-500/30 rounded-2xl p-3 shadow-sm flex items-center justify-between"
+                  className="bg-[#3A4750] border border-[#F6C90E]/30 rounded-2xl p-3 shadow-sm flex items-center justify-between"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-100">
-                        {tire.brand} {tire.size}
+                      <h4 className="text-xs font-bold text-[#EEEEEE]">
+                        {tire.name || `${tire.brand} ${tire.size}`}
                       </h4>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300">
-                        {tire.rim}&quot;
-                      </span>
+                      {tire.unit && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
+                          {tire.unit}
+                        </span>
+                      )}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      ระบบ: <span className="font-mono text-slate-200">{tire.systemQty}</span> | นับได้:{' '}
-                      <span className="font-mono font-bold text-amber-400">{tire.actualQty}</span> (
+                    <div className="text-[11px] text-[#A0ABB5] mt-0.5">
+                      ระบบ: <span className="font-mono text-[#EEEEEE]">{tire.systemQty}</span> | นับได้:{' '}
+                      <span className="font-mono font-bold text-[#F6C90E]">{tire.actualQty}</span> (
                       {tire.location})
                     </div>
                   </div>
@@ -163,15 +165,15 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
                     <span
                       className={`text-xs font-bold px-2 py-0.5 rounded-full font-mono ${
                         diff > 0
-                          ? 'bg-amber-950/80 text-amber-400 border border-amber-500/40'
-                          : 'bg-rose-950/80 text-rose-400 border border-rose-500/40'
+                          ? 'bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40'
+                          : 'bg-[#252C33] text-rose-400 border border-rose-500/40'
                       }`}
                     >
                       {diff > 0 ? `+${diff}` : diff}
                     </span>
                     <button
                       onClick={() => onJumpToAudit(tire)}
-                      className="px-2 py-1 bg-[#1c2c47] hover:bg-[#25395c] text-slate-300 rounded-lg text-[11px]"
+                      className="px-2 py-1 bg-[#252C33] hover:bg-[#2C353E] text-[#EEEEEE] border border-[#475662] rounded-lg text-[11px]"
                     >
                       ตรวจซ้ำ
                     </button>
@@ -188,22 +190,22 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-rose-400" />
-            <h3 className="text-xs font-bold text-slate-200 tracking-wider">
-              ยางที่ต้องสั่งซื้อด่วน ({outOfStockItems.length + lowStockItems.length})
+            <h3 className="text-xs font-bold text-[#EEEEEE] tracking-wider">
+              อะไหล่ที่ต้องสั่งซื้อด่วน ({outOfStockItems.length + lowStockItems.length})
             </h3>
           </div>
           <button
             onClick={handleCopyPO}
-            className="text-[11px] text-slate-300 hover:text-white px-2 py-1 rounded-lg bg-[#18263d] border border-slate-700 flex items-center gap-1 transition-all"
+            className="text-[11px] text-[#EEEEEE] hover:bg-[#43525D] px-2.5 py-1 rounded-lg bg-[#252C33] border border-[#475662] flex items-center gap-1 transition-all"
           >
             {copiedText ? (
               <>
-                <Check className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400">คัดลอกแล้ว</span>
+                <Check className="w-3 h-3 text-[#F6C90E]" />
+                <span className="text-[#F6C90E] font-bold">คัดลอกแล้ว</span>
               </>
             ) : (
               <>
-                <Copy className="w-3 h-3" />
+                <Copy className="w-3 h-3 text-[#F6C90E]" />
                 <span>คัดลอกใบสั่ง</span>
               </>
             )}
@@ -219,33 +221,33 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
             return (
               <div
                 key={tire.id}
-                className="bg-[#131e31] border border-slate-800 rounded-2xl p-3 flex items-center justify-between"
+                className="bg-[#3A4750] border border-[#475662] rounded-2xl p-3 flex items-center justify-between"
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-slate-100">
-                      {tire.brand} {tire.size}
+                    <h4 className="text-xs font-bold text-[#EEEEEE]">
+                      {tire.name || `${tire.brand} ${tire.size}`}
                     </h4>
                     {isZero ? (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-500/40">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#252C33] text-rose-400 border border-rose-500/40">
                         หมด (0)
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-500/40">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40">
                         เหลือ {tire.actualQty}
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {tire.description || 'ยางมาตรฐาน'} • แนะนำสั่ง {suggestedOrder} เส้น
+                  <p className="text-[11px] text-[#A0ABB5] mt-0.5">
+                    {tire.description || 'อะไหล่มาตรฐาน'} • แนะนำสั่ง {suggestedOrder} {tire.unit || 'ชิ้น'}
                   </p>
                 </div>
 
                 <button
                   onClick={() => onOpenPO(tire)}
-                  className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-md shadow-rose-600/20"
+                  className="px-3 py-1.5 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20"
                 >
-                  <ShoppingCart className="w-3 h-3" />
+                  <ShoppingCart className="w-3 h-3 text-[#252C33]" />
                   <span>เปิด PO</span>
                 </button>
               </div>

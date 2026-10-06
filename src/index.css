@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-bg: #252C33;
+  --color-brand-surface: #3A4750;
+  --color-brand-surface-hover: #43525D;
+  --color-brand-input: #2C353E;
+  --color-brand-accent: #F6C90E;
+  --color-brand-accent-hover: #E5B800;
+  --color-brand-light: #EEEEEE;
+  --color-brand-muted: #A0ABB5;
+  --color-brand-border: #475662;
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
@@ -12,7 +24,7 @@
 
 body {
   font-family: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #090e18;
-  color: #f1f5f9;
+  background-color: #252C33;
+  color: #EEEEEE;
   -webkit-tap-highlight-color: transparent;
 }

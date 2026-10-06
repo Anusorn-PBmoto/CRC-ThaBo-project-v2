@@ -22,7 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       label: 'นับสต็อก',
       icon: ListChecks,
       badge: discrepancyCount > 0 ? discrepancyCount : undefined,
-      badgeColor: 'bg-amber-500 text-slate-950',
+      badgeColor: 'bg-[#F6C90E] text-[#252C33]',
     },
     {
       id: 'inventory' as TabType,
@@ -50,7 +50,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#0c1424]/95 backdrop-blur-md border-t border-slate-800/80 px-2 py-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-t border-[#3A4750] px-2 py-2">
       <div className="max-w-md mx-auto grid grid-cols-5 gap-0.5">
         {tabs.map((tab) => {
           const Icon = tab.icon;
@@ -62,17 +62,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               onClick={() => onChangeTab(tab.id)}
               className={`flex flex-col items-center justify-center py-1 px-1 rounded-xl transition-all relative ${
                 isActive
-                  ? 'text-amber-400 font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 active:scale-95'
+                  ? 'text-[#F6C90E] font-semibold'
+                  : 'text-[#A0ABB5] hover:text-[#EEEEEE] active:scale-95'
               }`}
             >
               <div className="relative">
                 {tab.isSpecial && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#F6C90E] animate-pulse" />
                 )}
                 <Icon
                   className={`w-5 h-5 transition-transform ${
-                    isActive ? 'scale-110 text-amber-400' : tab.isSpecial ? 'text-emerald-400' : ''
+                    isActive ? 'scale-110 text-[#F6C90E]' : tab.isSpecial ? 'text-[#F6C90E]' : ''
                   }`}
                 />
                 {tab.badge !== undefined && tab.badge > 0 && (
@@ -86,16 +86,16 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               <span
                 className={`text-[10px] mt-1 tracking-tight truncate max-w-full ${
                   isActive
-                    ? 'text-amber-400 font-bold'
+                    ? 'text-[#F6C90E] font-bold'
                     : tab.isSpecial
-                    ? 'text-emerald-300 font-medium'
+                    ? 'text-[#EEEEEE] font-medium'
                     : ''
                 }`}
               >
                 {tab.label}
               </span>
               {isActive && (
-                <div className="w-5 h-0.5 bg-amber-400 rounded-full mt-0.5 shadow-sm shadow-amber-400/50" />
+                <div className="w-5 h-0.5 bg-[#F6C90E] rounded-full mt-0.5 shadow-sm shadow-[#F6C90E]/50" />
               )}
             </button>
           );

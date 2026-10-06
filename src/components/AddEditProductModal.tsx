@@ -58,20 +58,21 @@ async function compressImageFile(file: File, maxWidth = 800, maxHeight = 800, qu
           resolve(e.target?.result as string);
           return;
         }
+
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
-        resolve(dataUrl);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedBase64);
       };
-      img.onerror = () => reject(new Error('ไม่สามารถโหลดไฟล์รูปภาพได้'));
+      img.onerror = reject;
       img.src = e.target?.result as string;
     };
-    reader.onerror = () => reject(new Error('เกิดข้อผิดพลาดในการอ่านไฟล์'));
+    reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
 
-// Common units for motorcycle spare parts
-const COMMON_UNITS = ['ชิ้น', 'เส้น', 'กล่อง', 'ชุด', 'ขวด', 'อัน', 'คู่', 'แผ่น', 'ลูก', 'กระป๋อง'];
+// Common units for fast selection
+const COMMON_UNITS = ['เส้น', 'ชิ้น', 'คู่', 'อัน', 'ชุด', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ม้วน'];
 
 export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   isOpen,
@@ -83,20 +84,21 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 }) => {
   const currentItem = initialProduct || initialTire;
 
-  // 1. ระบบแสกนบาร์โค้ด และรหัสสินค้า
+  // The 6 Core Fields requested by user:
+  // 1. รหัสสินค้า (Barcode / Code)
+  // 2. ชื่อสินค้า (Product Name)
+  // 3. หน่วยนับ (Unit)
+  // 4. ราคาซื้อ (Cost Price)
+  // 5. ราคาขาย (Selling Price)
+  // 6. รูปภาพ (Image URL / Photo)
   const [barcode, setBarcode] = useState('');
-  // 2. ชื่อสินค้า
   const [name, setName] = useState('');
-  // 3. หน่วยนับ
   const [unit, setUnit] = useState('ชิ้น');
-  // 4. ราคาซื้อ / ราคาทุน
-  const [costPrice, setCostPrice] = useState<number | string>('');
-  // 5. ราคาขาย
-  const [sellingPrice, setSellingPrice] = useState<number | string>('');
-  // 6. ภาพถ่ายสินค้า
+  const [costPrice, setCostPrice] = useState<number | ''>('');
+  const [sellingPrice, setSellingPrice] = useState<number | ''>('');
   const [imageUrl, setImageUrl] = useState('');
 
-  // Optional supporting fields
+  // Auxiliary fields
   const [stockQty, setStockQty] = useState<number>(1);
   const [location, setLocation] = useState('');
   const [brand, setBrand] = useState('');
@@ -158,7 +160,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     setTimeout(() => setScanSuccessMsg(null), 3500);
   };
 
-  // Handle image upload from camera or gallery
+  // Handle file capture (Camera or Gallery)
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -168,15 +170,16 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       const compressedDataUrl = await compressImageFile(file, 800, 800, 0.82);
       setImageUrl(compressedDataUrl);
     } catch (err) {
-      console.error('Failed to compress image:', err);
+      console.error('Failed processing image:', err);
       alert('ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsUploadingImage(false);
+      // Reset input value so same photo can be re-selected if needed
       e.target.value = '';
     }
   };
 
-  // Calculate profit margin
+  // Calculate profit preview
   const costNum = Number(costPrice) || 0;
   const sellNum = Number(sellingPrice) || 0;
   const profit = sellNum - costNum;
@@ -228,18 +231,18 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 font-['Prompt',sans-serif]">
-      <div className="w-full max-w-md bg-[#111c2e] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="w-full max-w-md bg-[#3A4750] border border-[#475662] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-800 bg-[#0d1626]">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#475662] bg-[#252C33]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+            <div className="w-8 h-8 rounded-xl bg-[#3A4750] text-[#F6C90E] flex items-center justify-center border border-[#475662]">
               {currentItem ? <Save className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">
+              <h3 className="text-sm font-bold text-[#EEEEEE]">
                 {currentItem ? 'แก้ไขข้อมูลสินค้า / อะไหล่' : 'เพิ่มสินค้า / อะไหล่มอเตอร์ไซค์ใหม่'}
               </h3>
-              <p className="text-[10px] text-slate-400">ระบบคลังสินค้า CRC ThaBo</p>
+              <p className="text-[10px] text-[#A0ABB5]">ระบบคลังสินค้า CRC ThaBo</p>
             </div>
           </div>
           <button
@@ -247,7 +250,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               setIsScanning(false);
               onClose();
             }}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#3A4750] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -260,25 +263,25 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           <div className="space-y-2">
             {!isScanning ? (
-              <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 flex items-center justify-between gap-2">
+              <div className="p-2.5 rounded-xl bg-[#252C33] border border-[#475662] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#3A4750] flex items-center justify-center text-[#F6C90E] flex-shrink-0">
                     <ScanBarcode className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-100 flex items-center gap-1.5">
+                    <div className="text-xs font-bold text-[#EEEEEE] flex items-center gap-1.5">
                       <span>1. สแกนบาร์โค้ดสินค้า</span>
-                      <span className="text-[9px] bg-amber-400/20 text-amber-300 font-semibold px-1.5 py-0.2 rounded">
+                      <span className="text-[9px] bg-[#F6C90E]/20 text-[#F6C90E] font-semibold px-1.5 py-0.2 rounded">
                         HD PRO
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-400">เปิดกล้องส่องฉลากอะไหล่ หรือ EAN-13</p>
+                    <p className="text-[10px] text-[#A0ABB5]">เปิดกล้องส่องฉลากอะไหล่ หรือ EAN-13</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsScanning(true)}
-                  className="py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-95 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-sm transition-all flex-shrink-0"
+                  className="py-1.5 px-3 rounded-lg bg-[#F6C90E] hover:bg-[#E5B800] active:scale-95 text-[#252C33] font-bold text-xs flex items-center gap-1 shadow-sm transition-all flex-shrink-0"
                 >
                   <Camera className="w-3.5 h-3.5" />
                   <span>เปิดกล้อง</span>
@@ -287,14 +290,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             ) : (
               <div className="space-y-2 animate-in fade-in">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-[#F6C90E] flex items-center gap-1.5">
                     <Camera className="w-3.5 h-3.5 animate-pulse" />
                     <span>กำลังสแกนบาร์โค้ด... นำกล้องส่องที่ฉลากสินค้า</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setIsScanning(false)}
-                    className="text-xs text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
+                    className="text-xs text-[#EEEEEE] hover:bg-[#43525D] px-2 py-0.5 rounded bg-[#252C33] border border-[#475662]"
                   >
                     ปิดกล้อง
                   </button>
@@ -304,25 +307,25 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             )}
 
             {scanSuccessMsg && (
-              <div className="p-2 bg-emerald-950/90 border border-emerald-500/50 rounded-xl flex items-center gap-2 text-emerald-300 text-xs font-semibold animate-in fade-in">
+              <div className="p-2 bg-[#252C33] border border-emerald-500/50 rounded-xl flex items-center gap-2 text-emerald-300 text-xs font-semibold animate-in fade-in">
                 <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                 <span>{scanSuccessMsg}</span>
               </div>
             )}
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1 flex items-center justify-between">
+              <label className="block text-[#EEEEEE] font-semibold mb-1 flex items-center justify-between">
                 <span>รหัสสินค้า / บาร์โค้ด (Barcode)</span>
-                <span className="text-[10px] text-slate-500">พิมพ์หรือยิงบาร์โค้ด</span>
+                <span className="text-[10px] text-[#A0ABB5]">พิมพ์หรือยิงบาร์โค้ด</span>
               </label>
               <div className="relative">
-                <ScanBarcode className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <ScanBarcode className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5]" />
                 <input
                   type="text"
                   value={barcode}
                   onChange={(e) => setBarcode(e.target.value)}
                   placeholder="เช่น 8851234567890 หรือ H-23100-K0J-N01"
-                  className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl pl-9 pr-3 py-2 focus:border-amber-400 focus:outline-none font-mono text-xs"
+                  className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] rounded-xl pl-9 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-xs"
                 />
               </div>
             </div>
@@ -332,8 +335,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* 2. ชื่อสินค้า (Product Name) */}
           {/* ============================================================ */}
           <div>
-            <label className="block text-slate-300 font-semibold mb-1">
-              2. ชื่อสินค้า / รายการอะไหล่ <span className="text-amber-400">*</span>
+            <label className="block text-[#EEEEEE] font-semibold mb-1">
+              2. ชื่อสินค้า / รายการอะไหล่ <span className="text-[#F6C90E]">*</span>
             </label>
             <input
               type="text"
@@ -341,7 +344,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="เช่น สายพานแท้ Click 125i, ผ้าเบรกหน้า Wave 110i, น้ำมันเครื่อง 4T 0.8L"
-              className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2.5 focus:border-amber-400 focus:outline-none text-xs font-medium"
+              className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2.5 focus:border-[#F6C90E] focus:outline-none text-xs font-medium"
             />
           </div>
 
@@ -350,10 +353,10 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-slate-300 font-semibold">
-                3. หน่วยนับ <span className="text-amber-400">*</span>
+              <label className="text-[#EEEEEE] font-semibold">
+                3. หน่วยนับ <span className="text-[#F6C90E]">*</span>
               </label>
-              <span className="text-[10px] text-slate-400">เลือกด่วนหรือพิมพ์เอง</span>
+              <span className="text-[10px] text-[#A0ABB5]">เลือกด่วนหรือพิมพ์เอง</span>
             </div>
 
             {/* Quick unit pills */}
@@ -367,8 +370,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     onClick={() => setUnit(u)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
                       isSelected
-                        ? 'bg-amber-500 text-slate-950 font-bold shadow-sm'
-                        : 'bg-[#17253d] text-slate-300 hover:text-white border border-slate-700/80'
+                        ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
+                        : 'bg-[#252C33] text-[#EEEEEE] hover:bg-[#43525D] border border-[#475662]'
                     }`}
                   >
                     {u}
@@ -383,7 +386,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               placeholder="พิมพ์หน่วยนับเอง เช่น ชุด, ลัง, ม้วน"
-              className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 focus:border-amber-400 focus:outline-none text-xs"
+              className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none text-xs"
             />
           </div>
 
@@ -392,38 +395,38 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
+              <label className="block text-[#EEEEEE] font-semibold mb-1">
                 4. ราคาซื้อ / ทุน (บาท)
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">฿</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5] font-bold">฿</span>
                 <input
                   type="number"
                   min="0"
                   step="any"
                   value={costPrice}
-                  onChange={(e) => setCostPrice(e.target.value)}
+                  onChange={(e) => setCostPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full bg-[#17253d] border border-slate-700 text-amber-300 font-bold rounded-xl pl-7 pr-3 py-2 focus:border-amber-400 focus:outline-none font-mono text-sm"
+                  className="w-full bg-[#252C33] border border-[#475662] text-[#F6C90E] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                5. ราคาขาย (บาท) <span className="text-amber-400">*</span>
+              <label className="block text-[#EEEEEE] font-semibold mb-1">
+                5. ราคาขาย (บาท) <span className="text-[#F6C90E]">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 font-bold">฿</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 font-bold">฿</span>
                 <input
                   type="number"
                   min="0"
                   step="any"
                   required
                   value={sellingPrice}
-                  onChange={(e) => setSellingPrice(e.target.value)}
+                  onChange={(e) => setSellingPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full bg-[#17253d] border border-slate-700 text-emerald-400 font-bold rounded-xl pl-7 pr-3 py-2 focus:border-emerald-400 focus:outline-none font-mono text-sm"
+                  className="w-full bg-[#252C33] border border-[#475662] text-emerald-400 font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
                 />
               </div>
             </div>
@@ -431,8 +434,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
           {/* Profit Calculation Highlight Banner */}
           {sellNum > 0 && costNum > 0 && (
-            <div className="p-2 rounded-xl bg-[#0e1e33] border border-emerald-500/30 flex items-center justify-between text-xs animate-in fade-in">
-              <span className="text-slate-400 flex items-center gap-1">
+            <div className="p-2 rounded-xl bg-[#252C33] border border-emerald-500/30 flex items-center justify-between text-xs animate-in fade-in">
+              <span className="text-[#A0ABB5] flex items-center gap-1">
                 <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
                 <span>กำไรต่อ {unit || 'ชิ้น'}:</span>
               </span>
@@ -441,7 +444,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   {profit >= 0 ? `+฿${profit.toLocaleString()}` : `-฿${Math.abs(profit).toLocaleString()}`}
                 </span>
                 {profitMargin && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-semibold">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A4750] border border-emerald-500/40 text-emerald-300 font-semibold">
                     {profitMargin}%
                   </span>
                 )}
@@ -452,7 +455,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* Initial Stock Quantity & Storage Location */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-400 font-medium mb-1">
+              <label className="block text-[#A0ABB5] font-medium mb-1">
                 จำนวนสต็อกเริ่มต้น ({unit || 'ชิ้น'})
               </label>
               <input
@@ -460,11 +463,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                 min="0"
                 value={stockQty}
                 onChange={(e) => setStockQty(Number(e.target.value))}
-                className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 focus:border-amber-400 focus:outline-none font-mono"
+                className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono"
               />
             </div>
             <div>
-              <label className="block text-slate-400 font-medium mb-1">
+              <label className="block text-[#A0ABB5] font-medium mb-1">
                 ตำแหน่งจัดเก็บ / ชั้นวาง
               </label>
               <input
@@ -472,7 +475,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="เช่น RACK A-01, กล่อง 2"
-                className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 focus:border-amber-400 focus:outline-none"
+                className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none"
               />
             </div>
           </div>
@@ -480,10 +483,10 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           {/* 6. ถ่ายภาพสินค้า (Product Photo) */}
           {/* ============================================================ */}
-          <div className="pt-2 border-t border-slate-800 space-y-2.5">
+          <div className="pt-2 border-t border-[#475662] space-y-2.5">
             <div className="flex items-center justify-between">
-              <label className="text-slate-300 font-bold flex items-center gap-1.5">
-                <Camera className="w-3.5 h-3.5 text-amber-400" />
+              <label className="text-[#EEEEEE] font-bold flex items-center gap-1.5">
+                <Camera className="w-3.5 h-3.5 text-[#F6C90E]" />
                 <span>6. ภาพถ่ายสินค้า (Product Photo)</span>
               </label>
               {imageUrl && (
@@ -517,17 +520,18 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
             {/* If Image exists, show preview */}
             {imageUrl ? (
-              <div className="relative rounded-2xl overflow-hidden border border-amber-500/40 bg-slate-900 group">
-                <div className="w-full h-44 overflow-hidden flex items-center justify-center bg-slate-950">
+              <div className="relative rounded-2xl overflow-hidden border border-[#F6C90E]/40 bg-[#252C33] group">
+                <div className="w-full h-44 overflow-hidden flex items-center justify-center bg-[#20262D]">
                   <img
                     src={imageUrl}
                     alt={name || 'สินค้า'}
+                    referrerPolicy="no-referrer"
                     className="w-full h-full object-contain"
                   />
                 </div>
                 {/* Floating badge */}
-                <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-md text-amber-300 border border-amber-500/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
+                <div className="absolute top-2 left-2 bg-[#252C33]/90 backdrop-blur-md text-[#F6C90E] border border-[#F6C90E]/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+                  <Sparkles className="w-3 h-3 text-[#F6C90E]" />
                   <span>ภาพถ่ายสินค้าจริง</span>
                 </div>
 
@@ -536,17 +540,17 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   <button
                     type="button"
                     onClick={() => cameraInputRef.current?.click()}
-                    className="bg-black/80 hover:bg-black text-white text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-slate-700 flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
+                    className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
                   >
-                    <Camera className="w-3 h-3 text-amber-400" />
+                    <Camera className="w-3 h-3 text-[#F6C90E]" />
                     <span>ถ่ายใหม่</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => galleryInputRef.current?.click()}
-                    className="bg-black/80 hover:bg-black text-white text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-slate-700 flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
+                    className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
                   >
-                    <Upload className="w-3 h-3 text-teal-400" />
+                    <Upload className="w-3 h-3 text-[#F6C90E]" />
                     <span>เปลี่ยนรูป</span>
                   </button>
                 </div>
@@ -558,32 +562,32 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   type="button"
                   disabled={isUploadingImage}
                   onClick={() => cameraInputRef.current?.click()}
-                  className="py-3 px-3 rounded-2xl bg-gradient-to-b from-[#18263d] to-[#121c2e] hover:from-[#203250] hover:to-[#17253d] border border-slate-700/80 hover:border-amber-500/50 text-slate-100 flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm group"
+                  className="py-3 px-3 rounded-2xl bg-[#252C33] hover:bg-[#2C353E] border border-[#475662] hover:border-[#F6C90E]/50 text-[#EEEEEE] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm group"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-9 h-9 rounded-xl bg-[#3A4750] text-[#F6C90E] flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Camera className="w-4 h-4" />
                   </div>
-                  <span className="font-bold text-[11px] text-slate-200">ถ่ายรูปด้วยกล้อง</span>
-                  <span className="text-[9px] text-slate-400">ถ่ายภาพอะไหล่จริงทันที</span>
+                  <span className="font-bold text-[11px] text-[#EEEEEE]">ถ่ายรูปด้วยกล้อง</span>
+                  <span className="text-[9px] text-[#A0ABB5]">ถ่ายภาพอะไหล่จริงทันที</span>
                 </button>
 
                 <button
                   type="button"
                   disabled={isUploadingImage}
                   onClick={() => galleryInputRef.current?.click()}
-                  className="py-3 px-3 rounded-2xl bg-gradient-to-b from-[#18263d] to-[#121c2e] hover:from-[#203250] hover:to-[#17253d] border border-slate-700/80 hover:border-teal-500/50 text-slate-100 flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm group"
+                  className="py-3 px-3 rounded-2xl bg-[#252C33] hover:bg-[#2C353E] border border-[#475662] hover:border-[#F6C90E]/50 text-[#EEEEEE] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm group"
                 >
-                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-9 h-9 rounded-xl bg-[#3A4750] text-[#F6C90E] flex items-center justify-center group-hover:scale-110 transition-transform">
                     <Upload className="w-4 h-4" />
                   </div>
-                  <span className="font-bold text-[11px] text-slate-200">อัปโหลดจากเครื่อง</span>
-                  <span className="text-[9px] text-slate-400">เลือกจากคลังภาพในมือถือ</span>
+                  <span className="font-bold text-[11px] text-[#EEEEEE]">อัปโหลดจากเครื่อง</span>
+                  <span className="text-[9px] text-[#A0ABB5]">เลือกจากคลังภาพในมือถือ</span>
                 </button>
               </div>
             )}
 
             {isUploadingImage && (
-              <div className="flex items-center justify-center gap-2 py-2 text-xs text-amber-400 font-medium">
+              <div className="flex items-center justify-center gap-2 py-2 text-xs text-[#F6C90E] font-medium">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                 <span>กำลังประมวลผลและบีบอัดรูปภาพ...</span>
               </div>
@@ -595,19 +599,19 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowUrlInput(true)}
-                  className="text-[10px] text-slate-400 hover:text-amber-400 flex items-center gap-1 transition-colors"
+                  className="text-[10px] text-[#A0ABB5] hover:text-[#F6C90E] flex items-center gap-1 transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
                   <span>หรือต้องการใส่ลิงก์ URL รูปภาพ?</span>
                 </button>
               ) : (
                 <div className="space-y-1 animate-in fade-in">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                  <div className="flex items-center justify-between text-[10px] text-[#A0ABB5]">
                     <span>ลิงก์ URL รูปภาพ</span>
                     <button
                       type="button"
                       onClick={() => setShowUrlInput(false)}
-                      className="text-slate-500 hover:text-slate-300"
+                      className="text-[#A0ABB5] hover:text-[#EEEEEE]"
                     >
                       ซ่อน
                     </button>
@@ -617,7 +621,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     value={imageUrl.startsWith('data:') ? '' : imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
                     placeholder="https://..."
-                    className="w-full bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-1.5 focus:border-amber-400 focus:outline-none text-[11px]"
+                    className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none text-[11px]"
                   />
                 </div>
               )}
@@ -625,13 +629,13 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           </div>
 
           {/* AppSheet Real-Time Sync Indicator */}
-          <div className="flex items-center justify-center gap-1.5 text-[10px] text-emerald-300/90 pt-1">
+          <div className="flex items-center justify-center gap-1.5 text-[10px] text-emerald-300 pt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>บันทึกฐานข้อมูลลงไฟล์ AppSheet (crc-thano-project-v2.csv) ทันที</span>
           </div>
 
           {/* Submit Buttons */}
-          <div className="pt-2 flex items-center gap-2 border-t border-slate-800">
+          <div className="pt-2 flex items-center gap-2 border-t border-[#475662]">
             {currentItem && onDelete && (
               <button
                 type="button"
@@ -653,14 +657,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                 setIsScanning(false);
                 onClose();
               }}
-              className="flex-1 py-2.5 rounded-xl bg-[#17253d] hover:bg-[#203252] text-slate-300 font-medium active:scale-95 transition-all text-xs"
+              className="flex-1 py-2.5 rounded-xl bg-[#252C33] hover:bg-[#2C353E] text-[#EEEEEE] font-medium active:scale-95 transition-all text-xs border border-[#475662]"
             >
               ยกเลิก
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold active:scale-95 transition-all shadow-md shadow-amber-500/25 disabled:opacity-50 text-xs"
+              className="flex-1 py-2.5 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold active:scale-95 transition-all shadow-md shadow-[#F6C90E]/25 disabled:opacity-50 text-xs"
             >
               {isSubmitting ? 'กำลังบันทึก...' : currentItem ? 'บันทึกการแก้ไข' : 'เพิ่มสินค้าลงระบบ'}
             </button>

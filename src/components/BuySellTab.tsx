@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem, Transaction } from '../types';
+import { resolveProductImage } from '../utils/productImages';
 
 interface BuySellTabProps {
   tires: TireItem[];
@@ -46,11 +47,11 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   onOpenScanner,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBrand, setSelectedBrand] = useState('ทั้งหมด');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState('');
   const [note, setNote] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('ทั้งหมด');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -64,67 +65,43 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
     return ['ทั้งหมด', ...Array.from(set)];
   }, [tires]);
 
-  // Suggested price based on transaction type (sale vs purchase)
-  const getSuggestedPrice = (item: ProductItem) => {
+  // Suggested price based on transaction type
+  const getSuggestedPrice = (tire: TireItem): number => {
     if (transactionType === 'sale') {
-      return item.sellingPrice || item.price || 0;
+      return tire.sellingPrice || tire.price || (tire.costPrice ? Math.round(tire.costPrice * 1.3) : 850);
     } else {
-      return item.costPrice || (item.sellingPrice ? Math.round(item.sellingPrice * 0.7) : 0);
+      return tire.costPrice || Math.round((tire.sellingPrice || tire.price || 850) * 0.7);
     }
   };
 
-  // Filter products for selection
-  const filteredTires = useMemo(() => {
-    return tires.filter((item) => {
-      const q = searchQuery.toLowerCase();
-      const matchSearch =
-        (item.name || item.size || '').toLowerCase().includes(q) ||
-        (item.barcode || '').toLowerCase().includes(q) ||
-        (item.brand || '').toLowerCase().includes(q) ||
-        (item.category || '').toLowerCase().includes(q) ||
-        (item.location || '').toLowerCase().includes(q) ||
-        (item.description || '').toLowerCase().includes(q);
-
-      const matchBrand =
-        selectedBrand === 'ทั้งหมด' ||
-        (item.brand || '').toLowerCase() === selectedBrand.toLowerCase() ||
-        (item.category || '').toLowerCase() === selectedBrand.toLowerCase();
-
-      return matchSearch && matchBrand;
-    });
-  }, [tires, searchQuery, selectedBrand]);
-
-  // Add tire to cart
+  // Add tire to active bill/cart
   const addToCart = (tire: TireItem) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.tire.id === tire.id);
       if (existing) {
         return prev.map((item) =>
-          item.tire.id === tire.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+          item.tire.id === tire.id ? { ...item, quantity: item.quantity + 1 } : item
         );
-      } else {
-        return [
-          ...prev,
-          {
-            tire,
-            quantity: 1,
-            unitPrice: getSuggestedPrice(tire),
-          },
-        ];
       }
+      return [
+        ...prev,
+        {
+          tire,
+          quantity: 1,
+          unitPrice: getSuggestedPrice(tire),
+        },
+      ];
     });
   };
 
-  // Update quantity in cart
+  // Update item quantity
   const updateCartQty = (tireId: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
           if (item.tire.id === tireId) {
-            const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+            const nextQty = item.quantity + delta;
+            return nextQty > 0 ? { ...item, quantity: nextQty } : null;
           }
           return item;
         })
@@ -132,63 +109,85 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
     );
   };
 
-  // Update unit price in cart
+  // Update custom unit price
   const updateCartPrice = (tireId: string, price: number) => {
     setCart((prev) =>
-      prev.map((item) =>
-        item.tire.id === tireId ? { ...item, unitPrice: Math.max(0, price) } : item
-      )
+      prev.map((item) => (item.tire.id === tireId ? { ...item, unitPrice: price } : item))
     );
   };
 
-  // Remove from cart
+  // Remove single item from bill
   const removeFromCart = (tireId: string) => {
     setCart((prev) => prev.filter((item) => item.tire.id !== tireId));
   };
 
-  // Totals
+  // Calculate totals
   const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
   const totalAmount = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
 
-  // Submit Transaction & Auto cut stock
-  const handleSubmit = async () => {
-    if (cart.length === 0) return;
+  // Filter tires for selection list
+  const filteredTires = useMemo(() => {
+    return tires.filter((t) => {
+      const q = searchQuery.toLowerCase();
+      const matchQuery =
+        (t.name || t.size || '').toLowerCase().includes(q) ||
+        (t.brand || '').toLowerCase().includes(q) ||
+        (t.barcode || '').toLowerCase().includes(q) ||
+        (t.location || '').toLowerCase().includes(q) ||
+        (t.category || '').toLowerCase().includes(q);
 
-    // Check stock for sales
+      const matchBrand =
+        selectedBrand === 'ทั้งหมด' || (t.brand || '').toLowerCase() === selectedBrand.toLowerCase();
+
+      return matchQuery && matchBrand;
+    });
+  }, [tires, searchQuery, selectedBrand]);
+
+  // Execute transaction (Stock cut or Purchase intake)
+  const handleSubmit = async () => {
+    if (cart.length === 0) {
+      setErrorMessage('กรุณาเลือกสินค้าอย่างน้อย 1 รายการ');
+      return;
+    }
+
     if (transactionType === 'sale') {
-      const overStockItem = cart.find((item) => item.quantity > item.tire.actualQty);
-      if (overStockItem && overStockItem.tire.actualQty === 0) {
-        if (
-          !window.confirm(
-            `ยาง ${overStockItem.tire.brand} ${overStockItem.tire.size} ในคลังเหลือ 0 เส้น คุณต้องการขายและตัดสต็อกติดลบหรือไม่?`
-          )
-        ) {
+      // Check stock sufficiency
+      for (const item of cart) {
+        if (item.quantity > item.tire.actualQty) {
+          setErrorMessage(
+            `สินค้า ${item.tire.brand} ${item.tire.size} มีคงเหลือในคลังเพียง ${item.tire.actualQty} ชิ้น (สั่งขาย ${item.quantity} ชิ้น)`
+          );
           return;
         }
       }
     }
 
     setIsProcessing(true);
+    setErrorMessage(null);
+
     try {
       await onExecuteTransaction(
         transactionType,
-        cart,
-        customer.trim() || (transactionType === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
-        note.trim()
+        cart.map((item) => ({
+          tire: item.tire,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        customer.trim() || (transactionType === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ซัพพลายเออร์ทั่วไป'),
+        note.trim() || undefined
       );
 
-      // Trigger celebratory effect
+      // Trigger celebratory confetti
       confetti({
         particleCount: 50,
         spread: 60,
         origin: { y: 0.8 },
-        colors: transactionType === 'sale' ? ['#10b981', '#34d399', '#f59e0b'] : ['#38bdf8', '#818cf8'],
       });
 
       const message =
         transactionType === 'sale'
-          ? `ตัดสต็อกขายออก ${totalQuantity} เส้น สำเร็จ!`
-          : `รับเข้าคลังและเพิ่มสต็อก ${totalQuantity} เส้น สำเร็จ!`;
+          ? `ตัดสต็อกขายออก ${totalQuantity} รายการ สำเร็จ!`
+          : `รับเข้าคลังและเพิ่มสต็อก ${totalQuantity} รายการ สำเร็จ!`;
 
       setSuccessMessage(message);
       setErrorMessage(null);
@@ -206,15 +205,15 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   };
 
   return (
-    <div className="pb-32 pt-2 px-3 space-y-3.5 max-w-md mx-auto">
+    <div className="pb-32 pt-2 px-3 space-y-3.5 max-w-md mx-auto font-['Prompt',sans-serif]">
       {/* 1. Transaction Type Selector Tabs */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#121c2e] border border-slate-800 rounded-2xl">
+      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#3A4750] border border-[#475662] rounded-2xl">
         <button
           onClick={() => setTransactionType('sale')}
           className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             transactionType === 'sale'
-              ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-md shadow-emerald-500/20'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#F6C90E] text-[#252C33] shadow-md shadow-[#F6C90E]/20'
+              : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
           }`}
         >
           <ShoppingCart className="w-4 h-4" />
@@ -225,19 +224,19 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           onClick={() => setTransactionType('purchase')}
           className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             transactionType === 'purchase'
-              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/20'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#252C33] text-[#EEEEEE] border border-[#475662] shadow-md'
+              : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
           }`}
         >
-          <PackagePlus className="w-4 h-4" />
+          <PackagePlus className="w-4 h-4 text-[#F6C90E]" />
           <span>ซื้อเข้า / รับของ</span>
         </button>
       </div>
 
       {/* Success Notification Banner */}
       {successMessage && (
-        <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 rounded-2xl flex items-center gap-2 text-emerald-300 text-xs font-semibold animate-in fade-in">
-          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="p-3 bg-[#3A4750] border border-[#F6C90E] rounded-2xl flex items-center gap-2 text-[#EEEEEE] text-xs font-semibold animate-in fade-in">
+          <CheckCircle className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
@@ -252,17 +251,17 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
 
       {/* 2. Active Cart / Bill (If items selected) */}
       {cart.length > 0 && (
-        <div className="bg-[#121c2e] border border-amber-500/40 rounded-2xl p-3.5 shadow-xl space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-100">
-              <Receipt className="w-4 h-4 text-amber-400" />
+        <div className="bg-[#3A4750] border border-[#F6C90E]/40 rounded-2xl p-3.5 shadow-xl space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-[#475662]">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#EEEEEE]">
+              <Receipt className="w-4 h-4 text-[#F6C90E]" />
               <span>
                 {transactionType === 'sale' ? 'รายการตัดสต็อกขาย' : 'รายการรับเข้าสต็อก'} ({cart.length})
               </span>
             </div>
             <button
               onClick={() => setCart([])}
-              className="text-[11px] text-slate-400 hover:text-rose-400"
+              className="text-[11px] text-[#A0ABB5] hover:text-rose-400"
             >
               ล้างทั้งหมด
             </button>
@@ -277,21 +276,21 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               return (
                 <div
                   key={item.tire.id}
-                  className="bg-[#17253d] border border-slate-750 rounded-xl p-2.5 flex items-center justify-between gap-2"
+                  className="bg-[#252C33] border border-[#475662] rounded-xl p-2.5 flex items-center justify-between gap-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-slate-100 text-xs truncate">
-                      {item.tire.brand} {item.tire.size}
+                    <div className="font-bold text-[#EEEEEE] text-xs truncate">
+                      {item.tire.name || `${item.tire.brand} ${item.tire.size}`}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
-                      <span>ในคลัง: {currentStock} เส้น</span>
+                    <div className="text-[10px] text-[#A0ABB5] mt-0.5 flex items-center gap-1.5">
+                      <span>ในคลัง: {currentStock} {item.tire.unit || 'ชิ้น'}</span>
                       <span>•</span>
                       <span>{item.tire.location}</span>
                     </div>
                     {isInsufficient && (
                       <div className="text-[10px] text-rose-400 font-semibold flex items-center gap-1 mt-0.5">
                         <AlertCircle className="w-3 h-3" />
-                        <span>ยอดในคลังไม่พอ ({currentStock} เส้น)</span>
+                        <span>ยอดในคลังไม่พอ ({currentStock})</span>
                       </div>
                     )}
                   </div>
@@ -300,16 +299,16 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <button
                       onClick={() => updateCartQty(item.tire.id, -1)}
-                      className="w-7 h-7 rounded-lg bg-[#203250] hover:bg-[#283e63] text-slate-200 font-bold flex items-center justify-center active:scale-95"
+                      className="w-7 h-7 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold flex items-center justify-center active:scale-95 border border-[#475662]"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-7 text-center font-bold text-amber-300 font-mono text-sm">
+                    <span className="w-7 text-center font-bold text-[#F6C90E] font-mono text-sm">
                       {item.quantity}
                     </span>
                     <button
                       onClick={() => updateCartQty(item.tire.id, 1)}
-                      className="w-7 h-7 rounded-lg bg-[#203250] hover:bg-[#283e63] text-slate-200 font-bold flex items-center justify-center active:scale-95"
+                      className="w-7 h-7 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold flex items-center justify-center active:scale-95 border border-[#475662]"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
@@ -322,14 +321,14 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                       min="0"
                       value={item.unitPrice}
                       onChange={(e) => updateCartPrice(item.tire.id, Number(e.target.value))}
-                      className="w-full bg-[#0d1626] border border-slate-700 text-slate-100 font-mono text-right rounded-lg px-2 py-1 text-xs focus:border-amber-400 focus:outline-none"
+                      className="w-full bg-[#3A4750] border border-[#475662] text-[#F6C90E] font-mono text-right rounded-lg px-2 py-1 text-xs focus:border-[#F6C90E] focus:outline-none"
                     />
                   </div>
 
                   {/* Remove button */}
                   <button
                     onClick={() => removeFromCart(item.tire.id)}
-                    className="p-1 text-slate-500 hover:text-rose-400"
+                    className="p-1 text-[#A0ABB5] hover:text-rose-400"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -339,7 +338,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           </div>
 
           {/* Customer / Vehicle info */}
-          <div className="pt-2 border-t border-slate-800 space-y-2 text-xs">
+          <div className="pt-2 border-t border-[#475662] space-y-2 text-xs">
             <div className="flex gap-2">
               <input
                 type="text"
@@ -350,7 +349,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     ? 'ชื่อลูกค้า / ทะเบียนรถ (เช่น ช่างอาร์ต, กข 5678)'
                     : 'ชื่อผู้แทนจำหน่าย / บริษัทจัดส่ง'
                 }
-                className="flex-1 bg-[#16253c] border border-slate-700 text-slate-100 placeholder-slate-400 rounded-xl px-3 py-2 focus:border-amber-400 focus:outline-none text-xs"
+                className="flex-1 bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none text-xs"
               />
             </div>
 
@@ -361,7 +360,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                   key={preset}
                   type="button"
                   onClick={() => setCustomer(preset)}
-                  className="px-2 py-0.5 rounded-lg bg-[#18263d] text-slate-400 hover:text-white border border-slate-750 whitespace-nowrap"
+                  className="px-2 py-0.5 rounded-lg bg-[#252C33] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#475662] whitespace-nowrap"
                 >
                   {preset}
                 </button>
@@ -369,10 +368,10 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
             </div>
 
             {/* Total Summary & Confirm Button */}
-            <div className="bg-[#0e1728] border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+            <div className="bg-[#252C33] border border-[#475662] rounded-xl p-3 flex items-center justify-between">
               <div>
-                <span className="text-[11px] text-slate-400 block">รวม {totalQuantity} เส้น</span>
-                <span className="text-base font-extrabold font-mono text-amber-400">
+                <span className="text-[11px] text-[#A0ABB5] block">รวม {totalQuantity} รายการ</span>
+                <span className="text-base font-extrabold font-mono text-[#F6C90E]">
                   ฿{totalAmount.toLocaleString()}
                 </span>
               </div>
@@ -380,13 +379,9 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               <button
                 onClick={handleSubmit}
                 disabled={isProcessing}
-                className={`py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all disabled:opacity-50 ${
-                  transactionType === 'sale'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
-                    : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-amber-500/20'
-                }`}
+                className="py-2 px-4 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all disabled:opacity-50 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] shadow-[#F6C90E]/20"
               >
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle className="w-4 h-4 text-[#252C33]" />
                 <span>
                   {isProcessing
                     ? 'กำลังตัดสต็อก...'
@@ -400,24 +395,24 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         </div>
       )}
 
-      {/* 3. Search & Tire Selection Header */}
+      {/* 3. Search & Product Selection Header */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5]" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหายางเพื่อตัดสต็อก (รหัส, ขนาด, แบรนด์)"
-              className="w-full bg-[#142033] text-slate-100 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-slate-750 focus:outline-none focus:border-amber-400/80"
+              placeholder="ค้นหาเพื่อตัดสต็อก (รหัส, ชื่อ, แบรนด์)"
+              className="w-full bg-[#252C33] text-[#EEEEEE] placeholder-[#A0ABB5] text-xs rounded-xl pl-9 pr-3 py-2 border border-[#475662] focus:outline-none focus:border-[#F6C90E]"
             />
           </div>
 
           <button
             onClick={onOpenScanner}
-            title="สแกนบาร์โค้ดยาง"
-            className="p-2 bg-[#1b2b46] hover:bg-[#23385c] text-cyan-300 rounded-xl border border-slate-750 active:scale-95 transition-all"
+            title="สแกนบาร์โค้ด"
+            className="p-2 bg-[#3A4750] hover:bg-[#43525D] text-[#F6C90E] rounded-xl border border-[#475662] active:scale-95 transition-all"
           >
             <ScanBarcode className="w-4 h-4" />
           </button>
@@ -431,8 +426,8 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               onClick={() => setSelectedBrand(b)}
               className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
                 selectedBrand.toLowerCase() === b.toLowerCase()
-                  ? 'bg-amber-400 text-slate-950 font-bold'
-                  : 'bg-[#152236] text-slate-300 border border-slate-800'
+                  ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
+                  : 'bg-[#3A4750] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#475662]'
               }`}
             >
               {b}
@@ -441,9 +436,9 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         </div>
       </div>
 
-      {/* 4. Tire Cards for Fast Selection */}
+      {/* 4. Product Cards for Fast Selection */}
       <div className="space-y-2">
-        <div className="text-[11px] font-semibold text-slate-400 px-1 flex items-center justify-between">
+        <div className="text-[11px] font-semibold text-[#A0ABB5] px-1 flex items-center justify-between">
           <span>แตะเพื่อเพิ่มเข้าบิลตัดสต็อก:</span>
           <span>{filteredTires.length} รายการ</span>
         </div>
@@ -457,39 +452,52 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               <div
                 key={tire.id}
                 onClick={() => addToCart(tire)}
-                className="bg-[#131e31] hover:bg-[#182740] active:scale-[0.99] border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-[#3A4750] hover:bg-[#43525D] active:scale-[0.99] border border-[#475662] rounded-2xl p-3 transition-all cursor-pointer flex items-center justify-between group"
               >
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-slate-100 text-xs">
-                      {tire.name || tire.size}
-                    </span>
-                    {tire.unit && (
-                      <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#1b2b46] text-cyan-300 border border-cyan-500/20">
-                        {tire.unit}
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {tire.imageUrl && tire.imageUrl.trim() !== '' && (
+                    <div className="w-11 h-11 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-inner">
+                      <img
+                        src={tire.imageUrl}
+                        alt={tire.name || tire.size || 'สินค้า'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-bold text-[#EEEEEE] text-xs">
+                        {tire.name || tire.size}
                       </span>
-                    )}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    ช่อง: {tire.location || 'RACK A-01'} {tire.description ? `• ${tire.description}` : ''}
+                      {tire.unit && (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
+                          {tire.unit}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#A0ABB5] mt-0.5">
+                      ช่อง: {tire.location || 'RACK A-01'} {tire.description ? `• ${tire.description}` : ''}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 text-right">
                   <div>
-                    <span className="text-xs font-bold font-mono text-amber-400 block">
+                    <span className="text-xs font-bold font-mono text-[#F6C90E] block">
                       ฿{price.toLocaleString()}
                     </span>
                     <span
                       className={`text-[10px] font-semibold ${
-                        isZero ? 'text-rose-400' : 'text-emerald-400'
+                        isZero ? 'text-rose-400' : 'text-[#EEEEEE]'
                       }`}
                     >
                       {isZero ? 'หมด (0)' : `เหลือ ${tire.actualQty} ${tire.unit || 'ชิ้น'}`}
                     </span>
                   </div>
 
-                  <div className="w-8 h-8 rounded-xl bg-[#1b2b46] group-hover:bg-amber-400 group-hover:text-slate-950 text-cyan-300 flex items-center justify-center transition-all">
+                  <div className="w-8 h-8 rounded-xl bg-[#252C33] group-hover:bg-[#F6C90E] group-hover:text-[#252C33] text-[#F6C90E] flex items-center justify-center transition-all border border-[#475662]">
                     <Plus className="w-4 h-4" />
                   </div>
                 </div>
@@ -500,16 +508,16 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
       </div>
 
       {/* 5. Recent Transactions History */}
-      <div className="space-y-2 pt-3 border-t border-slate-800">
+      <div className="space-y-2 pt-3 border-t border-[#475662]">
         <div className="flex items-center gap-2 px-1">
-          <Clock className="w-3.5 h-3.5 text-amber-400" />
-          <h3 className="text-xs font-bold text-slate-200 tracking-wider">
+          <Clock className="w-3.5 h-3.5 text-[#F6C90E]" />
+          <h3 className="text-xs font-bold text-[#EEEEEE] tracking-wider">
             รายการซื้อขาย & ตัดสต็อกล่าสุด ({transactions.length})
           </h3>
         </div>
 
         {transactions.length === 0 ? (
-          <div className="bg-[#121c2e] border border-slate-800 rounded-2xl p-6 text-center text-slate-400 text-xs">
+          <div className="bg-[#3A4750] border border-[#475662] rounded-2xl p-6 text-center text-[#A0ABB5] text-xs">
             ยังไม่มีรายการซื้อขายในระบบ
           </div>
         ) : (
@@ -519,14 +527,14 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               return (
                 <div
                   key={tx.id}
-                  className="bg-[#131e31] border border-slate-800 rounded-2xl p-2.5 flex items-center justify-between text-xs"
+                  className="bg-[#3A4750] border border-[#475662] rounded-2xl p-2.5 flex items-center justify-between text-xs"
                 >
                   <div className="flex items-center gap-2.5">
                     <div
                       className={`w-7 h-7 rounded-xl flex items-center justify-center ${
                         isSale
-                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-amber-950/80 text-amber-400 border border-amber-500/30'
+                          ? 'bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40'
+                          : 'bg-[#252C33] text-emerald-400 border border-emerald-500/30'
                       }`}
                     >
                       {isSale ? (
@@ -536,12 +544,12 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                       )}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-100 text-xs">
+                      <div className="font-bold text-[#EEEEEE] text-xs">
                         {tx.tireName}
                       </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
+                      <div className="text-[10px] text-[#A0ABB5] mt-0.5">
                         {isSale ? 'ขายให้: ' : 'รับจาก: '}
-                        <span className="text-slate-300">{tx.customerOrSupplier}</span>
+                        <span className="text-[#EEEEEE]">{tx.customerOrSupplier}</span>
                         {tx.note && ` • ${tx.note}`}
                       </div>
                     </div>
@@ -550,12 +558,12 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                   <div className="text-right">
                     <div
                       className={`font-mono font-bold ${
-                        isSale ? 'text-emerald-400' : 'text-amber-400'
+                        isSale ? 'text-[#F6C90E]' : 'text-emerald-400'
                       }`}
                     >
-                      {isSale ? `-${tx.quantity}` : `+${tx.quantity}`} เส้น
+                      {isSale ? `-${tx.quantity}` : `+${tx.quantity}`} รายการ
                     </div>
-                    <div className="text-[10px] text-slate-400 font-mono">
+                    <div className="text-[10px] text-[#A0ABB5] font-mono">
                       ฿{tx.totalPrice?.toLocaleString() || (tx.quantity * tx.unitPrice).toLocaleString()}
                     </div>
                   </div>

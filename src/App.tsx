@@ -39,11 +39,12 @@ import {
   downloadAppSheetCsv,
   APPSHEET_CSV_FILENAME,
 } from './utils/appsheetCsv';
+import { resolveProductImage } from './utils/productImages';
 
-const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v1';
-const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v1';
-const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v1';
-const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v1';
+const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v4';
+const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v4';
+const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v4';
+const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v4';
 
 const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS;
 
@@ -589,7 +590,7 @@ export default function App() {
   const matchedCount = tires.filter((t) => t.actualQty === t.systemQty && t.status === 'checked').length;
 
   return (
-    <div className="min-h-screen bg-[#090e18] text-slate-100 flex flex-col font-['Prompt',sans-serif]">
+    <div className="min-h-screen bg-[#252C33] text-[#EEEEEE] flex flex-col font-['Prompt',sans-serif]">
       {/* Top Header */}
       <Header
         onOpenScanner={() => setIsScannerOpen(true)}

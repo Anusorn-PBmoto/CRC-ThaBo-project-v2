@@ -67,20 +67,20 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 font-['Prompt',sans-serif]">
-      <div className="w-full max-w-sm bg-[#111c2e] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-sm bg-[#3A4750] border border-[#475662] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#0d1626] border-b border-slate-800">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#252C33] border-b border-[#475662]">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+            <div className="w-7 h-7 rounded-lg bg-[#3A4750] text-[#F6C90E] flex items-center justify-center border border-[#475662]">
               <User className="w-4 h-4" />
             </div>
-            <h3 className="text-sm font-bold text-slate-100">
+            <h3 className="text-sm font-bold text-[#EEEEEE]">
               ข้อมูลระบบ & สถานะคลาวด์
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#3A4750] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -89,42 +89,42 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {/* Content */}
         <div className="p-4 space-y-3 text-xs overflow-y-auto max-h-[80vh]">
           {/* User info */}
-          <div className="bg-[#15233a] border border-slate-700/80 rounded-xl p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-sm shadow-md flex-shrink-0">
+          <div className="bg-[#252C33] border border-[#475662] rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#F6C90E] text-[#252C33] font-extrabold flex items-center justify-center text-sm shadow-md flex-shrink-0">
               CT
             </div>
             <div className="min-w-0 flex-1">
-              <div className="font-bold text-slate-100 text-sm truncate">CRC ThaBo Manager</div>
-              <div className="text-[11px] text-slate-400 truncate">dooddeetv@gmail.com</div>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-500/30 inline-block mt-0.5 font-medium">
+              <div className="font-bold text-[#EEEEEE] text-sm truncate">CRC ThaBo Manager</div>
+              <div className="text-[11px] text-[#A0ABB5] truncate">dooddeetv@gmail.com</div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A4750] text-[#F6C90E] border border-[#475662] inline-block mt-0.5 font-medium">
                 ระบบจัดการคลังอะไหล่มอเตอร์ไซค์
               </span>
             </div>
           </div>
 
           {/* Device & Cloud Sync Explanation Banner */}
-          <div className="p-2.5 rounded-xl bg-gradient-to-r from-sky-950/60 to-cyan-950/40 border border-sky-500/30 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-sky-300 font-bold text-xs">
-              <Smartphone className="w-4 h-4 text-sky-400 flex-shrink-0" />
+          <div className="p-2.5 rounded-xl bg-[#252C33] border border-[#475662] space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[#F6C90E] font-bold text-xs">
+              <Smartphone className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
               <span>การใช้งานร่วมกับมือถือและแชร์ลิงก์</span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              ข้อมูลจะถูกบันทึกลงใน <span className="text-amber-300 font-semibold">Firebase Firestore</span> อัตโนมัติ เมื่อเปิดใช้งานบนมือถือหรือแชร์ลิงก์ ข้อมูลจะอัปเดตตรงกันทุกอุปกรณ์แบบ Real-Time ทันที
+            <p className="text-[11px] text-[#EEEEEE] leading-relaxed">
+              ข้อมูลจะถูกบันทึกลงใน <span className="text-[#F6C90E] font-semibold">Firebase Firestore</span> อัตโนมัติ เมื่อเปิดใช้งานบนมือถือหรือแชร์ลิงก์ ข้อมูลจะอัปเดตตรงกันทุกอุปกรณ์แบบ Real-Time ทันที
             </p>
           </div>
 
           {/* Database info */}
-          <div className="bg-[#15233a] border border-slate-700/80 rounded-xl p-3 space-y-2">
+          <div className="bg-[#252C33] border border-[#475662] rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-[#A0ABB5] flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-[#F6C90E]" />
                 <span>ฐานข้อมูลคลาวด์:</span>
               </span>
-              <span className="font-mono text-cyan-300 font-semibold">Firebase Firestore</span>
+              <span className="font-mono text-[#EEEEEE] font-semibold">Firebase Firestore</span>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
+              <span className="text-[#A0ABB5] flex items-center gap-1.5">
                 <Cloud className="w-3.5 h-3.5 text-emerald-400" />
                 <span>สถานะการเชื่อมต่อ:</span>
               </span>
@@ -134,48 +134,47 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px]">
-              <span className="text-slate-400">จำนวนสินค้าในคลัง:</span>
-              <span className="font-mono text-amber-400 font-bold">{totalProducts} รายการ</span>
+            <div className="flex items-center justify-between pt-1 border-t border-[#475662] text-[11px]">
+              <span className="text-[#A0ABB5]">จำนวนสินค้าในคลัง:</span>
+              <span className="font-mono text-[#F6C90E] font-bold">{totalProducts} รายการ</span>
             </div>
           </div>
 
+          {/* Status Message */}
           {syncStatusMsg && (
-            <div className="p-2 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs flex items-center gap-1.5 font-medium animate-in fade-in">
-              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <div className="p-2.5 bg-[#252C33] border border-[#F6C90E] rounded-xl flex items-center gap-2 text-[#F6C90E] text-xs font-semibold animate-in fade-in">
+              <Check className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
               <span>{syncStatusMsg}</span>
             </div>
           )}
 
-          {/* Action: Force Sync Cloud */}
-          <button
-            onClick={handleSyncCloud}
-            disabled={isProcessing}
-            className="w-full py-2.5 px-3 rounded-xl bg-[#172740] hover:bg-[#1e3456] border border-sky-500/40 text-sky-200 hover:text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 font-semibold text-xs"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isProcessing ? 'animate-spin' : ''}`} />
-            <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
-          </button>
+          {/* Action Buttons */}
+          <div className="space-y-2 pt-1">
+            {/* Sync Cloud Button */}
+            <button
+              onClick={handleSyncCloud}
+              disabled={isProcessing}
+              className="w-full py-2.5 px-3 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20 disabled:opacity-50"
+            >
+              <Cloud className="w-4 h-4 text-[#252C33]" />
+              <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
+            </button>
 
-          {/* Action: Clear all products (0 items) */}
-          <button
-            onClick={handleClearAll}
-            disabled={isProcessing}
-            className="w-full py-2.5 px-3 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 border border-rose-500/40 text-rose-300 hover:text-rose-200 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 font-semibold text-xs"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span>นำรายการสินค้าทั้งหมดออก (เริ่มต้น 0 รายการ)</span>
-          </button>
+            {/* Clear All Data Button */}
+            <button
+              onClick={handleClearAll}
+              disabled={isProcessing}
+              className="w-full py-2.5 px-3 bg-rose-950/40 hover:bg-rose-950/70 border border-rose-500/40 text-rose-300 rounded-xl font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>ล้างข้อมูลรายการสินค้าทั้งหมด (เริ่มต้น 0 รายการ)</span>
+            </button>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-[#0d1626] border-t border-slate-800">
-          <button
-            onClick={onClose}
-            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors"
-          >
-            ปิดหน้าต่าง
-          </button>
+        <div className="px-4 py-2.5 bg-[#252C33] border-t border-[#475662] text-center text-[10px] text-[#A0ABB5]">
+          CRC ThaBo Part Inventory • v2.0
         </div>
       </div>
     </div>

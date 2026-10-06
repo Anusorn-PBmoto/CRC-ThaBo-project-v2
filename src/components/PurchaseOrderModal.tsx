@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ShoppingCart, Check, Copy, Printer, FileText } from 'lucide-react';
 import { TireItem } from '../types';
+import { resolveProductImage } from '../utils/productImages';
 
 interface PurchaseOrderModalProps {
   isOpen: boolean;
@@ -109,15 +110,27 @@ export const PurchaseOrderModal: React.FC<PurchaseOrderModalProps> = ({
             {items.map((item) => (
               <div
                 key={item.id}
-                className="bg-[#15233a] border border-slate-750 rounded-xl p-3 flex items-center justify-between"
+                className="bg-[#15233a] border border-slate-750 rounded-xl p-3 flex items-center justify-between gap-2"
               >
-                <div>
-                  <div className="font-bold text-slate-100 text-xs">
-                    {item.brand} {item.size}
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    คงเหลือในระบบ: <span className="text-rose-400 font-bold">{item.actualQty}</span> เส้น
-                    • ช่อง: {item.location}
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  {item.imageUrl && item.imageUrl.trim() !== '' && (
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-900 border border-slate-700 flex-shrink-0 flex items-center justify-center">
+                      <img
+                        src={item.imageUrl}
+                        alt={item.name || item.size || 'สินค้า'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-slate-100 text-xs truncate">
+                      {item.name || `${item.brand} ${item.size}`}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">
+                      คงเหลือ: <span className="text-rose-400 font-bold">{item.actualQty}</span> {item.unit || 'ชิ้น'}
+                      {item.location ? ` • ${item.location}` : ''}
+                    </div>
                   </div>
                 </div>
 
