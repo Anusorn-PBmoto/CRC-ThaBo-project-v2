@@ -19,7 +19,7 @@ import {
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
-import { INITIAL_TIRES } from './initialData';
+import { INITIAL_PRODUCTS, INITIAL_TIRES } from './initialData';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { QuickAuditTab } from './components/QuickAuditTab';
@@ -33,18 +33,19 @@ import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
 import { ProfileModal } from './components/ProfileModal';
 import { AppSheetSyncModal } from './components/AppSheetSyncModal';
+import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import {
+  generateAppSheetCsv,
   downloadAppSheetCsv,
-  isAutoCsvExportEnabled,
   APPSHEET_CSV_FILENAME,
 } from './utils/appsheetCsv';
 
-const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_v9';
-const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_v9';
-const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_v9';
-const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_v9';
+const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v1';
+const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v1';
+const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v1';
+const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v1';
 
-const defaultTiresList: ProductItem[] = [];
+const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS;
 
 export default function App() {
   const [tires, setTires] = useState<ProductItem[]>(() => {
@@ -141,6 +142,7 @@ export default function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAppSheetOpen, setIsAppSheetOpen] = useState(false);
   const [appSheetToast, setAppSheetToast] = useState<string | null>(null);
+  const [productToDelete, setProductToDelete] = useState<ProductItem | null>(null);
 
   // Initialize and subscribe
   useEffect(() => {
@@ -298,15 +300,13 @@ export default function App() {
         }
       }
 
-      // Automatically generate & save AppSheet CSV crc-thano-project-v2.csv immediately
+      // Cache latest CSV data quietly in background without triggering browser download popup
       try {
-        if (isAutoCsvExportEnabled()) {
-          downloadAppSheetCsv(nextList, APPSHEET_CSV_FILENAME);
-        }
-        setAppSheetToast(`บันทึกฐานข้อมูลไปยัง ${APPSHEET_CSV_FILENAME} เรียบร้อยแล้ว`);
-        setTimeout(() => setAppSheetToast(null), 4000);
+        const csvContent = generateAppSheetCsv(nextList);
+        localStorage.setItem('crc_thano_last_csv_content', csvContent);
+        localStorage.setItem('crc_thano_last_csv_timestamp', new Date().toISOString());
       } catch (csvErr) {
-        console.warn('AppSheet CSV auto export note:', csvErr);
+        console.warn('AppSheet CSV cache note:', csvErr);
       }
 
       setIsAddEditOpen(false);
@@ -316,17 +316,23 @@ export default function App() {
     }
   };
 
-  // Delete Product
-  const handleDeleteTire = async (tire: TireItem) => {
-    const itemName = tire.name || tire.size || 'สินค้านี้';
-    if (window.confirm(`ยืนยันการลบ "${itemName}" ออกจากระบบ?`)) {
-      // Optimistic delete + localStorage persist
-      persistTires((prev) => prev.filter((t) => t.id !== tire.id));
-      try {
-        await deleteTireItem(tire.id);
-      } catch (error) {
-        console.error('Failed to delete item:', error);
-      }
+  // Delete Product - Open Custom In-App Modal
+  const handleDeleteTire = (tire: TireItem) => {
+    setProductToDelete(tire);
+  };
+
+  const handleConfirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    const target = productToDelete;
+    setProductToDelete(null);
+
+    // Optimistic delete + localStorage persist
+    persistTires((prev) => prev.filter((t) => t.id !== target.id));
+    try {
+      await deleteTireItem(target.id);
+      console.log('Successfully deleted product from Firestore:', target.id);
+    } catch (error) {
+      console.error('Failed to delete item:', error);
     }
   };
 
@@ -714,6 +720,7 @@ export default function App() {
           setEditingTire(null);
         }}
         onSave={handleSaveTire}
+        onDelete={handleDeleteTire}
         initialProduct={editingTire}
       />
 
@@ -766,6 +773,13 @@ export default function App() {
         isOpen={isAppSheetOpen}
         onClose={() => setIsAppSheetOpen(false)}
         products={tires}
+      />
+
+      <DeleteConfirmModal
+        isOpen={Boolean(productToDelete)}
+        onClose={() => setProductToDelete(null)}
+        onConfirm={handleConfirmDeleteProduct}
+        product={productToDelete}
       />
     </div>
   );

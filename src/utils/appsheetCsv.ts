@@ -98,9 +98,9 @@ export function downloadAppSheetCsv(products: ProductItem[], fileName = APPSHEET
 export function isAutoCsvExportEnabled(): boolean {
   try {
     const val = localStorage.getItem(LOCAL_STORAGE_KEY_AUTO_CSV);
-    return val === null ? true : val === 'true'; // Enabled by default
+    return val === 'true'; // Disabled by default to prevent intrusive browser download popups
   } catch {
-    return true;
+    return false;
   }
 }
 

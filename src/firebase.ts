@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   collection,
@@ -24,11 +24,6 @@ const app = initializeApp(firebaseConfig);
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
-
-// Authenticate anonymously so Firestore security context is always valid
-signInAnonymously(auth).catch((err) => {
-  console.warn('Anonymous auth note (app continues offline/local):', err);
-});
 
 export enum OperationType {
   CREATE = 'create',
@@ -112,7 +107,28 @@ export async function seedTiresIfEmpty(customTires?: TireItem[]): Promise<void> 
   }
 }
 
-// Restore all initial products (clean reset - wipes catalog to 0 items)
+// Restore all 116 ItemDetails products
+export async function resetToItemDetailsData(): Promise<void> {
+  const prodCol = 'products';
+  try {
+    const snap = await getDocs(collection(db, prodCol));
+    const deleteBatch = writeBatch(db);
+    snap.docs.forEach((d) => deleteBatch.delete(d.ref));
+    await deleteBatch.commit();
+
+    // Re-seed all 116 initial products
+    const seedBatch = writeBatch(db);
+    for (const item of INITIAL_TIRES) {
+      const ref = doc(db, prodCol, item.id);
+      seedBatch.set(ref, sanitizeForFirestore(item), { merge: true });
+    }
+    await seedBatch.commit();
+  } catch (error) {
+    console.error('Failed to reset to ItemDetails data:', error);
+  }
+}
+
+// Clear all products completely (clean reset to 0 items)
 export async function restoreAllInitialTires(): Promise<void> {
   const prodCol = 'products';
   try {

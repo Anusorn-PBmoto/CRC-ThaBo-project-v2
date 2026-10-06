@@ -23,6 +23,7 @@ interface AddEditProductModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (productData: Omit<ProductItem, 'id'>, id?: string) => Promise<void>;
+  onDelete?: (product: ProductItem) => void;
   initialProduct?: ProductItem | null;
   initialTire?: ProductItem | null; // Compatibility alias
 }
@@ -76,6 +77,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDelete,
   initialProduct,
   initialTire,
 }) => {
@@ -630,6 +632,21 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
           {/* Submit Buttons */}
           <div className="pt-2 flex items-center gap-2 border-t border-slate-800">
+            {currentItem && onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsScanning(false);
+                  onClose();
+                  onDelete(currentItem);
+                }}
+                className="py-2.5 px-3 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 text-rose-400 border border-rose-500/30 flex items-center justify-center gap-1 active:scale-95 transition-all text-xs font-semibold"
+                title="ลบรายการสินค้านี้"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ลบ</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
