@@ -20,17 +20,23 @@ export const AuditHistoryTab: React.FC<AuditHistoryTabProps> = ({ logs, sessions
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredLogs = logs.filter((log) => {
+    const name = (log.productName || log.tireName || '').toLowerCase();
+    const brand = (log.brand || '').toLowerCase();
+    const action = (log.action || '').toLowerCase();
+    const note = (log.note || '').toLowerCase();
+    const term = searchTerm.toLowerCase();
+
     return (
-      log.tireName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (log.note && log.note.toLowerCase().includes(searchTerm.toLowerCase()))
+      name.includes(term) ||
+      brand.includes(term) ||
+      action.includes(term) ||
+      note.includes(term)
     );
   });
 
   const exportCSV = () => {
     if (logs.length === 0) return;
-    const headers = ['วันที่เวลา', 'ขนาดยาง', 'แบรนด์', 'ยอดก่อนหน้า', 'ยอดนับใหม่', 'ผลต่าง', 'การกระทำ', 'หมายเหตุ'];
+    const headers = ['วันที่เวลา', 'ชื่อสินค้า/อะไหล่', 'แบรนด์', 'ยอดก่อนหน้า', 'ยอดนับใหม่', 'ผลต่าง', 'การกระทำ', 'หมายเหตุ'];
     const rows = logs.map((l) => [
       new Date(l.timestamp).toLocaleString('th-TH'),
       `"${l.tireName}"`,

@@ -17,7 +17,7 @@ import {
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
-import { TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
+import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
 import { INITIAL_TIRES } from './initialData';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -26,79 +26,31 @@ import { InventoryListTab } from './components/InventoryListTab';
 import { BuySellTab } from './components/BuySellTab';
 import { SummaryAlertsTab } from './components/SummaryAlertsTab';
 import { AuditHistoryTab } from './components/AuditHistoryTab';
-import { AddEditTireModal } from './components/AddEditTireModal';
+import { AddEditProductModal } from './components/AddEditProductModal';
 import { BarcodeScanModal } from './components/BarcodeScanModal';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
 import { ProfileModal } from './components/ProfileModal';
 
-const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_tires_v5';
-const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_v5';
-const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_v5';
-const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_v5';
+const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_v9';
+const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_v9';
+const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_v9';
+const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_v9';
 
-const defaultTiresList: TireItem[] = INITIAL_TIRES.map((t, idx) => ({
-  ...t,
-  id: `crc-tire-${idx + 1}`,
-}));
+const defaultTiresList: ProductItem[] = [];
 
 export default function App() {
-  const [tires, setTires] = useState<TireItem[]>(() => {
+  const [tires, setTires] = useState<ProductItem[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // If fewer than 70 items (e.g. only 1 item after sale), recover the full 80-item catalog
-          // while preserving the user's updated stock (e.g. 0 qty for the sold tire)!
-          if (parsed.length < 70) {
-            const recovered = defaultTiresList.map((defaultTire) => {
-              const userTire = parsed.find(
-                (p: TireItem) =>
-                  p.id === defaultTire.id ||
-                  (p.brand.toLowerCase() === defaultTire.brand.toLowerCase() &&
-                    p.size.toLowerCase() === defaultTire.size.toLowerCase())
-              );
-              return userTire ? { ...defaultTire, ...userTire } : defaultTire;
-            });
-            parsed.forEach((p: TireItem) => {
-              if (
-                !recovered.some(
-                  (r) =>
-                    r.id === p.id ||
-                    (r.brand.toLowerCase() === p.brand.toLowerCase() &&
-                      r.size.toLowerCase() === p.size.toLowerCase())
-                )
-              ) {
-                recovered.push(p);
-              }
-            });
-            try {
-              localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(recovered));
-            } catch {}
-            return recovered;
-          }
-
-          // Enrich existing tires with known barcodes if missing (e.g. IRC 120/70-14 barcode)
-          const enriched = parsed.map((tire: TireItem) => {
-            if (!tire.barcode) {
-              const matchedDefault = defaultTiresList.find(
-                (d) =>
-                  d.brand.toLowerCase() === tire.brand.toLowerCase() &&
-                  d.size.toLowerCase() === tire.size.toLowerCase()
-              );
-              if (matchedDefault?.barcode) {
-                return { ...tire, barcode: matchedDefault.barcode };
-              }
-            }
-            return tire;
-          });
-
-          return enriched;
+        if (Array.isArray(parsed)) {
+          return parsed;
         }
       }
     } catch (e) {
-      console.warn('Failed reading tires from localStorage', e);
+      console.warn('Failed reading products from localStorage', e);
     }
     return defaultTiresList;
   });
@@ -193,36 +145,11 @@ export default function App() {
         // Attach real-time listeners immediately
         unsubscribeTires = subscribeToTires(
           (remoteData) => {
-            if (remoteData && remoteData.length > 0) {
-              persistTires((prevTires) => {
-                // If remote has the full catalog (>= 70 items), use it directly
-                if (remoteData.length >= 70) {
-                  return remoteData;
-                }
-                // If remote only has a partial subset of updated items (e.g. 1-10 items),
-                // smart-merge them into the full list so we NEVER lose the rest of the tires!
-                const baseList = prevTires.length >= 70 ? prevTires : defaultTiresList;
-                const updated = [...baseList];
-                for (const remoteItem of remoteData) {
-                  const idx = updated.findIndex(
-                    (t) =>
-                      t.id === remoteItem.id ||
-                      (t.brand.toLowerCase() === remoteItem.brand.toLowerCase() &&
-                        t.size.toLowerCase() === remoteItem.size.toLowerCase())
-                  );
-                  if (idx >= 0) {
-                    updated[idx] = { ...updated[idx], ...remoteItem };
-                  } else {
-                    updated.push(remoteItem);
-                  }
-                }
-                return updated;
-              });
-              setIsOnline(true);
-            }
+            persistTires(remoteData || []);
+            setIsOnline(true);
           },
           (err) => {
-            console.warn('Tires listener note:', err);
+            console.warn('Products listener note:', err);
             setIsOnline(false);
           }
         );
@@ -299,8 +226,8 @@ export default function App() {
         tire.id,
         safeQty,
         tire.systemQty,
-        `${tire.brand} ${tire.size}`,
-        tire.brand
+        tire.name || tire.size || 'สินค้า',
+        tire.brand || ''
       );
     } catch (error) {
       console.warn('Failed to sync quantity to Firestore:', error);
@@ -341,15 +268,16 @@ export default function App() {
     }
   };
 
-  // Delete Tire
+  // Delete Product
   const handleDeleteTire = async (tire: TireItem) => {
-    if (window.confirm(`ยืนยันการลบ ${tire.brand} ${tire.size} ออกจากระบบ?`)) {
+    const itemName = tire.name || tire.size || 'สินค้านี้';
+    if (window.confirm(`ยืนยันการลบ "${itemName}" ออกจากระบบ?`)) {
       // Optimistic delete + localStorage persist
       persistTires((prev) => prev.filter((t) => t.id !== tire.id));
       try {
         await deleteTireItem(tire.id);
       } catch (error) {
-        console.error('Failed to delete tire:', error);
+        console.error('Failed to delete item:', error);
       }
     }
   };
@@ -366,8 +294,8 @@ export default function App() {
       const savedSession: AuditSession = {
         id: sessionId,
         code: sessionCode,
-        zone: 'ห้องยางชั้น 2',
-        title: 'คลังยางเรเดียล Tubeless • บันทึกผลนับสต็อก',
+        zone: 'คลังอะไหล่',
+        title: 'คลังอะไหล่มอเตอร์ไซค์ • บันทึกผลนับสต็อก',
         status: 'completed',
         totalItems: tires.length,
         checkedItems: checkedCount,
@@ -382,8 +310,10 @@ export default function App() {
       // 2. Optimistic audit log
       const newLog: AuditLog = {
         id: `log-${Date.now()}`,
+        productId: 'audit-session',
+        productName: 'สรุปการนับสต็อกคลังอะไหล่',
         tireId: 'audit-session',
-        tireName: 'สรุปการนับสต็อกห้องยางชั้น 2',
+        tireName: 'สรุปการนับสต็อกคลังอะไหล่',
         brand: 'CRC ThaBo',
         diff: syncToSystem ? 0 : discrepancyCount,
         previousQty: tires.length,
@@ -410,9 +340,9 @@ export default function App() {
           const batch = writeBatch(db);
           tires.forEach((tire) => {
             if (tire.actualQty !== tire.systemQty) {
-              const tireRef = doc(db, 'tires', tire.id);
+              const prodRef = doc(db, 'products', tire.id);
               batch.set(
-                tireRef,
+                prodRef,
                 {
                   systemQty: tire.actualQty,
                   status: 'checked',
@@ -431,8 +361,8 @@ export default function App() {
       // 4. Save session to Firestore
       saveAuditSession(sessionId, {
         code: sessionCode,
-        zone: 'ห้องยางชั้น 2',
-        title: 'คลังยางเรเดียล Tubeless • บันทึกผลนับสต็อก',
+        zone: 'คลังอะไหล่',
+        title: 'คลังอะไหล่มอเตอร์ไซค์ • บันทึกผลนับสต็อก',
         totalItems: tires.length,
         checkedItems: checkedCount,
         discrepancyCount: syncToSystem ? 0 : discrepancyCount,
@@ -453,34 +383,35 @@ export default function App() {
     }
   };
 
-  // Reset sample data
-  const handleResetSampleData = async () => {
+  // Clear all products (reset to 0 items per user instruction)
+  const handleClearAllProducts = async () => {
     try {
       await restoreAllInitialTires();
-      persistTires(defaultTiresList);
+      persistTires([]);
       confetti({
-        particleCount: 80,
-        spread: 70,
+        particleCount: 60,
+        spread: 60,
         origin: { y: 0.6 },
       });
     } catch (error) {
-      console.error('Failed to reset sample data:', error);
+      console.error('Failed to clear products:', error);
     }
   };
 
-  // Restore all 80 tires
-  const handleRestoreAllData = async () => {
+  // Force sync local products to Firestore Cloud
+  const handleForceSyncCloud = async () => {
     try {
-      await restoreAllInitialTires();
-      persistTires(defaultTiresList);
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#f59e0b', '#10b981', '#38bdf8'],
-      });
+      if (tires.length > 0) {
+        const batch = writeBatch(db);
+        for (const item of tires) {
+          const itemRef = doc(db, 'products', item.id);
+          batch.set(itemRef, item, { merge: true });
+        }
+        await batch.commit();
+      }
+      setIsOnline(true);
     } catch (error) {
-      console.error('Failed to restore initial tires:', error);
+      console.error('Failed to force sync with cloud:', error);
     }
   };
 
@@ -532,33 +463,42 @@ export default function App() {
     });
 
     // 2. Optimistic update of transactions list + localStorage
-    const newTransactions: Transaction[] = items.map((item, idx) => ({
-      id: `tx-${Date.now()}-${idx}`,
-      type,
-      tireId: item.tire.id,
-      tireName: `${item.tire.brand} ${item.tire.size}`,
-      brand: item.tire.brand,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.quantity * item.unitPrice,
-      customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
-      note: note?.trim() || '',
-      createdAt: new Date().toISOString(),
-    }));
+    const newTransactions: Transaction[] = items.map((item, idx) => {
+      const prodName = item.tire.name || item.tire.size || 'สินค้า';
+      return {
+        id: `tx-${Date.now()}-${idx}`,
+        type,
+        productId: item.tire.id,
+        productName: prodName,
+        tireId: item.tire.id,
+        tireName: prodName,
+        brand: item.tire.brand,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.quantity * item.unitPrice,
+        customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
+        note: note?.trim() || '',
+        createdAt: new Date().toISOString(),
+      };
+    });
     persistTransactions((prev) => [...newTransactions, ...prev]);
 
     // 3. Optimistic update of audit logs + localStorage
     const newLogs: AuditLog[] = items.map((item, idx) => {
       const delta = type === 'sale' ? -item.quantity : item.quantity;
+      const prodName = item.tire.name || item.tire.size || 'สินค้า';
+      const unitLabel = item.tire.unit || 'ชิ้น';
       return {
         id: `log-tx-${Date.now()}-${idx}`,
+        productId: item.tire.id,
+        productName: prodName,
         tireId: item.tire.id,
-        tireName: `${item.tire.brand} ${item.tire.size}`,
+        tireName: prodName,
         brand: item.tire.brand,
         diff: delta,
         previousQty: item.tire.actualQty,
         newQty: Math.max(0, item.tire.actualQty + delta),
-        action: type === 'sale' ? `ตัดสต็อกขายออก (-${item.quantity} เส้น)` : `รับเข้าคลัง (+${item.quantity} เส้น)`,
+        action: type === 'sale' ? `ตัดสต็อกขายออก (-${item.quantity} ${unitLabel})` : `รับเข้าคลัง (+${item.quantity} ${unitLabel})`,
         timestamp: new Date().toISOString(),
         note: `${type === 'sale' ? 'ขายให้: ' : 'รับจาก: '}${customerOrSupplier.trim() || 'หน้าร้าน'} ${note ? `(${note})` : ''}`,
       };
@@ -598,17 +538,17 @@ export default function App() {
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         isOnline={isOnline}
-        activeZone="ห้องยางชั้น 2"
+        activeZone="คลังอะไหล่มอเตอร์ไซค์"
         subtitle={
           currentTab === 'audit'
-            ? 'นับสต็อกด่วน • คลังยางเรเดียล Tubeless'
+            ? 'นับสต็อกด่วน • อะไหล่มอเตอร์ไซค์ทุกชนิด'
             : currentTab === 'buysell'
-            ? 'ซื้อขายอย่างง่าย • ตัดสต็อกอัตโนมัติ'
+            ? 'ซื้อ-ขายอะไหล่ • ตัดสต็อกอัตโนมัติ'
             : currentTab === 'alerts'
-            ? 'สรุปยอดความคลาดเคลื่อน & แจ้งเตือน'
+            ? 'สรุปยอดสินค้า & แจ้งเตือนสินค้าใกล้หมด'
             : currentTab === 'history'
-            ? 'ประวัติการตัดสต็อก & บันทึกเรียลไทม์'
-            : 'ยางนอก Tubeless • ชั้น 2 - ห้องยาง'
+            ? 'ประวัติการเคลื่อนไหวสต็อกอะไหล่'
+            : 'รายการสินค้า & แคตตาล็อกอะไหล่'
         }
       />
 
@@ -637,7 +577,7 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onDeleteTire={handleDeleteTire}
-                onRestoreInitialData={handleRestoreAllData}
+                onRestoreInitialData={handleClearAllProducts}
               />
             )}
 
@@ -657,7 +597,7 @@ export default function App() {
                 onJumpToAudit={handleJumpToAudit}
                 onOpenPO={handleOpenSinglePO}
                 onOpenBatchPO={handleOpenBatchPO}
-                onRestoreInitialData={handleRestoreAllData}
+                onRestoreInitialData={handleClearAllProducts}
               />
             )}
 
@@ -695,14 +635,14 @@ export default function App() {
       />
 
       {/* Modals */}
-      <AddEditTireModal
+      <AddEditProductModal
         isOpen={isAddEditOpen}
         onClose={() => {
           setIsAddEditOpen(false);
           setEditingTire(null);
         }}
         onSave={handleSaveTire}
-        initialTire={editingTire}
+        initialProduct={editingTire}
       />
 
       <BarcodeScanModal
@@ -745,8 +685,9 @@ export default function App() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         isOnline={isOnline}
-        onResetSampleData={handleResetSampleData}
-        totalTires={tires.length}
+        onClearAllProducts={handleClearAllProducts}
+        onForceSyncCloud={handleForceSyncCloud}
+        totalProducts={tires.length}
       />
     </div>
   );

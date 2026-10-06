@@ -17,7 +17,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { TireItem, AuditSession, AuditLog, StockStatus, Transaction } from './types';
+import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction } from './types';
 import { INITIAL_TIRES } from './initialData';
 
 const app = initializeApp(firebaseConfig);
@@ -91,133 +91,107 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
-// Seed initial tires only if remote collection is empty
+// Seed initial products only if remote collection is empty
 export async function seedTiresIfEmpty(customTires?: TireItem[]): Promise<void> {
-  const tiresCol = 'tires';
+  // Respect user instruction to start clean: only seed if customTires explicitly provided
+  if (!customTires || customTires.length === 0) return;
+  const prodCol = 'products';
   try {
-    const snap = await getDocs(collection(db, tiresCol));
+    const snap = await getDocs(collection(db, prodCol));
     if (snap.empty) {
-      console.log('Seeding initial tires to Firestore...');
+      console.log('Seeding custom products to Firestore...');
       const batch = writeBatch(db);
-      const itemsToSeed: TireItem[] =
-        customTires && customTires.length > 0
-          ? customTires
-          : INITIAL_TIRES.map((t, idx) => ({
-              ...t,
-              id: `crc-tire-${idx + 1}`,
-            }));
-
-      for (const item of itemsToSeed) {
-        const newRef = doc(db, tiresCol, item.id);
+      for (const item of customTires) {
+        const newRef = doc(db, prodCol, item.id);
         batch.set(newRef, item, { merge: true });
       }
       await batch.commit();
-
-      // Create initial active session if missing
-      const sessionsSnap = await getDocs(collection(db, 'audit_sessions'));
-      if (sessionsSnap.empty) {
-        const sessionRef = doc(db, 'audit_sessions', 'AUD-SESSION-01');
-        const initialSession: AuditSession = {
-          id: 'AUD-SESSION-01',
-          code: 'AUD-2410-09',
-          zone: 'ห้องยางชั้น 2',
-          title: 'คลังยางเรเดียล Tubeless • รอบเช้า',
-          status: 'in_progress',
-          totalItems: itemsToSeed.length,
-          checkedItems: itemsToSeed.filter((t) => t.systemQty > 0).length,
-          discrepancyCount: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await setDoc(sessionRef, initialSession, { merge: true });
-      }
-      console.log(`Seeding of ${itemsToSeed.length} tires completed successfully!`);
     }
   } catch (error) {
-    console.warn('Failed to seed initial tires:', error);
+    console.warn('Failed to seed products:', error);
   }
 }
 
-// Restore all 80 initial tires completely from CSV
+// Restore all initial products (clean reset - wipes catalog to 0 items)
 export async function restoreAllInitialTires(): Promise<void> {
-  const tiresCol = 'tires';
+  const prodCol = 'products';
   try {
-    const snap = await getDocs(collection(db, tiresCol));
-    const deleteBatch = writeBatch(db);
-    snap.docs.forEach((d) => deleteBatch.delete(d.ref));
-    await deleteBatch.commit();
-
-    const insertBatch = writeBatch(db);
-    for (let i = 0; i < INITIAL_TIRES.length; i++) {
-      const tire = INITIAL_TIRES[i];
-      const tireId = `crc-tire-${i + 1}`;
-      const newRef = doc(db, tiresCol, tireId);
-      insertBatch.set(newRef, {
-        ...tire,
-        id: tireId,
-      });
+    const snap = await getDocs(collection(db, prodCol));
+    if (!snap.empty) {
+      const deleteBatch = writeBatch(db);
+      snap.docs.forEach((d) => deleteBatch.delete(d.ref));
+      await deleteBatch.commit();
     }
-    await insertBatch.commit();
 
-    // Update session item count
-    const sessionSnap = await getDocs(collection(db, 'audit_sessions'));
-    if (!sessionSnap.empty) {
-      const sessionDoc = sessionSnap.docs[0];
-      await setDoc(
-        sessionDoc.ref,
-        {
-          totalItems: INITIAL_TIRES.length,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+    // Also clean up legacy 'tires' collection if any existed
+    const legacySnap = await getDocs(collection(db, 'tires'));
+    if (!legacySnap.empty) {
+      const legacyBatch = writeBatch(db);
+      legacySnap.docs.forEach((d) => legacyBatch.delete(d.ref));
+      await legacyBatch.commit();
     }
   } catch (error) {
-    console.error('Failed to restore initial tires:', error);
-    throw error;
+    console.error('Failed to clear products:', error);
   }
 }
 
-// Real-time Tires Listener
+// Real-time Products / Inventory Listener
 export function subscribeToTires(
-  onData: (tires: TireItem[]) => void,
+  onData: (products: ProductItem[]) => void,
   onError?: (err: unknown) => void
 ) {
-  const path = 'tires';
+  const path = 'products';
   return onSnapshot(
     collection(db, path),
     (snapshot) => {
-      const tires: TireItem[] = snapshot.docs.map((docSnap) => {
+      const items: ProductItem[] = snapshot.docs.map((docSnap) => {
         const data = docSnap.data() || {};
+        const costVal = typeof data.costPrice === 'number' ? data.costPrice : 0;
+        const sellVal =
+          typeof data.sellingPrice === 'number'
+            ? data.sellingPrice
+            : typeof data.price === 'number'
+            ? data.price
+            : 0;
+        const nameVal = data.name || data.size || '';
+
         return {
           id: docSnap.id,
-          brand: data.brand || '',
-          size: data.size || '',
-          rim: data.rim || '14',
-          systemQty: typeof data.systemQty === 'number' ? data.systemQty : 0,
-          actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
-          status: data.status || 'pending',
-          category: data.category || 'Tubeless',
-          location: data.location || 'RACK A-01',
-          zone: data.zone || 'ห้องยางชั้น 2',
-          description: data.description || '',
-          minStock: typeof data.minStock === 'number' ? data.minStock : 2,
-          barcode: data.barcode || undefined,
+          barcode: data.barcode || '',
+          name: nameVal,
+          unit: data.unit || 'ชิ้น',
+          costPrice: costVal,
+          sellingPrice: sellVal,
           imageUrl: data.imageUrl || '',
+          category: data.category || '',
+          brand: data.brand || '',
+          location: data.location || 'RACK A-01',
+          actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
+          systemQty: typeof data.systemQty === 'number' ? data.systemQty : 0,
+          status: data.status || 'checked',
+          minStock: typeof data.minStock === 'number' ? data.minStock : 2,
+          description: data.description || '',
           updatedAt: data.updatedAt || new Date().toISOString(),
+          // Compatibility aliases
+          size: nameVal,
+          price: sellVal,
+          rim: data.rim || '',
+          zone: data.zone || 'ห้องอะไหล่',
           isOem: Boolean(data.isOem),
           oemLabel: data.oemLabel || '',
-          price: typeof data.price === 'number' ? data.price : undefined,
         };
       });
-      onData(tires);
+      onData(items);
     },
     (error) => {
-      console.warn('subscribeToTires error:', error);
+      console.warn('subscribeToProducts error:', error);
       if (onError) onError(error);
     }
   );
 }
+
+// Alias for products listener
+export const subscribeToProducts = subscribeToTires;
 
 // Real-time Audit Sessions Listener
 export function subscribeToAuditSessions(
@@ -278,7 +252,7 @@ export async function updateTireActualQty(
   try {
     // Use setDoc with merge: true so it never throws NOT_FOUND
     await setDoc(
-      doc(db, 'tires', tireId),
+      doc(db, 'products', tireId),
       {
         actualQty: newActualQty,
         status,
@@ -289,9 +263,9 @@ export async function updateTireActualQty(
 
     // Write audit log
     await addDoc(collection(db, 'audit_logs'), {
-      tireId,
-      tireName,
-      brand,
+      productId: tireId,
+      productName: tireName,
+      brand: brand || '',
       diff,
       previousQty: systemQty,
       newQty: newActualQty,
@@ -304,9 +278,9 @@ export async function updateTireActualQty(
   }
 }
 
-// Add new tire
-export async function addNewTire(item: Omit<TireItem, 'id'>): Promise<string> {
-  const newDocRef = doc(collection(db, 'tires'));
+// Add new product
+export async function addNewTire(item: Omit<ProductItem, 'id'>): Promise<string> {
+  const newDocRef = doc(collection(db, 'products'));
   const newId = newDocRef.id;
   try {
     await setDoc(newDocRef, {
@@ -315,16 +289,18 @@ export async function addNewTire(item: Omit<TireItem, 'id'>): Promise<string> {
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.warn('addNewTire offline/error:', error);
+    console.warn('addNewProduct offline/error:', error);
   }
   return newId;
 }
 
-// Update tire details
-export async function updateTireItem(tireId: string, updates: Partial<TireItem>): Promise<void> {
+export const addNewProduct = addNewTire;
+
+// Update product details
+export async function updateTireItem(tireId: string, updates: Partial<ProductItem>): Promise<void> {
   try {
     await setDoc(
-      doc(db, 'tires', tireId),
+      doc(db, 'products', tireId),
       {
         ...updates,
         updatedAt: new Date().toISOString(),
@@ -332,18 +308,22 @@ export async function updateTireItem(tireId: string, updates: Partial<TireItem>)
       { merge: true }
     );
   } catch (error) {
-    console.warn('updateTireItem offline/error:', error);
+    console.warn('updateProductItem offline/error:', error);
   }
 }
 
-// Delete tire
+export const updateProductItem = updateTireItem;
+
+// Delete product
 export async function deleteTireItem(tireId: string): Promise<void> {
   try {
-    await deleteDoc(doc(db, 'tires', tireId));
+    await deleteDoc(doc(db, 'products', tireId));
   } catch (error) {
-    console.warn('deleteTireItem offline/error:', error);
+    console.warn('deleteProductItem offline/error:', error);
   }
 }
+
+export const deleteProductItem = deleteTireItem;
 
 // Save Audit Session Result
 export async function saveAuditSession(
@@ -421,7 +401,7 @@ export async function executeTransaction(
   note?: string
 ): Promise<void> {
   const pathTx = 'transactions';
-  const pathTires = 'tires';
+  const pathProducts = 'products';
   const pathLogs = 'audit_logs';
 
   try {
@@ -432,9 +412,9 @@ export async function executeTransaction(
       const diff = nextActualQty - nextSystemQty;
       const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
-      // 1. Update Tire Stock in Firestore (setDoc with merge so it never throws NOT_FOUND)
+      // 1. Update Product Stock in Firestore (setDoc with merge so it never throws NOT_FOUND)
       await setDoc(
-        doc(db, pathTires, item.tire.id),
+        doc(db, pathProducts, item.tire.id),
         {
           ...item.tire,
           id: item.tire.id,

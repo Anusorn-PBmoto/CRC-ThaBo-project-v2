@@ -13,8 +13,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenScanner,
   onOpenProfile,
   isOnline,
-  activeZone = 'ห้องยางชั้น 2',
-  subtitle = 'ยางนอก Tubeless • ชั้น 2 - ห้องยาง',
+  activeZone = 'คลังอะไหล่มอเตอร์ไซค์',
+  subtitle = 'ระบบสต็อกอะไหล่ • CRC ThaBo',
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-[#0e1626]/95 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">

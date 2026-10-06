@@ -1,114 +1,170 @@
-import React from 'react';
-import { X, User, Database, CheckCircle, RefreshCw, ShieldCheck, HardDrive } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  X,
+  User,
+  Database,
+  CheckCircle,
+  RefreshCw,
+  ShieldCheck,
+  HardDrive,
+  Trash2,
+  Smartphone,
+  Cloud,
+  Check,
+} from 'lucide-react';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   isOnline: boolean;
-  onResetSampleData: () => Promise<void>;
-  totalTires: number;
+  onClearAllProducts: () => Promise<void>;
+  onForceSyncCloud?: () => Promise<void>;
+  totalProducts: number;
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
   isOnline,
-  onResetSampleData,
-  totalTires,
+  onClearAllProducts,
+  onForceSyncCloud,
+  totalProducts,
 }) => {
-  const [isResetting, setIsResetting] = React.useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleReset = async () => {
-    if (window.confirm('คุณต้องการรีเซ็ตข้อมูลตัวอย่างกลับเป็นค่าเริ่มต้นหรือไม่?')) {
-      setIsResetting(true);
+  const handleClearAll = async () => {
+    if (
+      window.confirm(
+        '⚠️ คุณต้องการนำข้อมูลรายการสินค้าทั้งหมดออกจากระบบ (ตั้งต้นเป็น 0 รายการ) หรือไม่?\n\nข้อมูลเดิมจะถูกล้างออกจากทั้งคลาวด์และหน่วยความจำ เพื่อให้คุณเริ่มต้นบันทึกอะไหล่ใหม่ได้อย่างสะอาด'
+      )
+    ) {
+      setIsProcessing(true);
       try {
-        await onResetSampleData();
+        await onClearAllProducts();
+        setSyncStatusMsg('นำรายการสินค้าทั้งหมดออกเรียบร้อยแล้ว (0 รายการ)');
+        setTimeout(() => setSyncStatusMsg(null), 3000);
       } finally {
-        setIsResetting(false);
-        onClose();
+        setIsProcessing(false);
       }
     }
   };
 
+  const handleSyncCloud = async () => {
+    setIsProcessing(true);
+    try {
+      if (onForceSyncCloud) {
+        await onForceSyncCloud();
+      }
+      setSyncStatusMsg('ซิงค์ข้อมูลกับคลาวด์ Firestore สำเร็จ');
+      setTimeout(() => setSyncStatusMsg(null), 3000);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-[#111c2e] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 font-['Prompt',sans-serif]">
+      <div className="w-full max-w-sm bg-[#111c2e] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#0d1626] border-b border-slate-800">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
               <User className="w-4 h-4" />
             </div>
             <h3 className="text-sm font-bold text-slate-100">
-              ข้อมูลผู้ใช้ & สถานะระบบ
+              ข้อมูลระบบ & สถานะคลาวด์
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-white">
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-3 text-xs">
+        <div className="p-4 space-y-3 text-xs overflow-y-auto max-h-[80vh]">
           {/* User info */}
-          <div className="bg-[#15233a] border border-slate-750 rounded-xl p-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-sm shadow-md">
+          <div className="bg-[#15233a] border border-slate-700/80 rounded-xl p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-400 text-slate-950 font-bold flex items-center justify-center text-sm shadow-md flex-shrink-0">
               CT
             </div>
-            <div>
-              <div className="font-bold text-slate-100 text-sm">CRC ThaBo Manager</div>
-              <div className="text-[11px] text-slate-400">dooddeetv@gmail.com</div>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-950 text-amber-400 border border-amber-500/30 inline-block mt-0.5">
-                เจ้าหน้าที่คลังยางเรเดียล
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-slate-100 text-sm truncate">CRC ThaBo Manager</div>
+              <div className="text-[11px] text-slate-400 truncate">dooddeetv@gmail.com</div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-500/30 inline-block mt-0.5 font-medium">
+                ระบบจัดการคลังอะไหล่มอเตอร์ไซค์
               </span>
             </div>
           </div>
 
+          {/* Device & Cloud Sync Explanation Banner */}
+          <div className="p-2.5 rounded-xl bg-gradient-to-r from-sky-950/60 to-cyan-950/40 border border-sky-500/30 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-sky-300 font-bold text-xs">
+              <Smartphone className="w-4 h-4 text-sky-400 flex-shrink-0" />
+              <span>การใช้งานร่วมกับมือถือและแชร์ลิงก์</span>
+            </div>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              ข้อมูลจะถูกบันทึกลงใน <span className="text-amber-300 font-semibold">Firebase Firestore</span> อัตโนมัติ เมื่อเปิดใช้งานบนมือถือหรือแชร์ลิงก์ ข้อมูลจะอัปเดตตรงกันทุกอุปกรณ์แบบ Real-Time ทันที
+            </p>
+          </div>
+
           {/* Database info */}
-          <div className="bg-[#15233a] border border-slate-750 rounded-xl p-3 space-y-2">
+          <div className="bg-[#15233a] border border-slate-700/80 rounded-xl p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center gap-1.5">
                 <Database className="w-3.5 h-3.5 text-cyan-400" />
-                <span>ฐานข้อมูล:</span>
+                <span>ฐานข้อมูลคลาวด์:</span>
               </span>
               <span className="font-mono text-cyan-300 font-semibold">Firebase Firestore</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="text-slate-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>โปรเจกต์:</span>
+                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                <span>สถานะการเชื่อมต่อ:</span>
               </span>
-              <span className="text-slate-200 font-medium">CRC ThaBo project</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-slate-400 flex items-center gap-1.5">
-                <HardDrive className="w-3.5 h-3.5 text-amber-400" />
-                <span>สถานะซิงค์ข้อมูล:</span>
-              </span>
-              <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
                 <span>{isOnline ? 'ออนไลน์แบบเรียลไทม์' : 'ออฟไลน์'}</span>
               </span>
             </div>
 
             <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-[11px]">
-              <span className="text-slate-400">จำนวนรายการในคลัง:</span>
-              <span className="font-mono text-slate-200 font-bold">{totalTires} รายการ</span>
+              <span className="text-slate-400">จำนวนสินค้าในคลัง:</span>
+              <span className="font-mono text-amber-400 font-bold">{totalProducts} รายการ</span>
             </div>
           </div>
 
-          {/* Reset sample data */}
+          {syncStatusMsg && (
+            <div className="p-2 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs flex items-center gap-1.5 font-medium animate-in fade-in">
+              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>{syncStatusMsg}</span>
+            </div>
+          )}
+
+          {/* Action: Force Sync Cloud */}
           <button
-            onClick={handleReset}
-            disabled={isResetting}
-            className="w-full py-2.5 px-3 rounded-xl bg-[#1c2b44] hover:bg-[#233757] border border-slate-700 text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+            onClick={handleSyncCloud}
+            disabled={isProcessing}
+            className="w-full py-2.5 px-3 rounded-xl bg-[#172740] hover:bg-[#1e3456] border border-sky-500/40 text-sky-200 hover:text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 font-semibold text-xs"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isResetting ? 'animate-spin' : ''}`} />
-            <span>{isResetting ? 'กำลังกู้คืน...' : 'กู้คืนข้อมูลสินค้าตามไฟล์ CSV (80 รายการ)'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${isProcessing ? 'animate-spin' : ''}`} />
+            <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
+          </button>
+
+          {/* Action: Clear all products (0 items) */}
+          <button
+            onClick={handleClearAll}
+            disabled={isProcessing}
+            className="w-full py-2.5 px-3 rounded-xl bg-rose-950/30 hover:bg-rose-950/50 border border-rose-500/40 text-rose-300 hover:text-rose-200 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 font-semibold text-xs"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span>นำรายการสินค้าทั้งหมดออก (เริ่มต้น 0 รายการ)</span>
           </button>
         </div>
 
@@ -116,7 +172,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         <div className="p-3 bg-[#0d1626] border-t border-slate-800">
           <button
             onClick={onClose}
-            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs"
+            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors"
           >
             ปิดหน้าต่าง
           </button>

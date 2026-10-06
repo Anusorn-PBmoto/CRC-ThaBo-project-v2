@@ -1,29 +1,40 @@
 export type StockStatus = 'pending' | 'checked' | 'discrepancy';
 
-export interface TireItem {
+export interface ProductItem {
   id: string;
-  brand: string;
-  size: string;
-  rim: string; // e.g. "12", "14", "13", "10", "17"
-  systemQty: number;
-  actualQty: number;
-  status: StockStatus;
-  category: string; // 'Tubeless' | 'Tube'
-  location: string; // e.g. "ช่อง A-01-2" or "RACK A-02"
-  zone: string; // e.g. "ห้องยางชั้น 2"
-  description: string; // e.g. "ยางสปอร์ต สกู๊ตเตอร์", "Vespa Sprint / Grand Filano หน้า"
-  minStock: number;
-  price?: number; // Standard selling price in THB
-  barcode?: string; // Barcode / QR Code
-  isOem?: boolean;
-  oemLabel?: string; // e.g. "OEM ศูนย์"
-  imageUrl?: string;
+  barcode: string;           // 1. ระบบแสกนบาร์โค้ด และรหัสสินค้า
+  name: string;              // 2. ชื่อสินค้า
+  unit: string;              // 3. หน่วยนับ (ชิ้น, กล่อง, ชุด, เส้น, ขวด, อัน, คู่, แผ่น, ลูก ฯลฯ)
+  costPrice: number;         // 4. ราคาซื้อ / ราคาทุน
+  sellingPrice: number;      // 5. ราคาขาย
+  imageUrl?: string;         // 6. ถ่ายภาพสินค้า
+  category?: string;         // หมวดหมู่ (เช่น อะไหล่เครื่องยนต์, ระบบส่งกำลัง, ระบบเบรก, น้ำมันเครื่อง ฯลฯ)
+  brand?: string;            // ยี่ห้อ (เช่น Honda, Yamaha, Castrol, Bando, DID, NGK, YSS ฯลฯ)
+  location?: string;         // ช่องจัดเก็บ/ชั้นวาง (เช่น RACK A-01, กล่อง 1, ชั้น 2)
+  systemQty: number;         // ยอดตามระบบ
+  actualQty: number;         // ยอดคงเหลือจริง
+  status: StockStatus;       // สถานะตรวจนับ
+  minStock?: number;         // จุดเตือนสต็อกต่ำ
+  description?: string;      // รุ่นรถที่รองรับ / รายละเอียด
   updatedAt: string;
+
+  // Compatibility aliases
+  size?: string;
+  rim?: string;
+  price?: number;
+  tireId?: string;
+  tireName?: string;
+  isOem?: boolean;
+  oemLabel?: string;
+  zone?: string;
 }
+
+// Seamless alias for parts
+export type TireItem = ProductItem;
 
 export interface AuditSession {
   id: string;
-  code: string; // "AUD-2410-09"
+  code: string;
   zone: string;
   title: string;
   status: 'in_progress' | 'completed';
@@ -36,27 +47,31 @@ export interface AuditSession {
 
 export interface AuditLog {
   id: string;
-  tireId: string;
-  tireName: string;
-  brand: string;
+  productId: string;
+  productName: string;
+  brand?: string;
   diff: number;
   previousQty: number;
   newQty: number;
   action: string;
   timestamp: string;
   note?: string;
+  tireId?: string;
+  tireName?: string;
 }
 
 export interface Transaction {
   id: string;
   type: 'sale' | 'purchase';
-  tireId: string;
-  tireName: string;
-  brand: string;
+  productId: string;
+  productName: string;
+  brand?: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
   customerOrSupplier: string;
   note?: string;
   createdAt: string;
+  tireId?: string;
+  tireName?: string;
 }

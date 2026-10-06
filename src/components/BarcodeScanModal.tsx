@@ -85,23 +85,26 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
     if (!matched && cleanDigits) {
       const known = KNOWN_BARCODE_CATALOG[cleanDigits];
       if (known) {
-        matched = tires.find(
-          (t) =>
-            t.brand.toLowerCase() === known.brand.toLowerCase() &&
-            (t.size.toLowerCase().includes(known.size.toLowerCase()) ||
-              known.size.toLowerCase().includes(t.size.toLowerCase()))
-        );
+        matched = tires.find((t) => {
+          const tName = (t.name || t.size || '').toLowerCase();
+          const tBrand = (t.brand || '').toLowerCase();
+          return (
+            tBrand === known.brand.toLowerCase() &&
+            (tName.includes(known.size.toLowerCase()) || known.size.toLowerCase().includes(tName))
+          );
+        });
       }
     }
 
-    // 3. Exact match with Tire Size, ID, or Location
+    // 3. Exact or partial match with Product Name, Code, ID, or Location
     if (!matched) {
-      matched = tires.find(
-        (t) =>
-          t.size.toLowerCase() === rawCode.toLowerCase() ||
-          t.id.toLowerCase() === rawCode.toLowerCase() ||
-          t.location.toLowerCase() === rawCode.toLowerCase()
-      );
+      matched = tires.find((t) => {
+        const tName = (t.name || t.size || '').toLowerCase();
+        const tId = t.id.toLowerCase();
+        const tLoc = (t.location || '').toLowerCase();
+        const q = rawCode.toLowerCase();
+        return tName === q || tId === q || tLoc === q;
+      });
     }
 
     // 4. Match if barcode text explicitly contains full tire size e.g. "120/70-14" or "90/90-12"
@@ -109,7 +112,9 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
       const sizePatternMatch = rawCode.match(/(\d{2,3})[/-](\d{2,3})[-/R](\d{2})/i);
       if (sizePatternMatch) {
         const extractedSize = `${sizePatternMatch[1]}/${sizePatternMatch[2]}-${sizePatternMatch[3]}`.toLowerCase();
-        matched = tires.find((t) => t.size.toLowerCase().replace(/\s+/g, '').includes(extractedSize));
+        matched = tires.find((t) =>
+          (t.size || t.name || '').toLowerCase().replace(/\s+/g, '').includes(extractedSize)
+        );
       }
     }
 
@@ -147,14 +152,15 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
     setIsBindingOpen(false);
   };
 
-  // Filter tires for binding search
+  // Filter products for binding search
   const bindFilteredTires = tires.filter((t) => {
     if (!bindSearchQuery.trim()) return true;
     const q = bindSearchQuery.toLowerCase();
     return (
-      t.brand.toLowerCase().includes(q) ||
-      t.size.toLowerCase().includes(q) ||
-      t.location.toLowerCase().includes(q) ||
+      (t.name || t.size || '').toLowerCase().includes(q) ||
+      (t.barcode || '').toLowerCase().includes(q) ||
+      (t.brand || '').toLowerCase().includes(q) ||
+      (t.location || '').toLowerCase().includes(q) ||
       (t.description || '').toLowerCase().includes(q)
     );
   }).slice(0, 10);
@@ -170,7 +176,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
-                <span>สแกนเนอร์บาร์โค้ดยาง HD Pro</span>
+                <span>สแกนเนอร์บาร์โค้ดอะไหล่ HD Pro</span>
                 <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-bold px-1.5 py-0.2 rounded">
                   AI FAST
                 </span>
@@ -209,7 +215,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>⚡ จำลองยิงด่วน / พิมพ์</span>
+            <span>⚡ ค้นหา / พิมพ์รหัส</span>
           </button>
         </div>
 
@@ -224,33 +230,8 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             /* Manual / Preset simulation mode */
             <div className="space-y-2.5">
               <div>
-                <p className="text-[11px] text-slate-400 mb-1.5">
-                  ทดสอบเลือกบาร์โค้ดยางยอดนิยม:
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {[
-                    { code: '8858722105389', label: 'IRC 120/70-14' },
-                    { code: '110/70-12', label: 'Camal 110/70-12' },
-                    { code: '140/70-14', label: 'IRC 140/70-14' },
-                    { code: '90/90-14', label: 'Quick 90/90-14' },
-                    { code: '80/90-14', label: 'Quick 80/90-14' },
-                    { code: '90/90-12', label: 'Maxxis 90/90-12' },
-                  ].map((item) => (
-                    <button
-                      key={item.code}
-                      onClick={() => handleSearchCode(item.code)}
-                      className="p-2 rounded-xl bg-[#17253d] hover:bg-[#1e3252] border border-slate-700/80 text-left flex items-center justify-between text-slate-200 active:scale-95 transition-all"
-                    >
-                      <span className="truncate">{item.label}</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0 ml-1" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-800">
                 <label className="block text-slate-400 font-medium mb-1">
-                  หรือพิมพ์รหัสบาร์โค้ด / เบอร์ยาง:
+                  พิมพ์รหัสบาร์โค้ด หรือชื่ออะไหล่:
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -260,7 +241,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       setManualCode(e.target.value);
                       handleSearchCode(e.target.value);
                     }}
-                    placeholder="เช่น 8858722105389 หรือ 120/70-14"
+                    placeholder="เช่น 8851234567890 หรือชื่อสินค้า"
                     className="flex-1 bg-[#17253d] border border-slate-700 text-slate-100 rounded-xl px-3 py-2 text-xs focus:border-cyan-400 focus:outline-none font-mono"
                   />
                   <button
@@ -281,29 +262,31 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                   <span className="font-bold text-emerald-300 text-xs">
-                    สแกนพบยาง: {scannedResult.brand} {scannedResult.size}
+                    สแกนพบสินค้า: {scannedResult.name || scannedResult.size}
                   </span>
                 </div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-200 font-bold">
-                  {scannedResult.rim}&quot;
-                </span>
+                {scannedResult.unit && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-900 text-emerald-200 font-bold">
+                    {scannedResult.unit}
+                  </span>
+                )}
               </div>
 
               <div className="text-[11px] text-slate-300 flex items-center justify-between">
-                <span>ช่องจัดเก็บ: <strong className="text-slate-100">{scannedResult.location}</strong></span>
+                <span>ช่องจัดเก็บ: <strong className="text-slate-100">{scannedResult.location || 'RACK A-01'}</strong></span>
                 <span>
                   ยอดคงเหลือ:{' '}
                   <strong className="text-amber-300 font-mono text-sm">
                     {scannedResult.actualQty}
                   </strong>{' '}
-                  เส้น
+                  {scannedResult.unit || 'ชิ้น'}
                 </span>
               </div>
 
-              {scannedResult.description && (
-                <p className="text-[10px] text-slate-400 truncate">
-                  {scannedResult.description}
-                </p>
+              {scannedResult.sellingPrice > 0 && (
+                <div className="text-[11px] text-emerald-400 font-bold font-mono">
+                  ราคาขาย: ฿{scannedResult.sellingPrice.toLocaleString()}
+                </div>
               )}
 
               <button
@@ -326,7 +309,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                     <span>สแกนพบรหัส: {unmatchedBarcode}</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    รหัสนี้ยังไม่ได้ผูกกับยางในระบบ
+                    รหัสนี้ยังไม่ได้ผูกกับสินค้าในระบบ
                   </p>
                 </div>
               </div>
@@ -338,7 +321,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                     className="py-2 px-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
                   >
                     <Link className="w-3.5 h-3.5" />
-                    <span>ผูกกับยางที่มี</span>
+                    <span>ผูกกับสินค้าที่มี</span>
                   </button>
 
                   <button
@@ -349,14 +332,14 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                     className="py-2 px-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>เพิ่มเป็นยางใหม่</span>
+                    <span>เพิ่มเป็นสินค้าใหม่</span>
                   </button>
                 </div>
               ) : (
-                /* Tire Search & Bind Selector */
+                /* Product Search & Bind Selector */
                 <div className="pt-2 border-t border-slate-800 space-y-2 animate-in fade-in">
                   <div className="flex items-center justify-between text-xs text-slate-300 font-medium">
-                    <span>ค้นหายางเพื่อผูกรหัสบาร์โค้ดนี้:</span>
+                    <span>ค้นหาสินค้าเพื่อผูกรหัสบาร์โค้ดนี้:</span>
                     <button
                       onClick={() => setIsBindingOpen(false)}
                       className="text-[10px] text-slate-400 hover:text-slate-200"
@@ -370,7 +353,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       type="text"
                       value={bindSearchQuery}
                       onChange={(e) => setBindSearchQuery(e.target.value)}
-                      placeholder="พิมพ์ขนาด เช่น 120/70-14 หรือ IRC"
+                      placeholder="พิมพ์ชื่อสินค้า เช่น สายพาน, ผ้าเบรก"
                       className="w-full bg-[#18263d] border border-slate-700 text-slate-100 rounded-xl pl-8 pr-3 py-1.5 text-xs focus:border-cyan-400 focus:outline-none"
                       autoFocus
                     />
@@ -385,9 +368,9 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       >
                         <div>
                           <div className="font-bold text-slate-100">
-                            {t.brand} {t.size}
+                            {t.name || t.size}
                           </div>
-                          <div className="text-[10px] text-slate-400">{t.location} • คงเหลือ {t.actualQty} เส้น</div>
+                          <div className="text-[10px] text-slate-400">{t.location || 'RACK A-01'} • คงเหลือ {t.actualQty} {t.unit || 'ชิ้น'}</div>
                         </div>
                         <span className="text-[10px] bg-cyan-600/30 text-cyan-300 font-bold px-2 py-1 rounded-lg">
                           ผูกรหัสนี้

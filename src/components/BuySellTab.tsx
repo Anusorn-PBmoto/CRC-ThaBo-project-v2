@@ -19,7 +19,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { TireItem, Transaction } from '../types';
+import { ProductItem, TireItem, Transaction } from '../types';
 
 interface BuySellTabProps {
   tires: TireItem[];
@@ -58,35 +58,37 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   // Available brands
   const brands = useMemo(() => {
     const set = new Set<string>();
-    tires.forEach((t) => set.add(t.brand));
+    tires.forEach((t) => {
+      if (t.brand) set.add(t.brand);
+    });
     return ['ทั้งหมด', ...Array.from(set)];
   }, [tires]);
 
-  // Default suggested price calculation if tire.price is not set
-  const getSuggestedPrice = (tire: TireItem) => {
-    if (tire.price && tire.price > 0) return tire.price;
-    // Estimate reasonable Thai motorcycle tubeless tire prices by rim
-    const rimNum = parseInt(tire.rim, 10) || 14;
-    if (rimNum <= 10) return 650;
-    if (rimNum === 12) return 790;
-    if (rimNum === 13) return 890;
-    if (rimNum === 14) return 850;
-    if (rimNum === 15) return 1250;
-    return 950;
+  // Suggested price based on transaction type (sale vs purchase)
+  const getSuggestedPrice = (item: ProductItem) => {
+    if (transactionType === 'sale') {
+      return item.sellingPrice || item.price || 0;
+    } else {
+      return item.costPrice || (item.sellingPrice ? Math.round(item.sellingPrice * 0.7) : 0);
+    }
   };
 
-  // Filter tires for selection
+  // Filter products for selection
   const filteredTires = useMemo(() => {
-    return tires.filter((tire) => {
+    return tires.filter((item) => {
+      const q = searchQuery.toLowerCase();
       const matchSearch =
-        (tire.size || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.brand || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (item.name || item.size || '').toLowerCase().includes(q) ||
+        (item.barcode || '').toLowerCase().includes(q) ||
+        (item.brand || '').toLowerCase().includes(q) ||
+        (item.category || '').toLowerCase().includes(q) ||
+        (item.location || '').toLowerCase().includes(q) ||
+        (item.description || '').toLowerCase().includes(q);
 
       const matchBrand =
         selectedBrand === 'ทั้งหมด' ||
-        (tire.brand || '').toLowerCase() === selectedBrand.toLowerCase();
+        (item.brand || '').toLowerCase() === selectedBrand.toLowerCase() ||
+        (item.category || '').toLowerCase() === selectedBrand.toLowerCase();
 
       return matchSearch && matchBrand;
     });
@@ -458,16 +460,18 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                 className="bg-[#131e31] hover:bg-[#182740] active:scale-[0.99] border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3 transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-slate-100 text-xs">
-                      {tire.brand} {tire.size}
+                      {tire.name || tire.size}
                     </span>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#1b2b46] text-cyan-300 border border-cyan-500/20">
-                      {tire.rim}&quot;
-                    </span>
+                    {tire.unit && (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#1b2b46] text-cyan-300 border border-cyan-500/20">
+                        {tire.unit}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-slate-400 mt-0.5">
-                    ช่อง: {tire.location} • {tire.description || 'ยางมาตรฐาน'}
+                    ช่อง: {tire.location || 'RACK A-01'} {tire.description ? `• ${tire.description}` : ''}
                   </div>
                 </div>
 
@@ -481,7 +485,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                         isZero ? 'text-rose-400' : 'text-emerald-400'
                       }`}
                     >
-                      {isZero ? 'หมด (0)' : `เหลือ ${tire.actualQty} เส้น`}
+                      {isZero ? 'หมด (0)' : `เหลือ ${tire.actualQty} ${tire.unit || 'ชิ้น'}`}
                     </span>
                   </div>
 

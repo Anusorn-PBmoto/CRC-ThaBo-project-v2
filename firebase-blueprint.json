@@ -1,30 +1,32 @@
 {
   "entities": {
-    "tire": {
-      "title": "Tire",
-      "description": "Motorcycle tire inventory item",
+    "product": {
+      "title": "Product",
+      "description": "Motorcycle spare part and inventory item",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "brand": { "type": "string", "maxLength": 50 },
-        "size": { "type": "string", "maxLength": 50 },
-        "rim": { "type": "string", "maxLength": 10 },
-        "systemQty": { "type": "number" },
-        "actualQty": { "type": "number" },
-        "status": { "type": "string", "enum": ["pending", "checked", "discrepancy"] },
-        "category": { "type": "string", "maxLength": 50 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "name": { "type": "string", "maxLength": 150 },
+        "unit": { "type": "string", "maxLength": 30 },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string", "maxLength": 80 },
+        "brand": { "type": "string", "maxLength": 80 },
         "location": { "type": "string", "maxLength": 100 },
-        "zone": { "type": "string", "maxLength": 100 },
-        "description": { "type": "string", "maxLength": 200 },
+        "actualQty": { "type": "number" },
+        "systemQty": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "checked", "discrepancy"] },
         "minStock": { "type": "number" },
-        "isOem": { "type": "boolean" },
+        "description": { "type": "string", "maxLength": 300 },
         "updatedAt": { "type": "string", "maxLength": 50 }
       },
-      "required": ["brand", "size", "rim", "systemQty", "actualQty", "status"]
+      "required": ["name", "unit", "costPrice", "sellingPrice"]
     },
     "auditSession": {
       "title": "AuditSession",
-      "description": "Quick audit session record",
+      "description": "Inventory stock audit session record",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -42,13 +44,12 @@
     },
     "auditLog": {
       "title": "AuditLog",
-      "description": "Log record for tire audit and stock adjustment",
+      "description": "Log record for inventory audit and stock adjustment",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "tireId": { "type": "string", "maxLength": 100 },
-        "tireName": { "type": "string", "maxLength": 100 },
-        "brand": { "type": "string", "maxLength": 50 },
+        "productId": { "type": "string", "maxLength": 100 },
+        "productName": { "type": "string", "maxLength": 150 },
         "diff": { "type": "number" },
         "previousQty": { "type": "number" },
         "newQty": { "type": "number" },
@@ -56,18 +57,17 @@
         "timestamp": { "type": "string", "maxLength": 50 },
         "note": { "type": "string", "maxLength": 200 }
       },
-      "required": ["tireId", "tireName", "brand", "diff", "action", "timestamp"]
+      "required": ["productName", "diff", "action", "timestamp"]
     },
     "transaction": {
       "title": "Transaction",
-      "description": "Buy/Sell record for automatic stock cutting and restocking",
+      "description": "Buy and Sell transactions for automatic stock adjustment",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "type": { "type": "string", "enum": ["sale", "purchase"] },
-        "tireId": { "type": "string", "maxLength": 100 },
-        "tireName": { "type": "string", "maxLength": 100 },
-        "brand": { "type": "string", "maxLength": 50 },
+        "productId": { "type": "string", "maxLength": 100 },
+        "productName": { "type": "string", "maxLength": 150 },
         "quantity": { "type": "number" },
         "unitPrice": { "type": "number" },
         "totalPrice": { "type": "number" },
@@ -75,25 +75,25 @@
         "note": { "type": "string", "maxLength": 200 },
         "createdAt": { "type": "string", "maxLength": 50 }
       },
-      "required": ["type", "tireId", "tireName", "quantity", "createdAt"]
+      "required": ["type", "productId", "productName", "quantity", "createdAt"]
     }
   },
   "firestore": {
-    "/tires/{tireId}": {
-      "schema": { "$ref": "#/entities/tire" },
-      "description": "Tire inventory catalog and audit counts"
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/product" },
+      "description": "Motorcycle parts and inventory catalog"
     },
     "/audit_sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/auditSession" },
-      "description": "Audit session summaries"
+      "description": "Stock audit sessions"
     },
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/auditLog" },
-      "description": "Audit logs and transaction records"
+      "description": "Audit logs and history records"
     },
     "/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/transaction" },
-      "description": "Buy and sell transactions with auto stock deduction"
+      "description": "Buy and sell transaction history"
     }
   }
 }

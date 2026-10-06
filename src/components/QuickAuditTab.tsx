@@ -6,25 +6,24 @@ import {
   CheckCircle2,
   Clock,
   MoreVertical,
-  CloudUpload,
   RotateCcw,
   Sparkles,
   Layers,
   ChevronRight,
-  ExternalLink,
   Trash2,
+  Package,
 } from 'lucide-react';
-import { TireItem, AuditSession } from '../types';
+import { ProductItem, AuditSession } from '../types';
 
 interface QuickAuditTabProps {
-  tires: TireItem[];
+  tires: ProductItem[];
   activeSession: AuditSession | null;
-  onUpdateQty: (tire: TireItem, newQty: number) => void;
+  onUpdateQty: (product: ProductItem, newQty: number) => void;
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
   onSaveAudit: () => void;
-  onEditTire: (tire: TireItem) => void;
-  onDeleteTire?: (tire: TireItem) => void;
+  onEditTire: (product: ProductItem) => void;
+  onDeleteTire?: (product: ProductItem) => void;
   onRestoreInitialData?: () => void;
 }
 
@@ -37,72 +36,71 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
   onSaveAudit,
   onEditTire,
   onDeleteTire,
-  onRestoreInitialData,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedBrand, setSelectedBrand] = useState('ทั้งหมด');
-  const [selectedRim, setSelectedRim] = useState('ทุกขอบ');
+  const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
   const [activeMenuTireId, setActiveMenuTireId] = useState<string | null>(null);
 
-  // Available brands and rims
-  const brands = useMemo(() => {
+  // Available categories or brands
+  const categories = useMemo(() => {
     const set = new Set<string>();
     tires.forEach((t) => {
-      if (t.brand) set.add(t.brand);
+      if (t.category) set.add(t.category);
+      else if (t.brand) set.add(t.brand);
     });
     return ['ทั้งหมด', ...Array.from(set)];
   }, [tires]);
 
-  const rims = ['ทุกขอบ', '10"', '12"', '13"', '14"', '15"', '16"', '17"'];
-
-  // Filter tires
-  const filteredTires = useMemo(() => {
-    return tires.filter((tire) => {
+  // Filter products
+  const filteredProducts = useMemo(() => {
+    return tires.filter((p) => {
+      const q = searchQuery.toLowerCase();
       const matchSearch =
-        (tire.size || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.brand || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.location || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tire.description || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (p.name || p.size || '').toLowerCase().includes(q) ||
+        (p.barcode || '').toLowerCase().includes(q) ||
+        (p.brand || '').toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q) ||
+        (p.location || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q);
 
-      const matchBrand =
-        selectedBrand === 'ทั้งหมด' ||
-        (tire.brand || '').toLowerCase() === selectedBrand.toLowerCase();
-      const cleanRim = selectedRim.replace('"', '');
-      const matchRim = selectedRim === 'ทุกขอบ' || tire.rim === cleanRim;
+      const matchCategory =
+        selectedCategory === 'ทั้งหมด' ||
+        (p.category || '').toLowerCase() === selectedCategory.toLowerCase() ||
+        (p.brand || '').toLowerCase() === selectedCategory.toLowerCase();
 
-      return matchSearch && matchBrand && matchRim;
+      return matchSearch && matchCategory;
     });
-  }, [tires, searchQuery, selectedBrand, selectedRim]);
+  }, [tires, searchQuery, selectedCategory]);
 
   // Calculations for stats
   const totalCount = tires.length;
-  const checkedTires = tires.filter((t) => t.status === 'checked');
-  const checkedCount = checkedTires.length;
+  const checkedProducts = tires.filter((t) => t.status === 'checked');
+  const checkedCount = checkedProducts.length;
   const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
-  // Remaining to check in units (pieces)
+  // Remaining to check in units
   const remainingPieces = tires
     .filter((t) => t.status === 'pending')
     .reduce((sum, t) => sum + (t.systemQty || 0), 0);
 
-  // Matched vs Discrepancies
+  // Exact matched vs discrepancies
   const exactMatchedCount = tires.filter((t) => t.actualQty === t.systemQty && t.status === 'checked').length;
   const discrepancyCount = tires.filter((t) => t.actualQty !== t.systemQty).length;
   const modifiedCount = tires.filter((t) => t.status === 'checked' || t.status === 'discrepancy').length;
 
   return (
-    <div className="pb-32 pt-2 px-3 space-y-3 max-w-md mx-auto">
+    <div className="pb-32 pt-2 px-3 space-y-3 max-w-md mx-auto font-['Prompt',sans-serif]">
       {/* 1. Audit Progress & Search Header Card */}
       <div className="bg-[#121c2e] border border-slate-800/90 rounded-2xl p-3.5 shadow-md">
         {/* Title & Progress Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
-            <h2 className="text-sm font-semibold text-amber-300">
+            <h2 className="text-sm font-bold tracking-wide text-slate-100">
               นับสต็อกด่วน (Quick Audit)
             </h2>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-500/30 text-emerald-400">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-full">
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>
               {checkedCount} / {totalCount} รายการ ({progressPercent}%)
@@ -111,14 +109,14 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-3.5 flex">
+        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-3">
           <div
             className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 rounded-full"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
 
-        {/* Search & Actions Bar */}
+        {/* Search input + Action buttons */}
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -126,84 +124,67 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหารหัสยาง, ขนาด, แบรนด์"
-              className="w-full bg-[#18263d] text-slate-100 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2 border border-slate-700/60 focus:outline-none focus:border-amber-400/80 transition-all"
+              placeholder="ค้นหาชื่อสินค้า, บาร์โค้ด, ชั้นวาง..."
+              className="w-full bg-[#18263d] border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
 
+          {/* Quick Scanner Action Button */}
           <button
             onClick={onOpenScanner}
-            title="สแกนบาร์โค้ด"
-            className="p-2 bg-[#1b2b46] hover:bg-[#23385c] text-cyan-300 rounded-xl border border-slate-700/60 active:scale-95 transition-all flex items-center justify-center flex-shrink-0"
+            title="เปิดกล้องสแกนบาร์โค้ด"
+            className="p-2 rounded-xl bg-[#1c2d47] border border-slate-700 text-cyan-300 hover:text-white hover:bg-cyan-600 transition-all active:scale-95 shadow-sm"
           >
             <ScanBarcode className="w-4 h-4" />
           </button>
 
+          {/* Add Product Button */}
           <button
             onClick={onOpenAddModal}
-            className="px-2.5 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 rounded-xl text-xs font-medium flex items-center gap-1 active:scale-95 transition-all flex-shrink-0 shadow-sm"
+            className="flex items-center gap-1 px-3 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>เพิ่มขนาดยาง</span>
+            <span>เพิ่มสินค้า</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Brand Filters Horizontal Scroll */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        {brands.map((brand) => {
-          const isSelected = selectedBrand.toLowerCase() === brand.toLowerCase();
-          return (
-            <button
-              key={brand}
-              onClick={() => setSelectedBrand(brand)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-                isSelected
-                  ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20'
-                  : 'bg-[#152236] text-slate-300 hover:text-white border border-slate-800'
-              }`}
-            >
-              {brand}
-            </button>
-          );
-        })}
-      </div>
+      {/* 2. Category Filters (if categories exist) */}
+      {categories.length > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {categories.map((cat) => {
+            const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                  isSelected
+                    ? 'bg-amber-400 text-slate-950 font-bold shadow-md shadow-amber-400/20'
+                    : 'bg-[#152236] text-slate-300 hover:text-white border border-slate-800'
+                }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {/* 3. Rim Filters (ขอบล้อ) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
-        <span className="text-slate-400 font-medium pl-1 flex-shrink-0">ขอบล้อ:</span>
-        {rims.map((rim) => {
-          const isSelected = selectedRim === rim;
-          return (
-            <button
-              key={rim}
-              onClick={() => setSelectedRim(rim)}
-              className={`px-2.5 py-0.5 rounded-md font-medium whitespace-nowrap transition-all ${
-                isSelected
-                  ? 'bg-[#1e3a5f] text-cyan-300 border border-cyan-500/50 font-semibold'
-                  : 'bg-[#121c2d] text-slate-400 hover:text-slate-200 border border-slate-800/80'
-              }`}
-            >
-              {rim}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 4. Zone Header Card */}
+      {/* 3. Zone Header Card */}
       <div className="bg-gradient-to-r from-[#142136] to-[#121b2d] border border-slate-800 rounded-2xl p-3 flex items-center justify-between shadow-sm">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
             <span className="text-xs font-semibold text-slate-100">
-              โซน: ห้องยางชั้น 2
+              คลังอะไหล่มอเตอร์ไซค์ CRC ThaBo
             </span>
             <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">
-              {activeSession?.code || 'AUD-2410-09'}
+              {activeSession?.code || 'AUD-STOCK'}
             </span>
           </div>
           <p className="text-[11px] text-slate-400 mt-1">
-            คลังยางเรเดียล Tubeless • รอบเช้า
+            ตรวจนับและเช็กสต็อกสินค้าทุกประเภท
           </p>
         </div>
 
@@ -211,44 +192,65 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
           <span className="text-[10px] text-slate-400 block">คงเหลือตรวจ</span>
           <span className="text-xl font-extrabold text-amber-400 leading-none">
             {remainingPieces}{' '}
-            <span className="text-xs font-normal text-amber-200/80">เส้น</span>
+            <span className="text-xs font-normal text-amber-200/80">รายการ</span>
           </span>
         </div>
       </div>
 
-      {/* 5. Tire Audit List */}
+      {/* 4. Products Audit List */}
       <div className="space-y-2.5">
-        {filteredTires.length === 0 ? (
+        {totalCount === 0 ? (
+          /* Empty state when catalog is cleared */
+          <div className="bg-[#121c2e] border border-dashed border-slate-700 rounded-2xl p-8 text-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+              <Package className="w-7 h-7" />
+            </div>
+            <div>
+              <h3 className="text-slate-100 text-sm font-bold">ยังไม่มีสินค้าในระบบ</h3>
+              <p className="text-slate-400 text-xs mt-1 max-w-xs mx-auto">
+                พร้อมเริ่มต้นบันทึกสต็อกอะไหล่มอเตอร์ไซค์ของคุณ กดปุ่มด้านล่างเพื่อสแกนบาร์โค้ดและเริ่มเพิ่มสินค้า
+              </p>
+            </div>
+            <button
+              onClick={onOpenAddModal}
+              className="py-2.5 px-5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              <span>เพิ่มสินค้าชิ้นแรก</span>
+            </button>
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="bg-[#121c2e] border border-slate-800 rounded-2xl p-8 text-center">
             <Layers className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-            <p className="text-slate-300 text-sm font-medium">ไม่พบขนาดยางที่ค้นหา</p>
-            <p className="text-slate-500 text-xs mt-1">ลองเปลี่ยนคำค้นหา หรือกดเพิ่มขนาดยางใหม่</p>
+            <p className="text-slate-300 text-sm font-medium">ไม่พบสินค้าที่ตรงกับการค้นหา</p>
+            <p className="text-slate-500 text-xs mt-1">ลองเปลี่ยนคำค้นหา หรือกดเพิ่มสินค้าใหม่</p>
             <button
               onClick={onOpenAddModal}
               className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-slate-950 rounded-xl text-xs font-semibold hover:bg-amber-400 active:scale-95 transition-all"
             >
-              <Plus className="w-4 h-4" /> เพิ่มขนาดยางในระบบ
+              <Plus className="w-4 h-4" /> เพิ่มสินค้าใหม่
             </button>
           </div>
         ) : (
-          filteredTires.map((tire) => {
-            const isMatch = tire.actualQty === tire.systemQty;
-            const diff = tire.actualQty - tire.systemQty;
-            const isChecked = tire.status === 'checked';
+          filteredProducts.map((product) => {
+            const isMatch = product.actualQty === product.systemQty;
+            const diff = product.actualQty - product.systemQty;
+            const isChecked = product.status === 'checked';
+            const unitLabel = product.unit || 'ชิ้น';
 
             return (
               <div
-                key={tire.id}
+                key={product.id}
                 className="bg-[#131e31] hover:bg-[#15233a] border border-slate-800/80 rounded-2xl p-3.5 shadow-sm transition-all relative overflow-hidden"
               >
-                {/* Top Row: Brand & Size + Status */}
+                {/* Top Row: Product Info & Menu */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    {tire.imageUrl && (
-                      <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 flex-shrink-0 flex items-center justify-center shadow-inner">
+                    {product.imageUrl && (
+                      <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 flex-shrink-0 flex items-center justify-center shadow-inner">
                         <img
-                          src={tire.imageUrl}
-                          alt={`${tire.brand} ${tire.size}`}
+                          src={product.imageUrl}
+                          alt={product.name}
                           className="w-full h-full object-cover"
                           onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
                         />
@@ -257,36 +259,40 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <h3 className="text-sm font-bold text-slate-100 tracking-wide">
-                          {tire.brand} {tire.size}
+                          {product.name || product.size}
                         </h3>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#1b2b46] text-blue-300 border border-blue-500/30">
-                          {tire.rim}&quot;
-                        </span>
-                        {tire.isOem && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-600/40">
-                            {tire.oemLabel || 'OEM ศูนย์'}
+                        {product.unit && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#1b2b46] text-blue-300 border border-blue-500/30">
+                            {product.unit}
                           </span>
                         )}
-                        {tire.barcode && (
+                        {product.barcode && (
                           <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
                             <ScanBarcode className="w-2.5 h-2.5" />
-                            <span>{tire.barcode}</span>
+                            <span>{product.barcode}</span>
                           </span>
                         )}
                       </div>
 
-                      {/* Subtitle: System quantity & location */}
-                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-slate-300 font-medium">
-                          ระบบ: {tire.systemQty} เส้น
-                        </span>
+                      {/* Subtitle: Prices & Location */}
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                        {product.sellingPrice > 0 && (
+                          <span className="text-emerald-400 font-bold font-mono">
+                            ฿{product.sellingPrice.toLocaleString()}
+                          </span>
+                        )}
+                        {product.costPrice > 0 && (
+                          <span className="text-slate-500 text-[11px] font-mono">
+                            (ทุน: ฿{product.costPrice.toLocaleString()})
+                          </span>
+                        )}
                         <span>•</span>
-                        <span>{tire.location}</span>
-                        {tire.description && (
+                        <span className="text-slate-300">{product.location || 'RACK A-01'}</span>
+                        {product.description && (
                           <>
                             <span>•</span>
-                            <span className="text-slate-500 truncate max-w-[150px]">
-                              {tire.description}
+                            <span className="text-slate-500 truncate max-w-[130px]">
+                              {product.description}
                             </span>
                           </>
                         )}
@@ -312,18 +318,18 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                     <div className="relative">
                       <button
                         onClick={() =>
-                          setActiveMenuTireId(activeMenuTireId === tire.id ? null : tire.id)
+                          setActiveMenuTireId(activeMenuTireId === product.id ? null : product.id)
                         }
                         className="p-1 text-slate-400 hover:text-slate-200 rounded-lg"
                       >
                         <MoreVertical className="w-4 h-4" />
                       </button>
 
-                      {activeMenuTireId === tire.id && (
+                      {activeMenuTireId === product.id && (
                         <div className="absolute right-0 top-6 z-20 w-36 bg-[#1a2942] border border-slate-700 rounded-xl shadow-xl py-1 text-xs text-slate-200">
                           <button
                             onClick={() => {
-                              onEditTire(tire);
+                              onEditTire(product);
                               setActiveMenuTireId(null);
                             }}
                             className="w-full px-3 py-1.5 text-left hover:bg-slate-700/60 flex items-center justify-between"
@@ -333,7 +339,7 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                           </button>
                           <button
                             onClick={() => {
-                              onUpdateQty(tire, tire.systemQty);
+                              onUpdateQty(product, product.systemQty);
                               setActiveMenuTireId(null);
                             }}
                             className="w-full px-3 py-1.5 text-left hover:bg-slate-700/60 flex items-center justify-between text-amber-300"
@@ -344,12 +350,12 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                           {onDeleteTire && (
                             <button
                               onClick={() => {
-                                onDeleteTire(tire);
+                                onDeleteTire(product);
                                 setActiveMenuTireId(null);
                               }}
                               className="w-full px-3 py-1.5 text-left hover:bg-rose-950/40 flex items-center justify-between text-rose-400 border-t border-slate-700/60"
                             >
-                              <span>ลบรายการยาง</span>
+                              <span>ลบรายการสินค้า</span>
                               <Trash2 className="w-3 h-3" />
                             </button>
                           )}
@@ -382,21 +388,19 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                   {/* Right: Stepper [-] [Number] [+] */}
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => onUpdateQty(tire, Math.max(0, tire.actualQty - 1))}
-                      aria-label="ลดจำนวน"
-                      className="w-9 h-8 rounded-xl bg-[#1c2c47] hover:bg-[#25395c] active:bg-[#15233a] border border-slate-700/60 text-slate-200 font-bold text-base flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                      onClick={() => onUpdateQty(product, Math.max(0, product.actualQty - 1))}
+                      className="w-8 h-8 rounded-xl bg-[#1b2b46] hover:bg-[#223659] active:scale-95 text-slate-100 font-bold flex items-center justify-center border border-slate-700 transition-all text-base"
                     >
-                      −
+                      -
                     </button>
 
-                    <span className="min-w-[32px] text-center font-bold text-lg text-amber-400 font-mono">
-                      {tire.actualQty}
+                    <span className="font-mono text-base font-extrabold text-amber-400 min-w-[28px] text-center">
+                      {product.actualQty}
                     </span>
 
                     <button
-                      onClick={() => onUpdateQty(tire, tire.actualQty + 1)}
-                      aria-label="เพิ่มจำนวน"
-                      className="w-9 h-8 rounded-xl bg-[#1c2c47] hover:bg-[#25395c] active:bg-[#15233a] border border-slate-700/60 text-slate-200 font-bold text-base flex items-center justify-center transition-all active:scale-95 shadow-sm"
+                      onClick={() => onUpdateQty(product, product.actualQty + 1)}
+                      className="w-8 h-8 rounded-xl bg-[#1b2b46] hover:bg-[#223659] active:scale-95 text-slate-100 font-bold flex items-center justify-center border border-slate-700 transition-all text-base"
                     >
                       +
                     </button>
@@ -408,35 +412,31 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
         )}
       </div>
 
-      {/* 6. Floating Bottom Action Bar */}
-      <div className="fixed bottom-16 left-0 right-0 z-20 px-3 py-2 pointer-events-none">
-        <div className="max-w-md mx-auto bg-[#0f192b]/95 backdrop-blur-md border border-slate-750/90 rounded-2xl p-2.5 shadow-2xl flex items-center justify-between pointer-events-auto">
-          <div>
-            <div className="text-xs font-semibold text-slate-200">
-              ปรับปรุงแล้ว:{' '}
-              <span className="text-amber-400 font-mono font-bold">
-                {modifiedCount}
-              </span>{' '}
-              รายการ
-            </div>
-            <div className="text-[11px] text-emerald-400 flex items-center gap-1 mt-0.5">
-              <span>สต็อกตรง {exactMatchedCount} รายการ</span>
-              <span>•</span>
-              <span className={discrepancyCount > 0 ? 'text-amber-400 font-semibold' : 'text-slate-400'}>
-                คลาดเคลื่อน {discrepancyCount}
-              </span>
+      {/* 5. Floating Bottom Save Bar */}
+      {totalCount > 0 && modifiedCount > 0 && (
+        <div className="fixed bottom-16 left-0 right-0 p-3 z-20 pointer-events-none">
+          <div className="max-w-md mx-auto pointer-events-auto">
+            <div className="bg-[#0f172a]/95 backdrop-blur-md border border-amber-500/40 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-slate-100 block">
+                  ปรับปรุงแล้ว: {modifiedCount} รายการ
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  สต็อกตรง {exactMatchedCount} รายการ • คลาดเคลื่อน {discrepancyCount}
+                </span>
+              </div>
+
+              <button
+                onClick={onSaveAudit}
+                className="py-2.5 px-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/25 active:scale-95 transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>บันทึกผลการนับ</span>
+              </button>
             </div>
           </div>
-
-          <button
-            onClick={onSaveAudit}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/25 active:scale-95 transition-all"
-          >
-            <CloudUpload className="w-4 h-4" />
-            <span>บันทึกผลการนับ</span>
-          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 };
