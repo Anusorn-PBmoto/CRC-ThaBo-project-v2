@@ -14,6 +14,7 @@ import {
   deleteTireItem,
   saveAuditSession,
   restoreAllInitialTires,
+  sanitizeForFirestore,
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
@@ -31,6 +32,12 @@ import { BarcodeScanModal } from './components/BarcodeScanModal';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
 import { ProfileModal } from './components/ProfileModal';
+import { AppSheetSyncModal } from './components/AppSheetSyncModal';
+import {
+  downloadAppSheetCsv,
+  isAutoCsvExportEnabled,
+  APPSHEET_CSV_FILENAME,
+} from './utils/appsheetCsv';
 
 const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_v9';
 const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_v9';
@@ -132,6 +139,8 @@ export default function App() {
   const [poItems, setPoItems] = useState<TireItem[]>([]);
   const [isAuditConfirmOpen, setIsAuditConfirmOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAppSheetOpen, setIsAppSheetOpen] = useState(false);
+  const [appSheetToast, setAppSheetToast] = useState<string | null>(null);
 
   // Initialize and subscribe
   useEffect(() => {
@@ -145,7 +154,33 @@ export default function App() {
         // Attach real-time listeners immediately
         unsubscribeTires = subscribeToTires(
           (remoteData) => {
-            persistTires(remoteData || []);
+            if (remoteData && remoteData.length > 0) {
+              persistTires(remoteData);
+            } else {
+              // Remote collection is empty: check if local storage has products that need preserving
+              try {
+                const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
+                if (saved) {
+                  const parsed = JSON.parse(saved);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    console.log('Preserving local products and syncing to Firestore:', parsed.length);
+                    // Push these local products to Firestore so they are permanently stored
+                    const batch = writeBatch(db);
+                    parsed.forEach((item: ProductItem) => {
+                      const ref = doc(db, 'products', item.id);
+                      batch.set(ref, sanitizeForFirestore(item), { merge: true });
+                    });
+                    batch.commit().catch(console.warn);
+                    persistTires(parsed);
+                    setIsOnline(true);
+                    return;
+                  }
+                }
+              } catch (e) {
+                console.warn('Error checking local storage fallback:', e);
+              }
+              persistTires([]);
+            }
             setIsOnline(true);
           },
           (err) => {
@@ -234,16 +269,17 @@ export default function App() {
     }
   };
 
-  // Add / Edit Tire
+  // Add / Edit Product
   const handleSaveTire = async (tireData: Omit<TireItem, 'id'>, id?: string) => {
     try {
+      let nextList: ProductItem[] = [];
+
       if (id) {
         // Optimistic update
-        persistTires((prev) =>
-          prev.map((t) =>
-            t.id === id ? { ...t, ...tireData, updatedAt: new Date().toISOString() } : t
-          )
+        nextList = tires.map((t) =>
+          t.id === id ? { ...t, ...tireData, updatedAt: new Date().toISOString() } : t
         );
+        persistTires(nextList);
         await updateTireItem(id, tireData);
       } else {
         // Optimistic add with unique ID
@@ -252,19 +288,31 @@ export default function App() {
           ...tireData,
           id: tempId,
         };
-        persistTires((prev) => [newTire, ...prev]);
+        nextList = [newTire, ...tires];
+        persistTires(nextList);
 
         const realId = await addNewTire(tireData);
         if (realId && realId !== tempId) {
-          persistTires((prev) =>
-            prev.map((t) => (t.id === tempId ? { ...t, id: realId } : t))
-          );
+          nextList = nextList.map((t) => (t.id === tempId ? { ...t, id: realId } : t));
+          persistTires(nextList);
         }
       }
+
+      // Automatically generate & save AppSheet CSV crc-thano-project-v2.csv immediately
+      try {
+        if (isAutoCsvExportEnabled()) {
+          downloadAppSheetCsv(nextList, APPSHEET_CSV_FILENAME);
+        }
+        setAppSheetToast(`บันทึกฐานข้อมูลไปยัง ${APPSHEET_CSV_FILENAME} เรียบร้อยแล้ว`);
+        setTimeout(() => setAppSheetToast(null), 4000);
+      } catch (csvErr) {
+        console.warn('AppSheet CSV auto export note:', csvErr);
+      }
+
       setIsAddEditOpen(false);
       setEditingTire(null);
     } catch (error) {
-      console.error('Failed to save tire:', error);
+      console.error('Failed to save product:', error);
     }
   };
 
@@ -386,6 +434,9 @@ export default function App() {
   // Clear all products (reset to 0 items per user instruction)
   const handleClearAllProducts = async () => {
     try {
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_KEY_TIRES);
+      } catch (e) {}
       await restoreAllInitialTires();
       persistTires([]);
       confetti({
@@ -537,6 +588,7 @@ export default function App() {
       <Header
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenAppSheet={() => setIsAppSheetOpen(true)}
         isOnline={isOnline}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
         subtitle={
@@ -551,6 +603,26 @@ export default function App() {
             : 'รายการสินค้า & แคตตาล็อกอะไหล่'
         }
       />
+
+      {/* AppSheet Real-Time Notification Toast */}
+      {appSheetToast && (
+        <div className="fixed top-16 left-0 right-0 z-40 px-3 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200 font-['Prompt',sans-serif]">
+          <div className="max-w-md mx-auto pointer-events-auto">
+            <div className="bg-[#0b281f]/95 border border-emerald-500/50 backdrop-blur-md rounded-xl p-2.5 shadow-2xl flex items-center justify-between gap-2.5 text-xs text-emerald-200">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+                <span className="font-semibold truncate">{appSheetToast}</span>
+              </div>
+              <button
+                onClick={() => setAppSheetToast(null)}
+                className="text-slate-400 hover:text-white p-0.5 rounded text-[11px]"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-md mx-auto">
@@ -688,6 +760,12 @@ export default function App() {
         onClearAllProducts={handleClearAllProducts}
         onForceSyncCloud={handleForceSyncCloud}
         totalProducts={tires.length}
+      />
+
+      <AppSheetSyncModal
+        isOpen={isAppSheetOpen}
+        onClose={() => setIsAppSheetOpen(false)}
+        products={tires}
       />
     </div>
   );

@@ -278,18 +278,31 @@ export async function updateTireActualQty(
   }
 }
 
+// Sanitizes object for Firestore by removing any undefined values
+export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
 // Add new product
 export async function addNewTire(item: Omit<ProductItem, 'id'>): Promise<string> {
   const newDocRef = doc(collection(db, 'products'));
   const newId = newDocRef.id;
   try {
-    await setDoc(newDocRef, {
+    const payload = sanitizeForFirestore({
       ...item,
       id: newId,
       updatedAt: new Date().toISOString(),
     });
+    await setDoc(newDocRef, payload);
+    console.log('Successfully saved product to Firestore with ID:', newId);
   } catch (error) {
-    console.warn('addNewProduct offline/error:', error);
+    console.error('addNewProduct error:', error);
   }
   return newId;
 }
@@ -299,16 +312,13 @@ export const addNewProduct = addNewTire;
 // Update product details
 export async function updateTireItem(tireId: string, updates: Partial<ProductItem>): Promise<void> {
   try {
-    await setDoc(
-      doc(db, 'products', tireId),
-      {
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+    const payload = sanitizeForFirestore({
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(doc(db, 'products', tireId), payload, { merge: true });
   } catch (error) {
-    console.warn('updateProductItem offline/error:', error);
+    console.error('updateProductItem error:', error);
   }
 }
 

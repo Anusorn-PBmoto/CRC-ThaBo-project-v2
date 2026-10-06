@@ -1,9 +1,10 @@
 import React from 'react';
-import { QrCode, User } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
   onOpenProfile: () => void;
+  onOpenAppSheet?: () => void;
   isOnline: boolean;
   activeZone?: string;
   subtitle?: string;
@@ -12,6 +13,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenScanner,
   onOpenProfile,
+  onOpenAppSheet,
   isOnline,
   activeZone = 'คลังอะไหล่มอเตอร์ไซค์',
   subtitle = 'ระบบสต็อกอะไหล่ • CRC ThaBo',
@@ -57,6 +59,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* AppSheet CSV Sync button */}
+          {onOpenAppSheet && (
+            <button
+              onClick={onOpenAppSheet}
+              aria-label="บันทึก AppSheet CSV"
+              title="ฐานข้อมูล AppSheet (crc-thano-project-v2.csv)"
+              className="h-9 px-2.5 rounded-lg bg-[#142922] hover:bg-[#1a382e] text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-bold tracking-tight">AppSheet</span>
+            </button>
+          )}
+
           {/* Barcode/QR Scanner button */}
           <button
             onClick={onOpenScanner}

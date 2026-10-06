@@ -201,15 +201,15 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         unit: unit.trim() || 'ชิ้น',
         costPrice: numericCost,
         sellingPrice: numericSell,
-        imageUrl: imageUrl.trim() || undefined,
-        category: category.trim() || undefined,
-        brand: brand.trim() || undefined,
+        imageUrl: imageUrl.trim() || '',
+        category: category.trim() || '',
+        brand: brand.trim() || '',
         location: location.trim() || 'RACK A-01',
         systemQty: numericQty,
         actualQty: numericQty,
         status: 'checked',
         minStock: 2,
-        description: description.trim() || undefined,
+        description: description.trim() || '',
         updatedAt: new Date().toISOString(),
         // Backwards compatibility fields
         size: name.trim(),
@@ -622,8 +622,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             </div>
           </div>
 
+          {/* AppSheet Real-Time Sync Indicator */}
+          <div className="flex items-center justify-center gap-1.5 text-[10px] text-emerald-300/90 pt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>บันทึกฐานข้อมูลลงไฟล์ AppSheet (crc-thano-project-v2.csv) ทันที</span>
+          </div>
+
           {/* Submit Buttons */}
-          <div className="pt-3 flex items-center gap-2 border-t border-slate-800">
+          <div className="pt-2 flex items-center gap-2 border-t border-slate-800">
             <button
               type="button"
               onClick={() => {
