@@ -254,9 +254,12 @@ export default function App() {
           (err) => console.warn('Transactions listener error:', err)
         );
 
-        // Test server connection asynchronously
+        // Test server connection and seed if needed asynchronously
         testConnection().then((connected) => {
           setIsOnline(connected);
+          if (connected) {
+            seedTiresIfEmpty().catch(console.warn);
+          }
         });
       } catch (error) {
         console.warn('Firebase initialization note (offline mode active):', error);
