@@ -19,6 +19,7 @@ import {
 import { ProductItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
+import { uploadProductImageToStorage } from '../firebase';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -168,8 +169,16 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
     setIsUploadingImage(true);
     try {
+      // 1. Compress image to clean lightweight format
       const compressedDataUrl = await compressImageFile(file, 480, 480, 0.75);
-      setImageUrl(compressedDataUrl);
+      
+      // 2. Upload to Cloud Storage (Firebase Storage) and store HTTPS Download URL
+      const storageUrl = await uploadProductImageToStorage(
+        compressedDataUrl,
+        name || barcode || file.name || 'product'
+      );
+      
+      setImageUrl(storageUrl);
     } catch (err) {
       console.error('Failed processing image:', err);
       alert('ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
@@ -571,9 +580,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             )}
 
             {isUploadingImage && (
-              <div className="flex items-center justify-center gap-2 py-2 text-xs text-[#F6C90E] font-medium">
+              <div className="flex items-center justify-center gap-2 py-2 text-xs text-[#F6C90E] font-medium bg-[#252C33] rounded-xl border border-[#F6C90E]/30 animate-pulse">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>กำลังประมวลผลและบีบอัดรูปภาพ...</span>
+                <span>กำลังประมวลผลและอัปโหลดขึ้น Cloud Storage...</span>
               </div>
             )}
 

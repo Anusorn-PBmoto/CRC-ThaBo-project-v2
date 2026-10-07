@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getStorage, ref, uploadBytes, getDownloadURL, uploadString, deleteObject } from 'firebase/storage';
 import {
   getFirestore,
   collection,
@@ -27,11 +28,77 @@ const app = initializeApp(firebaseConfig);
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 // Silence Firestore internal log messages to prevent console spam
 try {
   setLogLevel('silent');
 } catch {}
+
+/**
+ * Uploads a product image directly to Firebase Cloud Storage (Media Storage)
+ * and returns the permanent HTTPS Download URL.
+ * Falls back safely to compressed data URL if Cloud Storage is unconfigured or blocked.
+ */
+export async function uploadProductImageToStorage(
+  fileOrDataUrl: File | Blob | string,
+  fileNameHint?: string
+): Promise<string> {
+  const timestamp = Date.now();
+  const safeName = (fileNameHint || 'product')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .slice(0, 30);
+  const storagePath = `products/${timestamp}_${safeName}.jpg`;
+
+  try {
+    const storageRef = ref(storage, storagePath);
+
+    if (typeof fileOrDataUrl === 'string') {
+      if (fileOrDataUrl.startsWith('data:')) {
+        const snapshot = await uploadString(storageRef, fileOrDataUrl, 'data_url', {
+          contentType: 'image/jpeg',
+        });
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+        return downloadUrl;
+      } else if (fileOrDataUrl.startsWith('http')) {
+        return fileOrDataUrl;
+      }
+    } else {
+      const snapshot = await uploadBytes(storageRef, fileOrDataUrl, {
+        contentType: fileOrDataUrl.type || 'image/jpeg',
+      });
+      const downloadUrl = await getDownloadURL(snapshot.ref);
+      return downloadUrl;
+    }
+  } catch (err) {
+    console.warn('Cloud Storage upload note (using fallback):', err);
+    if (typeof fileOrDataUrl === 'string') {
+      return fileOrDataUrl;
+    }
+  }
+
+  // Fallback for Blob/File to Data URL
+  return new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve((e.target?.result as string) || '');
+    reader.onerror = () => resolve('');
+    reader.readAsDataURL(fileOrDataUrl as Blob);
+  });
+}
+
+/**
+ * Optionally removes an image from Firebase Cloud Storage when product is deleted
+ */
+export async function deleteProductImageFromStorage(imageUrl: string): Promise<void> {
+  if (!imageUrl || !imageUrl.includes('firebasestorage.googleapis.com')) return;
+  try {
+    const storageRef = ref(storage, imageUrl);
+    await deleteObject(storageRef);
+  } catch (err) {
+    console.warn('Could not delete storage image file (non-critical):', err);
+  }
+}
 
 export enum OperationType {
   CREATE = 'create',
