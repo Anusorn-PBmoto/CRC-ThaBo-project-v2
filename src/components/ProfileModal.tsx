@@ -7,7 +7,6 @@ import {
   RefreshCw,
   ShieldCheck,
   HardDrive,
-  Trash2,
   Smartphone,
   Cloud,
   Check,
@@ -20,7 +19,6 @@ interface ProfileModalProps {
   isOnline: boolean;
   isQuotaMode?: boolean;
   onRetryCloud?: () => Promise<void>;
-  onClearAllProducts: () => Promise<void>;
   onForceSyncCloud?: () => Promise<void>;
   onOpenImageMatch?: () => void;
   totalProducts: number;
@@ -32,7 +30,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOnline,
   isQuotaMode = false,
   onRetryCloud,
-  onClearAllProducts,
   onForceSyncCloud,
   onOpenImageMatch,
   totalProducts,
@@ -41,23 +38,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
-
-  const handleClearAll = async () => {
-    if (
-      window.confirm(
-        '⚠️ คุณต้องการนำข้อมูลรายการสินค้าทั้งหมดออกจากระบบ (ตั้งต้นเป็น 0 รายการ) หรือไม่?\n\nข้อมูลเดิมจะถูกล้างออกจากทั้งคลาวด์และหน่วยความจำ เพื่อให้คุณเริ่มต้นบันทึกอะไหล่ใหม่ได้อย่างสะอาด'
-      )
-    ) {
-      setIsProcessing(true);
-      try {
-        await onClearAllProducts();
-        setSyncStatusMsg('นำรายการสินค้าทั้งหมดออกเรียบร้อยแล้ว (0 รายการ)');
-        setTimeout(() => setSyncStatusMsg(null), 3000);
-      } finally {
-        setIsProcessing(false);
-      }
-    }
-  };
 
   const handleSyncCloud = async () => {
     setIsProcessing(true);
@@ -215,16 +195,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
               </button>
             )}
-
-            {/* Clear All Data Button */}
-            <button
-              onClick={handleClearAll}
-              disabled={isProcessing}
-              className="w-full py-2.5 px-3 bg-rose-950/40 hover:bg-rose-950/70 border border-rose-500/40 text-rose-300 rounded-xl font-medium flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>ล้างข้อมูลรายการสินค้าทั้งหมด (เริ่มต้น 0 รายการ)</span>
-            </button>
           </div>
         </div>
 

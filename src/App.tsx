@@ -4,9 +4,9 @@ import {
   testConnection,
   seedTiresIfEmpty,
   subscribeToTires,
-  subscribeToAuditSessions,
-  subscribeToAuditLogs,
-  subscribeToTransactions,
+  fetchAuditSessions,
+  fetchAuditLogs,
+  fetchTransactions,
   executeTransaction,
   updateTireActualQty,
   addNewTire,
@@ -208,12 +208,9 @@ export default function App() {
     }
   };
 
-  // Initialize and subscribe
+  // Initialize and subscribe (Streamlined: Single product listener, zero eager fetches)
   useEffect(() => {
     let unsubscribeTires: (() => void) | undefined;
-    let unsubscribeSessions: (() => void) | undefined;
-    let unsubscribeLogs: (() => void) | undefined;
-    let unsubscribeTransactions: (() => void) | undefined;
 
     const initFirebase = async () => {
       // If quota was already exhausted, stay in local offline mode immediately
@@ -224,7 +221,7 @@ export default function App() {
       }
 
       try {
-        // Attach real-time listeners
+        // 1. Attach single real-time listener for products only (the essential live stock data)
         unsubscribeTires = subscribeToTires(
           (remoteData) => {
             if (remoteData && remoteData.length > 0) {
@@ -266,56 +263,6 @@ export default function App() {
             setIsOnline(false);
           }
         );
-
-        unsubscribeSessions = subscribeToAuditSessions(
-          (data) => {
-            if (data && data.length > 0) {
-              persistSessions(data);
-            }
-          },
-          (err) => {
-            if (isQuotaError(err)) {
-              markQuotaExhausted();
-              setIsQuotaExceeded(true);
-            }
-          }
-        );
-
-        unsubscribeLogs = subscribeToAuditLogs(
-          (data) => {
-            if (data && data.length > 0) {
-              persistLogs(data);
-            }
-          },
-          (err) => {
-            if (isQuotaError(err)) {
-              markQuotaExhausted();
-              setIsQuotaExceeded(true);
-            }
-          }
-        );
-
-        unsubscribeTransactions = subscribeToTransactions(
-          (data) => {
-            if (data && data.length > 0) {
-              persistTransactions(data);
-            }
-          },
-          (err) => {
-            if (isQuotaError(err)) {
-              markQuotaExhausted();
-              setIsQuotaExceeded(true);
-            }
-          }
-        );
-
-        // Test server connection and seed if needed asynchronously
-        testConnection().then((connected) => {
-          setIsOnline(connected);
-          if (connected) {
-            seedTiresIfEmpty().catch(console.warn);
-          }
-        });
       } catch (error) {
         if (isQuotaError(error)) {
           markQuotaExhausted();
@@ -329,15 +276,43 @@ export default function App() {
 
     return () => {
       if (unsubscribeTires) unsubscribeTires();
-      if (unsubscribeSessions) unsubscribeSessions();
-      if (unsubscribeLogs) unsubscribeLogs();
-      if (unsubscribeTransactions) unsubscribeTransactions();
     };
   }, []);
 
+  // 2. Lazy-load history & transactions on demand only when switching to relevant tabs
+  useEffect(() => {
+    if (isFirestoreQuotaExhausted()) return;
+
+    if (currentTab === 'history') {
+      fetchAuditSessions()
+        .then((remoteSessions) => {
+          if (remoteSessions && remoteSessions.length > 0) {
+            persistSessions(remoteSessions);
+          }
+        })
+        .catch(() => {});
+
+      fetchAuditLogs()
+        .then((remoteLogs) => {
+          if (remoteLogs && remoteLogs.length > 0) {
+            persistLogs(remoteLogs);
+          }
+        })
+        .catch(() => {});
+    } else if (currentTab === 'buysell' || currentTab === 'alerts') {
+      fetchTransactions()
+        .then((remoteTx) => {
+          if (remoteTx && remoteTx.length > 0) {
+            persistTransactions(remoteTx);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [currentTab]);
+
   const activeSession = sessions[0] || null;
 
-  // Stepper quantity update (Instant optimistic UI + local storage + background sync)
+  // Stepper quantity update (Instant optimistic UI + local storage + single product cloud write)
   const handleUpdateQty = async (tire: TireItem, newQty: number) => {
     const safeQty = Math.max(0, newQty);
     const diff = safeQty - tire.systemQty;
@@ -352,7 +327,24 @@ export default function App() {
       )
     );
 
-    // 2. Persist to Firestore
+    // 2. Record locally in audit logs for UI history without burning cloud write quota
+    const localLog: AuditLog = {
+      id: `local-log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      productId: tire.id,
+      tireId: tire.id,
+      productName: tire.name || tire.size || 'สินค้า',
+      tireName: tire.name || tire.size || 'สินค้า',
+      brand: tire.brand || '',
+      diff,
+      previousQty: tire.systemQty,
+      newQty: safeQty,
+      action: diff === 0 ? 'ตรวจนับตรงระบบ' : `คลาดเคลื่อน (${diff > 0 ? '+' : ''}${diff})`,
+      timestamp: new Date().toISOString(),
+      note: diff === 0 ? 'ยอดตรวจตรงกับระบบ' : `ปรับค่ายอดนับจริงเป็น ${safeQty}`,
+    };
+    persistLogs((prev) => [localLog, ...prev.slice(0, 49)]);
+
+    // 3. Persist single product document to Firestore (skipping per-item audit_logs write)
     try {
       await updateTireActualQty(
         tire.id,
@@ -774,7 +766,6 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onDeleteTire={handleDeleteTire}
-                onRestoreInitialData={handleClearAllProducts}
               />
             )}
 
@@ -794,7 +785,6 @@ export default function App() {
                 onJumpToAudit={handleJumpToAudit}
                 onOpenPO={handleOpenSinglePO}
                 onOpenBatchPO={handleOpenBatchPO}
-                onRestoreInitialData={handleClearAllProducts}
                 onOpenImageMatch={() => setIsImageMatchOpen(true)}
               />
             )}
@@ -886,7 +876,6 @@ export default function App() {
         isOnline={isOnline && !isQuotaExceeded}
         isQuotaMode={isQuotaExceeded}
         onRetryCloud={handleRetryCloud}
-        onClearAllProducts={handleClearAllProducts}
         onForceSyncCloud={handleForceSyncCloud}
         onOpenImageMatch={() => setIsImageMatchOpen(true)}
         totalProducts={tires.length}

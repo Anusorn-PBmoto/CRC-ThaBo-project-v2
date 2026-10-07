@@ -31,7 +31,6 @@ interface QuickAuditTabProps {
   onSaveAudit: () => void;
   onEditTire: (product: ProductItem) => void;
   onDeleteTire?: (product: ProductItem) => void;
-  onRestoreInitialData?: () => void;
 }
 
 type AuditStatusFilter = 'all' | 'pending' | 'checked' | 'discrepancy';

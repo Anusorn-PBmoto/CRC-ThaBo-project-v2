@@ -68,10 +68,10 @@ export const AuditHistoryTab: React.FC<AuditHistoryTabProps> = ({ logs, sessions
             </div>
             <div>
               <h2 className="text-sm font-bold text-[#EEEEEE]">
-                ประวัติการตรวจนับสต็อก (Real-time Logs)
+                ประวัติการตรวจนับสต็อก (Audit History)
               </h2>
               <p className="text-[11px] text-[#A0ABB5]">
-                บันทึกการปรับปรุงยอดนับจริงใน Firebase
+                บันทึกประวัติการปรับปรุงยอดนับจริงและสรุปรอบตรวจ
               </p>
             </div>
           </div>

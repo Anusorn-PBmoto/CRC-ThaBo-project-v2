@@ -26,7 +26,6 @@ interface InventoryListTabProps {
   onJumpToAudit: (product: ProductItem) => void;
   onOpenPO: (product: ProductItem) => void;
   onOpenBatchPO: (selectedProducts: ProductItem[]) => void;
-  onRestoreInitialData?: () => void;
   onOpenImageMatch?: () => void;
 }
 

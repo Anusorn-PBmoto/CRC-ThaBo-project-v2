@@ -29,8 +29,8 @@ interface AddEditProductModalProps {
   initialTire?: ProductItem | null; // Compatibility alias
 }
 
-// Compress image via offscreen Canvas to keep storage lightweight (<80KB)
-async function compressImageFile(file: File, maxWidth = 800, maxHeight = 800, quality = 0.82): Promise<string> {
+// Compress image via offscreen Canvas to keep storage super lightweight (<35KB)
+async function compressImageFile(file: File, maxWidth = 480, maxHeight = 480, quality = 0.75): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -168,7 +168,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
     setIsUploadingImage(true);
     try {
-      const compressedDataUrl = await compressImageFile(file, 800, 800, 0.82);
+      const compressedDataUrl = await compressImageFile(file, 480, 480, 0.75);
       setImageUrl(compressedDataUrl);
     } catch (err) {
       console.error('Failed processing image:', err);

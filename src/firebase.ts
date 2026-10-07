@@ -348,7 +348,44 @@ export function subscribeToTires(
 // Alias for products listener
 export const subscribeToProducts = subscribeToTires;
 
-// Real-time Audit Sessions Listener
+// On-demand fetchers to prevent continuous real-time read billing
+export async function fetchAuditSessions(): Promise<AuditSession[]> {
+  if (isFirestoreQuotaExhausted()) return [];
+  try {
+    const q = query(collection(db, 'audit_sessions'), orderBy('updatedAt', 'desc'), limit(30));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AuditSession, 'id'>) }));
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    return [];
+  }
+}
+
+export async function fetchAuditLogs(): Promise<AuditLog[]> {
+  if (isFirestoreQuotaExhausted()) return [];
+  try {
+    const q = query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(30));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AuditLog, 'id'>) }));
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    return [];
+  }
+}
+
+export async function fetchTransactions(): Promise<Transaction[]> {
+  if (isFirestoreQuotaExhausted()) return [];
+  try {
+    const q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(40));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Transaction, 'id'>) }));
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    return [];
+  }
+}
+
+// Real-time Audit Sessions Listener (On-demand capable)
 export function subscribeToAuditSessions(
   onData: (sessions: AuditSession[]) => void,
   onError?: (err: unknown) => void
@@ -362,8 +399,9 @@ export function subscribeToAuditSessions(
   let unsub: (() => void) | null = null;
 
   try {
+    const q = query(collection(db, path), orderBy('updatedAt', 'desc'), limit(20));
     unsub = onSnapshot(
-      collection(db, path),
+      q,
       (snapshot) => {
         const sessions: AuditSession[] = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
@@ -398,7 +436,7 @@ export function subscribeToAuditSessions(
   };
 }
 
-// Real-time Audit Logs Listener
+// Real-time Audit Logs Listener (On-demand capable with tight limit to save reads)
 export function subscribeToAuditLogs(
   onData: (logs: AuditLog[]) => void,
   onError?: (err: unknown) => void
@@ -412,7 +450,7 @@ export function subscribeToAuditLogs(
   let unsub: (() => void) | null = null;
 
   try {
-    const q = query(collection(db, path), orderBy('timestamp', 'desc'), limit(50));
+    const q = query(collection(db, path), orderBy('timestamp', 'desc'), limit(30));
     unsub = onSnapshot(
       q,
       (snapshot) => {
@@ -449,13 +487,13 @@ export function subscribeToAuditLogs(
   };
 }
 
-// Update actual counted qty
+// Update actual counted qty (OPTIMIZED: single write to products, skips per-item audit_logs write)
 export async function updateTireActualQty(
   tireId: string,
   newActualQty: number,
   systemQty: number,
-  tireName: string,
-  brand: string
+  _tireName?: string,
+  _brand?: string
 ): Promise<void> {
   if (isFirestoreQuotaExhausted()) return;
 
@@ -463,7 +501,7 @@ export async function updateTireActualQty(
   const status: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
   try {
-    // Use setDoc with merge: true so it never throws NOT_FOUND
+    // 1 Write only - updates the product doc directly without generating redundant audit log docs per tick
     await setDoc(
       doc(db, 'products', tireId),
       {
@@ -473,19 +511,6 @@ export async function updateTireActualQty(
       },
       { merge: true }
     );
-
-    // Write audit log
-    await addDoc(collection(db, 'audit_logs'), {
-      productId: tireId,
-      productName: tireName,
-      brand: brand || '',
-      diff,
-      previousQty: systemQty,
-      newQty: newActualQty,
-      action: diff === 0 ? 'ตรวจนับตรงระบบ' : `คลาดเคลื่อน (${diff > 0 ? '+' : ''}${diff})`,
-      timestamp: new Date().toISOString(),
-      note: diff === 0 ? 'ยอดตรวจตรงกับระบบ' : `ปรับค่ายอดนับจริงเป็น ${newActualQty}`,
-    });
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaExhausted();
@@ -666,7 +691,7 @@ export function subscribeToTransactions(
   };
 }
 
-// Execute Buy/Sell with Automatic Stock Cutting
+// Execute Buy/Sell with Automatic Stock Cutting (OPTIMIZED: Atomic writeBatch, eliminates redundant audit_logs write)
 export async function executeTransaction(
   type: 'sale' | 'purchase',
   items: {
@@ -681,9 +706,10 @@ export async function executeTransaction(
 
   const pathTx = 'transactions';
   const pathProducts = 'products';
-  const pathLogs = 'audit_logs';
 
   try {
+    const batch = writeBatch(db);
+
     for (const item of items) {
       const delta = type === 'sale' ? -item.quantity : item.quantity;
       const nextSystemQty = Math.max(0, item.tire.systemQty + delta);
@@ -691,9 +717,10 @@ export async function executeTransaction(
       const diff = nextActualQty - nextSystemQty;
       const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
-      // 1. Update Product Stock in Firestore (setDoc with merge so it never throws NOT_FOUND)
-      await setDoc(
-        doc(db, pathProducts, item.tire.id),
+      // 1. Update Product Stock in Batch
+      const prodRef = doc(db, pathProducts, item.tire.id);
+      batch.set(
+        prodRef,
         {
           ...item.tire,
           id: item.tire.id,
@@ -705,13 +732,15 @@ export async function executeTransaction(
         { merge: true }
       );
 
-      // 2. Save Transaction record
+      // 2. Add Transaction record in Batch
+      const txDocRef = doc(collection(db, pathTx));
       const totalPrice = item.quantity * item.unitPrice;
-      await addDoc(collection(db, pathTx), {
+      batch.set(txDocRef, {
+        id: txDocRef.id,
         type,
         tireId: item.tire.id,
-        tireName: `${item.tire.brand} ${item.tire.size}`,
-        brand: item.tire.brand,
+        tireName: item.tire.name || item.tire.size || `${item.tire.brand} ${item.tire.size}`,
+        brand: item.tire.brand || '',
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice,
@@ -719,25 +748,15 @@ export async function executeTransaction(
         note: note?.trim() || '',
         createdAt: new Date().toISOString(),
       });
-
-      // 3. Save Log
-      await addDoc(collection(db, pathLogs), {
-        tireId: item.tire.id,
-        tireName: `${item.tire.brand} ${item.tire.size}`,
-        brand: item.tire.brand,
-        diff: delta,
-        previousQty: item.tire.actualQty,
-        newQty: nextActualQty,
-        action: type === 'sale' ? `ตัดสต็อกขายออก (-${item.quantity} เส้น)` : `รับเข้าคลัง (+${item.quantity} เส้น)`,
-        timestamp: new Date().toISOString(),
-        note: `${type === 'sale' ? 'ขายให้: ' : 'รับจาก: '}${customerOrSupplier.trim() || 'หน้าร้าน'} ${note ? `(${note})` : ''}`,
-      });
     }
+
+    // Commit all products and transactions in a single efficient atomic batch
+    await batch.commit();
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaExhausted();
     }
-    console.warn('executeTransaction Firestore sync error (handled safely):', error);
+    console.warn('executeTransaction Firestore batch error (handled safely):', error);
   }
 }
 
