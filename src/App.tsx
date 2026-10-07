@@ -15,9 +15,15 @@ import {
   saveAuditSession,
   restoreAllInitialTires,
   sanitizeForFirestore,
+  isQuotaError,
+  isFirestoreQuotaExhausted,
+  markQuotaExhausted,
+  resetQuotaCircuitBreaker,
+  retryCloudConnection,
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { AlertTriangle, CloudOff, RefreshCw, Download } from 'lucide-react';
 import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TIRES } from './initialData';
 import { Header } from './components/Header';
@@ -34,6 +40,7 @@ import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
 import { ProfileModal } from './components/ProfileModal';
 import { AppSheetSyncModal } from './components/AppSheetSyncModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { ImageMatchBackupModal } from './components/ImageMatchBackupModal';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -41,10 +48,10 @@ import {
 } from './utils/appsheetCsv';
 import { resolveProductImage } from './utils/productImages';
 
-const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v4';
-const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v4';
-const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v4';
-const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v4';
+const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v5';
+const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v5';
+const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v5';
+const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v5';
 
 const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS;
 
@@ -54,8 +61,39 @@ export default function App() {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const enrichedParsed = parsed.map((p: ProductItem) => {
+            const recImg = resolveProductImage(p);
+            if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
+              return { ...p, imageUrl: recImg };
+            }
+            return p;
+          });
+          const existingIds = new Set(enrichedParsed.map((p: ProductItem) => p.id));
+          const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
+          const merged = [...missingRecovered, ...enrichedParsed];
+          localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(merged));
+          return merged;
+        }
+      }
+
+      // Migrate from legacy v4 if available
+      const legacySaved = localStorage.getItem('crc_thabo_parts_itemdetails_v4');
+      if (legacySaved) {
+        const parsed = JSON.parse(legacySaved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const enrichedParsed = parsed.map((p: ProductItem) => {
+            const recImg = resolveProductImage(p);
+            if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
+              return { ...p, imageUrl: recImg };
+            }
+            return p;
+          });
+          const existingIds = new Set(enrichedParsed.map((p: ProductItem) => p.id));
+          const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
+          const merged = [...missingRecovered, ...enrichedParsed];
+          localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(merged));
+          return merged;
         }
       }
     } catch (e) {
@@ -144,6 +182,31 @@ export default function App() {
   const [isAppSheetOpen, setIsAppSheetOpen] = useState(false);
   const [appSheetToast, setAppSheetToast] = useState<string | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductItem | null>(null);
+  const [isImageMatchOpen, setIsImageMatchOpen] = useState(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isFirestoreQuotaExhausted());
+  const [isRetryingCloud, setIsRetryingCloud] = useState(false);
+
+  const handleRetryCloud = async () => {
+    setIsRetryingCloud(true);
+    try {
+      const res = await retryCloudConnection();
+      if (res.success) {
+        setIsQuotaExceeded(false);
+        setIsOnline(true);
+        setAppSheetToast('✅ ' + res.message);
+      } else {
+        setIsQuotaExceeded(true);
+        setIsOnline(false);
+        setAppSheetToast('⚠️ ' + res.message);
+      }
+    } catch (e) {
+      setIsQuotaExceeded(true);
+      setIsOnline(false);
+      setAppSheetToast('⚠️ ยังไม่สามารถเชื่อมต่อได้ ทำงานในโหมดออฟไลน์');
+    } finally {
+      setIsRetryingCloud(false);
+    }
+  };
 
   // Initialize and subscribe
   useEffect(() => {
@@ -153,12 +216,28 @@ export default function App() {
     let unsubscribeTransactions: (() => void) | undefined;
 
     const initFirebase = async () => {
+      // If quota was already exhausted, stay in local offline mode immediately
+      if (isFirestoreQuotaExhausted()) {
+        setIsQuotaExceeded(true);
+        setIsOnline(false);
+        return;
+      }
+
       try {
-        // Attach real-time listeners immediately
+        // Attach real-time listeners
         unsubscribeTires = subscribeToTires(
           (remoteData) => {
             if (remoteData && remoteData.length > 0) {
-              persistTires(remoteData);
+              const existingIds = new Set(remoteData.map((p) => p.id));
+              const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
+              const enriched = remoteData.map((p) => {
+                const recoveredImg = resolveProductImage(p);
+                if ((!p.imageUrl || p.imageUrl.trim() === '') && recoveredImg) {
+                  return { ...p, imageUrl: recoveredImg };
+                }
+                return p;
+              });
+              persistTires([...missingRecovered, ...enriched]);
             } else {
               // Remote collection is empty: check if local storage has products that need preserving
               try {
@@ -166,14 +245,6 @@ export default function App() {
                 if (saved) {
                   const parsed = JSON.parse(saved);
                   if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('Preserving local products and syncing to Firestore:', parsed.length);
-                    // Push these local products to Firestore so they are permanently stored
-                    const batch = writeBatch(db);
-                    parsed.forEach((item: ProductItem) => {
-                      const ref = doc(db, 'products', item.id);
-                      batch.set(ref, sanitizeForFirestore(item), { merge: true });
-                    });
-                    batch.commit().catch(console.warn);
                     persistTires(parsed);
                     setIsOnline(true);
                     return;
@@ -182,12 +253,16 @@ export default function App() {
               } catch (e) {
                 console.warn('Error checking local storage fallback:', e);
               }
-              persistTires([]);
+              persistTires(INITIAL_PRODUCTS);
             }
             setIsOnline(true);
           },
           (err) => {
             console.warn('Products listener note:', err);
+            if (isQuotaError(err)) {
+              markQuotaExhausted();
+              setIsQuotaExceeded(true);
+            }
             setIsOnline(false);
           }
         );
@@ -198,7 +273,12 @@ export default function App() {
               persistSessions(data);
             }
           },
-          (err) => console.warn('Sessions listener error:', err)
+          (err) => {
+            if (isQuotaError(err)) {
+              markQuotaExhausted();
+              setIsQuotaExceeded(true);
+            }
+          }
         );
 
         unsubscribeLogs = subscribeToAuditLogs(
@@ -207,7 +287,12 @@ export default function App() {
               persistLogs(data);
             }
           },
-          (err) => console.warn('Logs listener error:', err)
+          (err) => {
+            if (isQuotaError(err)) {
+              markQuotaExhausted();
+              setIsQuotaExceeded(true);
+            }
+          }
         );
 
         unsubscribeTransactions = subscribeToTransactions(
@@ -216,7 +301,12 @@ export default function App() {
               persistTransactions(data);
             }
           },
-          (err) => console.warn('Transactions listener error:', err)
+          (err) => {
+            if (isQuotaError(err)) {
+              markQuotaExhausted();
+              setIsQuotaExceeded(true);
+            }
+          }
         );
 
         // Test server connection and seed if needed asynchronously
@@ -227,6 +317,10 @@ export default function App() {
           }
         });
       } catch (error) {
+        if (isQuotaError(error)) {
+          markQuotaExhausted();
+          setIsQuotaExceeded(true);
+        }
         console.warn('Firebase initialization note (offline mode active):', error);
       }
     };
@@ -320,6 +414,29 @@ export default function App() {
   // Delete Product - Open Custom In-App Modal
   const handleDeleteTire = (tire: TireItem) => {
     setProductToDelete(tire);
+  };
+
+  // Batch update products (used by ImageMatchBackupModal & restore utilities)
+  const handleBatchUpdateProducts = async (updatedList: ProductItem[]) => {
+    persistTires(updatedList);
+    if (isFirestoreQuotaExhausted()) {
+      return;
+    }
+    try {
+      const batch = writeBatch(db);
+      updatedList.forEach((item) => {
+        const ref = doc(db, 'products', item.id);
+        batch.set(ref, sanitizeForFirestore(item), { merge: true });
+      });
+      await batch.commit();
+      console.log('Successfully batch updated products to Firestore:', updatedList.length);
+    } catch (err) {
+      if (isQuotaError(err)) {
+        markQuotaExhausted();
+        setIsQuotaExceeded(true);
+      }
+      console.warn('Failed batch updating products to Firestore (saved locally):', err);
+    }
   };
 
   const handleConfirmDeleteProduct = async () => {
@@ -596,7 +713,8 @@ export default function App() {
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
-        isOnline={isOnline}
+        isOnline={isOnline && !isQuotaExceeded}
+        isQuotaMode={isQuotaExceeded}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
         subtitle={
           currentTab === 'audit'
@@ -677,6 +795,7 @@ export default function App() {
                 onOpenPO={handleOpenSinglePO}
                 onOpenBatchPO={handleOpenBatchPO}
                 onRestoreInitialData={handleClearAllProducts}
+                onOpenImageMatch={() => setIsImageMatchOpen(true)}
               />
             )}
 
@@ -764,9 +883,12 @@ export default function App() {
       <ProfileModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
-        isOnline={isOnline}
+        isOnline={isOnline && !isQuotaExceeded}
+        isQuotaMode={isQuotaExceeded}
+        onRetryCloud={handleRetryCloud}
         onClearAllProducts={handleClearAllProducts}
         onForceSyncCloud={handleForceSyncCloud}
+        onOpenImageMatch={() => setIsImageMatchOpen(true)}
         totalProducts={tires.length}
       />
 
@@ -781,6 +903,13 @@ export default function App() {
         onClose={() => setProductToDelete(null)}
         onConfirm={handleConfirmDeleteProduct}
         product={productToDelete}
+      />
+
+      <ImageMatchBackupModal
+        isOpen={isImageMatchOpen}
+        onClose={() => setIsImageMatchOpen(false)}
+        products={tires}
+        onUpdateProducts={handleBatchUpdateProducts}
       />
     </div>
   );

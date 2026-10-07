@@ -472,6 +472,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           {filteredTires.map((tire) => {
             const price = getSuggestedPrice(tire);
             const isZero = tire.actualQty === 0;
+            const tireImg = resolveProductImage(tire);
 
             return (
               <div
@@ -481,10 +482,10 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
                   {/* Left Side: Product Photo Thumbnail */}
-                  {tire.imageUrl && tire.imageUrl.trim() !== '' && (
+                  {tireImg && tireImg.trim() !== '' && (
                     <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-inner">
                       <img
-                        src={tire.imageUrl}
+                        src={tireImg}
                         alt={tire.name || tire.size || 'สินค้า'}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"

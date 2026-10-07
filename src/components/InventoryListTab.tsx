@@ -12,6 +12,7 @@ import {
   X,
   Sparkles,
   Maximize2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -26,6 +27,7 @@ interface InventoryListTabProps {
   onOpenPO: (product: ProductItem) => void;
   onOpenBatchPO: (selectedProducts: ProductItem[]) => void;
   onRestoreInitialData?: () => void;
+  onOpenImageMatch?: () => void;
 }
 
 type StockFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
@@ -39,6 +41,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   onJumpToAudit,
   onOpenPO,
   onOpenBatchPO,
+  onOpenImageMatch,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
@@ -343,6 +346,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             const isLow = product.actualQty > 0 && product.actualQty <= (product.minStock || 2);
             const isSelected = selectedIds.has(product.id);
             const unitLabel = product.unit || 'ชิ้น';
+            const productImg = resolveProductImage(product);
 
             return (
               <div
@@ -354,15 +358,15 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                 {/* Top Section: Left Photo (Red box in screenshot) + Right Info & Actions */}
                 <div className="flex items-start gap-3">
                   {/* Left Side: Product Photo */}
-                  {product.imageUrl && product.imageUrl.trim() !== '' && (
+                  {productImg && productImg.trim() !== '' && (
                     <button
                       type="button"
-                      onClick={() => setPreviewProduct(product)}
+                      onClick={() => setPreviewProduct({ ...product, imageUrl: productImg })}
                       className="w-20 h-20 sm:w-22 sm:h-22 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-md relative group hover:border-[#F6C90E] transition-all active:scale-95 cursor-zoom-in"
                       title="แตะเพื่อดูภาพขนาดใหญ่"
                     >
                       <img
-                        src={product.imageUrl}
+                        src={productImg}
                         alt={product.name || 'สินค้า'}
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"

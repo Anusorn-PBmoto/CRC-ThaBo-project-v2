@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
+import { resolveProductImage } from '../utils/productImages';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -128,7 +129,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           ? currentItem.price
           : ''
       );
-      setImageUrl(currentItem.imageUrl || '');
+      setImageUrl(currentItem.imageUrl || resolveProductImage(currentItem) || '');
       setStockQty(currentItem.actualQty !== undefined ? currentItem.actualQty : 1);
       setLocation(currentItem.location || '');
       setBrand(currentItem.brand || '');

@@ -11,14 +11,18 @@ import {
   Smartphone,
   Cloud,
   Check,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   isOnline: boolean;
+  isQuotaMode?: boolean;
+  onRetryCloud?: () => Promise<void>;
   onClearAllProducts: () => Promise<void>;
   onForceSyncCloud?: () => Promise<void>;
+  onOpenImageMatch?: () => void;
   totalProducts: number;
 }
 
@@ -26,8 +30,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
   isOnline,
+  isQuotaMode = false,
+  onRetryCloud,
   onClearAllProducts,
   onForceSyncCloud,
+  onOpenImageMatch,
   totalProducts,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -125,12 +132,26 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
             <div className="flex items-center justify-between">
               <span className="text-[#A0ABB5] flex items-center gap-1.5">
-                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                <Cloud className={`w-3.5 h-3.5 ${isQuotaMode ? 'text-amber-400' : isOnline ? 'text-emerald-400' : 'text-slate-400'}`} />
                 <span>สถานะการเชื่อมต่อ:</span>
               </span>
-              <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`} />
-                <span>{isOnline ? 'ออนไลน์แบบเรียลไทม์' : 'ออฟไลน์'}</span>
+              <span className={`flex items-center gap-1.5 font-semibold ${isQuotaMode ? 'text-amber-400' : isOnline ? 'text-emerald-400' : 'text-slate-400'}`}>
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isQuotaMode
+                      ? 'bg-amber-400 animate-pulse'
+                      : isOnline
+                      ? 'bg-emerald-400 animate-pulse'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <span>
+                  {isQuotaMode
+                    ? 'โหมดออฟไลน์ (โควต้า Cloud เต็มชั่วคราว)'
+                    : isOnline
+                    ? 'ออนไลน์แบบเรียลไทม์'
+                    : 'ออฟไลน์'}
+                </span>
               </span>
             </div>
 
@@ -150,15 +171,50 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
           {/* Action Buttons */}
           <div className="space-y-2 pt-1">
+            {/* Image Match & Backup Button */}
+            {onOpenImageMatch && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenImageMatch();
+                }}
+                className="w-full py-2.5 px-3 bg-[#3A4750] hover:bg-[#43525D] border border-[#475662] text-[#EEEEEE] rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-sm text-xs"
+              >
+                <ImageIcon className="w-4 h-4 text-[#F6C90E]" />
+                <span>จัดการรูปภาพ & จับคู่ชื่อไฟล์ & สำรองข้อมูล</span>
+              </button>
+            )}
+
+            {/* Retry Cloud Connection Button */}
+            {isQuotaMode && onRetryCloud && (
+              <button
+                onClick={async () => {
+                  setIsProcessing(true);
+                  try {
+                    await onRetryCloud();
+                  } finally {
+                    setIsProcessing(false);
+                  }
+                }}
+                disabled={isProcessing}
+                className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md text-xs disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                <span>ทดสอบเชื่อมต่อ Firestore อีกครั้ง (Retry Connection)</span>
+              </button>
+            )}
+
             {/* Sync Cloud Button */}
-            <button
-              onClick={handleSyncCloud}
-              disabled={isProcessing}
-              className="w-full py-2.5 px-3 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20 disabled:opacity-50"
-            >
-              <Cloud className="w-4 h-4 text-[#252C33]" />
-              <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
-            </button>
+            {!isQuotaMode && (
+              <button
+                onClick={handleSyncCloud}
+                disabled={isProcessing}
+                className="w-full py-2.5 px-3 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] rounded-xl font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20 disabled:opacity-50"
+              >
+                <Cloud className="w-4 h-4 text-[#252C33]" />
+                <span>ซิงค์ข้อมูลกับคลาวด์ทันที (Sync to Cloud)</span>
+              </button>
+            )}
 
             {/* Clear All Data Button */}
             <button

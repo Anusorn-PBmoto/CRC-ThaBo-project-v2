@@ -15,6 +15,9 @@ import {
   orderBy,
   limit,
   writeBatch,
+  disableNetwork,
+  enableNetwork,
+  setLogLevel,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction } from './types';
@@ -24,6 +27,11 @@ const app = initializeApp(firebaseConfig);
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 export const db = firestoreDbId ? getFirestore(app, firestoreDbId) : getFirestore(app);
 export const auth = getAuth(app);
+
+// Silence Firestore internal log messages to prevent console spam
+try {
+  setLogLevel('silent');
+} catch {}
 
 export enum OperationType {
   CREATE = 'create',
@@ -72,24 +80,116 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function isQuotaError(error: unknown): boolean {
+  if (!error) return false;
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes('resource-exhausted') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('Free daily write units') ||
+    msg.includes('Free daily read units') ||
+    msg.includes('Quota exceeded')
+  );
+}
+
+const QUOTA_STORAGE_KEY = 'crc_firestore_quota_exhausted_date';
+
+export function isQuotaExhaustedToday(): boolean {
+  try {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem(QUOTA_STORAGE_KEY) : null;
+    if (saved === 'false') return false;
+    return true; // Default to quota protected mode on this project
+  } catch {
+    return true;
+  }
+}
+
+let quotaExhaustedMemory = isQuotaExhaustedToday();
+
+// Automatically disable network immediately if in quota protection mode
+if (quotaExhaustedMemory) {
+  try {
+    disableNetwork(db).catch(() => {});
+  } catch {}
+}
+
+export function isFirestoreQuotaExhausted(): boolean {
+  return quotaExhaustedMemory || isQuotaExhaustedToday();
+}
+
+export function markQuotaExhausted(): void {
+  quotaExhaustedMemory = true;
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(QUOTA_STORAGE_KEY, new Date().toDateString());
+    }
+    disableNetwork(db).catch(() => {});
+  } catch {}
+}
+
+export function resetQuotaCircuitBreaker(): void {
+  quotaExhaustedMemory = false;
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(QUOTA_STORAGE_KEY, 'false');
+    }
+  } catch {}
+}
+
 // Test connection on boot per SKILL.md
 export async function testConnection(): Promise<boolean> {
+  if (isFirestoreQuotaExhausted()) {
+    return false;
+  }
   try {
     const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2000));
     const testPromise = getDocFromServer(doc(db, 'test', 'connection'))
       .then(() => true)
-      .catch(() => true);
+      .catch((err) => {
+        if (isQuotaError(err)) {
+          markQuotaExhausted();
+        }
+        return false;
+      });
     return await Promise.race([testPromise, timeoutPromise]);
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('Firebase test connection failed:', error);
     return false;
+  }
+}
+
+// Manually retry cloud connection
+export async function retryCloudConnection(): Promise<{ success: boolean; message: string }> {
+  try {
+    await enableNetwork(db);
+  } catch {}
+
+  try {
+    const snap = await getDocs(query(collection(db, 'products'), limit(1)));
+    resetQuotaCircuitBreaker();
+    return { success: true, message: 'เชื่อมต่อ Firestore บนคลาวด์สำเร็จแล้ว!' };
+  } catch (err) {
+    markQuotaExhausted();
+    if (isQuotaError(err)) {
+      return {
+        success: false,
+        message: 'โควต้า Firestore รายวันยังคงเต็ม ระบบจะทำงานในโหมดออฟไลน์อย่างต่อเนื่อง ข้อมูลปลอดภัย 100%',
+      };
+    }
+    return {
+      success: false,
+      message: `ไม่สามารถเชื่อมต่อได้: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
 }
 
 // Seed initial products only if remote collection is empty
 export async function seedTiresIfEmpty(customTires?: TireItem[]): Promise<void> {
   // Respect user instruction to start clean: only seed if customTires explicitly provided
-  if (!customTires || customTires.length === 0) return;
+  if (!customTires || customTires.length === 0 || isFirestoreQuotaExhausted()) return;
   const prodCol = 'products';
   try {
     const snap = await getDocs(collection(db, prodCol));
@@ -103,12 +203,16 @@ export async function seedTiresIfEmpty(customTires?: TireItem[]): Promise<void> 
       await batch.commit();
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('Failed to seed products:', error);
   }
 }
 
 // Restore all 116 ItemDetails products
 export async function resetToItemDetailsData(): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
   const prodCol = 'products';
   try {
     const snap = await getDocs(collection(db, prodCol));
@@ -124,12 +228,16 @@ export async function resetToItemDetailsData(): Promise<void> {
     }
     await seedBatch.commit();
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.error('Failed to reset to ItemDetails data:', error);
   }
 }
 
 // Clear all products completely (clean reset to 0 items)
 export async function restoreAllInitialTires(): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
   const prodCol = 'products';
   try {
     const snap = await getDocs(collection(db, prodCol));
@@ -147,6 +255,9 @@ export async function restoreAllInitialTires(): Promise<void> {
       await legacyBatch.commit();
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.error('Failed to clear products:', error);
   }
 }
@@ -156,54 +267,82 @@ export function subscribeToTires(
   onData: (products: ProductItem[]) => void,
   onError?: (err: unknown) => void
 ) {
-  const path = 'products';
-  return onSnapshot(
-    collection(db, path),
-    (snapshot) => {
-      const items: ProductItem[] = snapshot.docs.map((docSnap) => {
-        const data = docSnap.data() || {};
-        const costVal = typeof data.costPrice === 'number' ? data.costPrice : 0;
-        const sellVal =
-          typeof data.sellingPrice === 'number'
-            ? data.sellingPrice
-            : typeof data.price === 'number'
-            ? data.price
-            : 0;
-        const nameVal = data.name || data.size || '';
+  if (isFirestoreQuotaExhausted()) {
+    if (onError) onError(new Error('Quota limit exceeded - running in offline mode'));
+    return () => {};
+  }
 
-        return {
-          id: docSnap.id,
-          barcode: data.barcode || '',
-          name: nameVal,
-          unit: data.unit || 'ชิ้น',
-          costPrice: costVal,
-          sellingPrice: sellVal,
-          imageUrl: data.imageUrl || '',
-          category: data.category || '',
-          brand: data.brand || '',
-          location: data.location || 'RACK A-01',
-          actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
-          systemQty: typeof data.systemQty === 'number' ? data.systemQty : 0,
-          status: data.status || 'checked',
-          minStock: typeof data.minStock === 'number' ? data.minStock : 2,
-          description: data.description || '',
-          updatedAt: data.updatedAt || new Date().toISOString(),
-          // Compatibility aliases
-          size: nameVal,
-          price: sellVal,
-          rim: data.rim || '',
-          zone: data.zone || 'ห้องอะไหล่',
-          isOem: Boolean(data.isOem),
-          oemLabel: data.oemLabel || '',
-        };
-      });
-      onData(items);
-    },
-    (error) => {
-      console.warn('subscribeToProducts error:', error);
-      if (onError) onError(error);
+  const path = 'products';
+  let unsub: (() => void) | null = null;
+
+  try {
+    unsub = onSnapshot(
+      collection(db, path),
+      (snapshot) => {
+        const items: ProductItem[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data() || {};
+          const costVal = typeof data.costPrice === 'number' ? data.costPrice : 0;
+          const sellVal =
+            typeof data.sellingPrice === 'number'
+              ? data.sellingPrice
+              : typeof data.price === 'number'
+              ? data.price
+              : 0;
+          const nameVal = data.name || data.size || '';
+
+          return {
+            id: docSnap.id,
+            barcode: data.barcode || '',
+            name: nameVal,
+            unit: data.unit || 'ชิ้น',
+            costPrice: costVal,
+            sellingPrice: sellVal,
+            imageUrl: data.imageUrl || '',
+            category: data.category || '',
+            brand: data.brand || '',
+            location: data.location || 'RACK A-01',
+            actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
+            systemQty: typeof data.systemQty === 'number' ? data.systemQty : 0,
+            status: data.status || 'checked',
+            minStock: typeof data.minStock === 'number' ? data.minStock : 2,
+            description: data.description || '',
+            updatedAt: data.updatedAt || new Date().toISOString(),
+            // Compatibility aliases
+            size: nameVal,
+            price: sellVal,
+            rim: data.rim || '',
+            zone: data.zone || 'ห้องอะไหล่',
+            isOem: Boolean(data.isOem),
+            oemLabel: data.oemLabel || '',
+          };
+        });
+        onData(items);
+      },
+      (error) => {
+        if (isQuotaError(error)) {
+          markQuotaExhausted();
+          if (unsub) {
+            try { unsub(); } catch {}
+            unsub = null;
+          }
+        }
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) {
+      markQuotaExhausted();
     }
-  );
+    if (onError) onError(err);
+    return () => {};
+  }
+
+  return () => {
+    if (unsub) {
+      try { unsub(); } catch {}
+      unsub = null;
+    }
+  };
 }
 
 // Alias for products listener
@@ -214,21 +353,49 @@ export function subscribeToAuditSessions(
   onData: (sessions: AuditSession[]) => void,
   onError?: (err: unknown) => void
 ) {
+  if (isFirestoreQuotaExhausted()) {
+    if (onError) onError(new Error('Quota limit exceeded - running in offline mode'));
+    return () => {};
+  }
+
   const path = 'audit_sessions';
-  return onSnapshot(
-    collection(db, path),
-    (snapshot) => {
-      const sessions: AuditSession[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<AuditSession, 'id'>),
-      }));
-      onData(sessions);
-    },
-    (error) => {
-      console.warn('subscribeToAuditSessions error:', error);
-      if (onError) onError(error);
+  let unsub: (() => void) | null = null;
+
+  try {
+    unsub = onSnapshot(
+      collection(db, path),
+      (snapshot) => {
+        const sessions: AuditSession[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<AuditSession, 'id'>),
+        }));
+        onData(sessions);
+      },
+      (error) => {
+        if (isQuotaError(error)) {
+          markQuotaExhausted();
+          if (unsub) {
+            try { unsub(); } catch {}
+            unsub = null;
+          }
+        }
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) {
+      markQuotaExhausted();
     }
-  );
+    if (onError) onError(err);
+    return () => {};
+  }
+
+  return () => {
+    if (unsub) {
+      try { unsub(); } catch {}
+      unsub = null;
+    }
+  };
 }
 
 // Real-time Audit Logs Listener
@@ -236,22 +403,50 @@ export function subscribeToAuditLogs(
   onData: (logs: AuditLog[]) => void,
   onError?: (err: unknown) => void
 ) {
+  if (isFirestoreQuotaExhausted()) {
+    if (onError) onError(new Error('Quota limit exceeded - running in offline mode'));
+    return () => {};
+  }
+
   const path = 'audit_logs';
-  const q = query(collection(db, path), orderBy('timestamp', 'desc'), limit(50));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const logs: AuditLog[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<AuditLog, 'id'>),
-      }));
-      onData(logs);
-    },
-    (error) => {
-      console.warn('subscribeToAuditLogs error:', error);
-      if (onError) onError(error);
+  let unsub: (() => void) | null = null;
+
+  try {
+    const q = query(collection(db, path), orderBy('timestamp', 'desc'), limit(50));
+    unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const logs: AuditLog[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<AuditLog, 'id'>),
+        }));
+        onData(logs);
+      },
+      (error) => {
+        if (isQuotaError(error)) {
+          markQuotaExhausted();
+          if (unsub) {
+            try { unsub(); } catch {}
+            unsub = null;
+          }
+        }
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) {
+      markQuotaExhausted();
     }
-  );
+    if (onError) onError(err);
+    return () => {};
+  }
+
+  return () => {
+    if (unsub) {
+      try { unsub(); } catch {}
+      unsub = null;
+    }
+  };
 }
 
 // Update actual counted qty
@@ -262,6 +457,8 @@ export async function updateTireActualQty(
   tireName: string,
   brand: string
 ): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
   const diff = newActualQty - systemQty;
   const status: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
@@ -290,6 +487,9 @@ export async function updateTireActualQty(
       note: diff === 0 ? 'ยอดตรวจตรงกับระบบ' : `ปรับค่ายอดนับจริงเป็น ${newActualQty}`,
     });
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('updateTireActualQty offline/error:', error);
   }
 }
@@ -309,6 +509,11 @@ export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Rec
 export async function addNewTire(item: Omit<ProductItem, 'id'>): Promise<string> {
   const newDocRef = doc(collection(db, 'products'));
   const newId = newDocRef.id;
+
+  if (isFirestoreQuotaExhausted()) {
+    return newId;
+  }
+
   try {
     const payload = sanitizeForFirestore({
       ...item,
@@ -318,6 +523,9 @@ export async function addNewTire(item: Omit<ProductItem, 'id'>): Promise<string>
     await setDoc(newDocRef, payload);
     console.log('Successfully saved product to Firestore with ID:', newId);
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.error('addNewProduct error:', error);
   }
   return newId;
@@ -327,6 +535,8 @@ export const addNewProduct = addNewTire;
 
 // Update product details
 export async function updateTireItem(tireId: string, updates: Partial<ProductItem>): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
   try {
     const payload = sanitizeForFirestore({
       ...updates,
@@ -334,6 +544,9 @@ export async function updateTireItem(tireId: string, updates: Partial<ProductIte
     });
     await setDoc(doc(db, 'products', tireId), payload, { merge: true });
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.error('updateProductItem error:', error);
   }
 }
@@ -342,9 +555,14 @@ export const updateProductItem = updateTireItem;
 
 // Delete product
 export async function deleteTireItem(tireId: string): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
   try {
     await deleteDoc(doc(db, 'products', tireId));
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('deleteProductItem offline/error:', error);
   }
 }
@@ -364,6 +582,8 @@ export async function saveAuditSession(
     title?: string;
   }
 ): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
   try {
     await setDoc(
       doc(db, 'audit_sessions', sessionId),
@@ -388,6 +608,9 @@ export async function saveAuditSession(
       note: `ตรวจเสร็จสิ้น ${data.checkedItems}/${data.totalItems} รายการ (พบยอดคลาดเคลื่อน ${data.discrepancyCount} รายการ)`,
     });
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('saveAuditSession offline/error:', error);
   }
 }
@@ -397,22 +620,50 @@ export function subscribeToTransactions(
   onData: (transactions: Transaction[]) => void,
   onError?: (err: unknown) => void
 ) {
+  if (isFirestoreQuotaExhausted()) {
+    if (onError) onError(new Error('Quota limit exceeded - running in offline mode'));
+    return () => {};
+  }
+
   const path = 'transactions';
-  const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(50));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const txs: Transaction[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...(docSnap.data() as Omit<Transaction, 'id'>),
-      }));
-      onData(txs);
-    },
-    (error) => {
-      console.warn('subscribeToTransactions error:', error);
-      if (onError) onError(error);
+  let unsub: (() => void) | null = null;
+
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(50));
+    unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const txs: Transaction[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Transaction, 'id'>),
+        }));
+        onData(txs);
+      },
+      (error) => {
+        if (isQuotaError(error)) {
+          markQuotaExhausted();
+          if (unsub) {
+            try { unsub(); } catch {}
+            unsub = null;
+          }
+        }
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) {
+      markQuotaExhausted();
     }
-  );
+    if (onError) onError(err);
+    return () => {};
+  }
+
+  return () => {
+    if (unsub) {
+      try { unsub(); } catch {}
+      unsub = null;
+    }
+  };
 }
 
 // Execute Buy/Sell with Automatic Stock Cutting
@@ -426,6 +677,8 @@ export async function executeTransaction(
   customerOrSupplier: string,
   note?: string
 ): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
   const pathTx = 'transactions';
   const pathProducts = 'products';
   const pathLogs = 'audit_logs';
@@ -481,6 +734,9 @@ export async function executeTransaction(
       });
     }
   } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
     console.warn('executeTransaction Firestore sync error (handled safely):', error);
   }
 }

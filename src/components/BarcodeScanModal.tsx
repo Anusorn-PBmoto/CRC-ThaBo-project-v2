@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { TireItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
+import { resolveProductImage } from '../utils/productImages';
 
 interface BarcodeScanModalProps {
   isOpen: boolean;
@@ -256,10 +257,10 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
           {/* 1. MATCHED SCAN RESULT */}
           {scannedResult && (
             <div className="p-3 rounded-2xl bg-[#252C33] border border-[#F6C90E] shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5 overflow-hidden">
-              {scannedResult.imageUrl && scannedResult.imageUrl.trim() !== '' && (
+              {(scannedResult.imageUrl || resolveProductImage(scannedResult)) && (
                 <div className="w-full h-40 -mt-3 -mx-3 mb-1 w-[calc(100%+1.5rem)] overflow-hidden bg-[#20262D] border-b border-[#475662]">
                   <img
-                    src={scannedResult.imageUrl}
+                    src={scannedResult.imageUrl || resolveProductImage(scannedResult)}
                     alt={scannedResult.name || 'สินค้า'}
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover"

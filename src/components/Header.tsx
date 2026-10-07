@@ -1,11 +1,13 @@
 import React from 'react';
-import { QrCode, User, FileSpreadsheet } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
   onOpenProfile: () => void;
   onOpenAppSheet?: () => void;
+  onOpenImageMatch?: () => void;
   isOnline: boolean;
+  isQuotaMode?: boolean;
   activeZone?: string;
   subtitle?: string;
 }
@@ -14,7 +16,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenScanner,
   onOpenProfile,
   onOpenAppSheet,
+  onOpenImageMatch,
   isOnline,
+  isQuotaMode = false,
   activeZone = 'คลังอะไหล่มอเตอร์ไซค์',
   subtitle = 'ระบบสต็อกอะไหล่ • CRC ThaBo',
 }) => {
@@ -86,15 +90,24 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenProfile}
             aria-label="ข้อมูลผู้ใช้งานและระบบ"
-            title="โปรไฟล์และสถานะ Firebase"
+            title={
+              isQuotaMode
+                ? 'โหมดออฟไลน์ทำงานบนเครื่อง (Firestore Quota เต็มชั่วคราว)'
+                : isOnline
+                ? 'Firebase Firestore เรียลไทม์ออนไลน์'
+                : 'โหมดออฟไลน์'
+            }
             className="w-9 h-9 rounded-lg bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold flex items-center justify-center transition-all active:scale-95 shadow-md shadow-[#F6C90E]/20 relative"
           >
             <User className="w-4 h-4 text-[#252C33]" />
             <span
               className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#20262D] ${
-                isOnline ? 'bg-emerald-500' : 'bg-rose-500'
+                isQuotaMode
+                  ? 'bg-amber-400 animate-pulse'
+                  : isOnline
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-400'
               }`}
-              title={isOnline ? 'Firebase เรียลไทม์ออนไลน์' : 'ออฟไลน์'}
             />
           </button>
         </div>
