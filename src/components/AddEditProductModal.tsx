@@ -395,9 +395,12 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-[#EEEEEE] font-semibold mb-1">
-                4. ราคาซื้อ / ทุน (บาท)
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[#EEEEEE] font-semibold text-xs">
+                  4. ราคาซื้อ / ต้นทุน
+                </label>
+                <span className="text-[10px] text-[#A0ABB5]">(ไม่แสดงหน้าร้าน)</span>
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5] font-bold">฿</span>
                 <input
@@ -407,17 +410,17 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   value={costPrice}
                   onChange={(e) => setCostPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full bg-[#252C33] border border-[#475662] text-[#F6C90E] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
+                  className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-[#EEEEEE] font-semibold mb-1">
+              <label className="block text-[#EEEEEE] font-semibold mb-1 text-xs">
                 5. ราคาขาย (บาท) <span className="text-[#F6C90E]">*</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 font-bold">฿</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F6C90E] font-bold">฿</span>
                 <input
                   type="number"
                   min="0"
@@ -426,31 +429,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   value={sellingPrice}
                   onChange={(e) => setSellingPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
                   placeholder="0.00"
-                  className="w-full bg-[#252C33] border border-[#475662] text-emerald-400 font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
+                  className="w-full bg-[#252C33] border border-[#475662] text-[#F6C90E] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
                 />
               </div>
             </div>
           </div>
-
-          {/* Profit Calculation Highlight Banner */}
-          {sellNum > 0 && costNum > 0 && (
-            <div className="p-2 rounded-xl bg-[#252C33] border border-emerald-500/30 flex items-center justify-between text-xs animate-in fade-in">
-              <span className="text-[#A0ABB5] flex items-center gap-1">
-                <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                <span>กำไรต่อ {unit || 'ชิ้น'}:</span>
-              </span>
-              <div className="flex items-center gap-2">
-                <span className={`font-mono font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {profit >= 0 ? `+฿${profit.toLocaleString()}` : `-฿${Math.abs(profit).toLocaleString()}`}
-                </span>
-                {profitMargin && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A4750] border border-emerald-500/40 text-emerald-300 font-semibold">
-                    {profitMargin}%
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Initial Stock Quantity & Storage Location */}
           <div className="grid grid-cols-2 gap-3">

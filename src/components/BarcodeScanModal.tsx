@@ -255,7 +255,17 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
 
           {/* 1. MATCHED SCAN RESULT */}
           {scannedResult && (
-            <div className="p-3 rounded-2xl bg-[#252C33] border border-[#F6C90E] shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5">
+            <div className="p-3 rounded-2xl bg-[#252C33] border border-[#F6C90E] shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5 overflow-hidden">
+              {scannedResult.imageUrl && scannedResult.imageUrl.trim() !== '' && (
+                <div className="w-full h-40 -mt-3 -mx-3 mb-1 w-[calc(100%+1.5rem)] overflow-hidden bg-[#20262D] border-b border-[#475662]">
+                  <img
+                    src={scannedResult.imageUrl}
+                    alt={scannedResult.name || 'สินค้า'}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <CheckCircle className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />

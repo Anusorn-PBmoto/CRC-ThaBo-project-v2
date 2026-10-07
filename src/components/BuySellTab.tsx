@@ -94,7 +94,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
     });
   };
 
-  // Update item quantity
+  // Update item quantity with +/- buttons
   const updateCartQty = (tireId: string, delta: number) => {
     setCart((prev) =>
       prev
@@ -106,6 +106,15 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           return item;
         })
         .filter(Boolean) as CartItem[]
+    );
+  };
+
+  // Set direct quantity typed by user
+  const setCartDirectQty = (tireId: string, val: number | string) => {
+    const parsed = typeof val === 'string' ? (val === '' ? 1 : parseInt(val, 10)) : val;
+    const safeQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setCart((prev) =>
+      prev.map((item) => (item.tire.id === tireId ? { ...item, quantity: safeQty } : item))
     );
   };
 
@@ -295,20 +304,36 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     )}
                   </div>
 
-                  {/* Quantity controls */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {/* Quantity controls (รองรับการพิมพ์กรอกตัวเลขโดยตรง) */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => updateCartQty(item.tire.id, -1)}
                       className="w-7 h-7 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold flex items-center justify-center active:scale-95 border border-[#475662]"
+                      title="ลดจำนวน"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="w-7 text-center font-bold text-[#F6C90E] font-mono text-sm">
-                      {item.quantity}
-                    </span>
+
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setCartDirectQty(item.tire.id, 1);
+                        } else {
+                          setCartDirectQty(item.tire.id, parseInt(val, 10) || 1);
+                        }
+                      }}
+                      className="w-12 h-7 text-center font-bold text-[#F6C90E] font-mono text-sm bg-[#3A4750] border border-[#475662] rounded-lg focus:border-[#F6C90E] focus:outline-none px-1 py-0"
+                      title="พิมพ์กรอกจำนวนได้"
+                    />
+
                     <button
                       onClick={() => updateCartQty(item.tire.id, 1)}
                       className="w-7 h-7 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold flex items-center justify-center active:scale-95 border border-[#475662]"
+                      title="เพิ่มจำนวน"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
@@ -454,14 +479,15 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                 onClick={() => addToCart(tire)}
                 className="bg-[#3A4750] hover:bg-[#43525D] active:scale-[0.99] border border-[#475662] rounded-2xl p-3 transition-all cursor-pointer flex items-center justify-between group"
               >
-                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="flex items-center gap-3 min-w-0 flex-1 pr-2">
+                  {/* Left Side: Product Photo Thumbnail */}
                   {tire.imageUrl && tire.imageUrl.trim() !== '' && (
-                    <div className="w-11 h-11 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-inner">
+                    <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-inner">
                       <img
                         src={tire.imageUrl}
                         alt={tire.name || tire.size || 'สินค้า'}
                         referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       />
                     </div>
                   )}
@@ -483,7 +509,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 text-right">
+                <div className="flex items-center gap-3 text-right flex-shrink-0">
                   <div>
                     <span className="text-xs font-bold font-mono text-[#F6C90E] block">
                       ฿{price.toLocaleString()}

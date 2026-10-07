@@ -13,6 +13,7 @@ import {
   Trash2,
   Package,
   X,
+  Maximize2,
 } from 'lucide-react';
 import { ProductItem, AuditSession } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -239,137 +240,141 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                 key={product.id}
                 className="bg-[#3A4750] hover:bg-[#43525D] border border-[#475662] rounded-2xl p-3.5 shadow-sm transition-all relative overflow-hidden"
               >
-                {/* Top Row: Product Info & Menu */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    {/* Product Photo Thumbnail (only if uploaded) */}
-                    {product.imageUrl && product.imageUrl.trim() !== '' && (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewProduct(product)}
-                        className="w-12 h-12 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-md relative group hover:border-[#F6C90E] transition-all active:scale-95 cursor-zoom-in"
-                        title="กดเพื่อดูรูปภาพขนาดใหญ่"
-                      >
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name || 'สินค้า'}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </button>
-                    )}
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3 className="text-sm font-bold text-[#EEEEEE] tracking-wide">
-                          {product.name || product.size}
-                        </h3>
-                        {product.unit && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
-                            {product.unit}
-                          </span>
-                        )}
-                        {product.barcode && (
-                          <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 flex items-center gap-1">
-                            <ScanBarcode className="w-2.5 h-2.5" />
-                            <span>{product.barcode}</span>
-                          </span>
-                        )}
+                {/* Top Section: Left Photo (Red box in screenshot) + Right Info */}
+                <div className="flex items-start gap-3">
+                  {/* Left Side: Product Photo */}
+                  {product.imageUrl && product.imageUrl.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewProduct(product)}
+                      className="w-20 h-20 sm:w-22 sm:h-22 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-md relative group hover:border-[#F6C90E] transition-all active:scale-95 cursor-zoom-in"
+                      title="แตะเพื่อดูภาพขนาดใหญ่"
+                    >
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name || 'สินค้า'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Maximize2 className="w-4 h-4 text-[#F6C90E]" />
                       </div>
+                    </button>
+                  )}
 
-                      {/* Subtitle: Prices & Location */}
-                      <div className="text-xs text-[#A0ABB5] mt-1 flex items-center gap-2 flex-wrap">
-                        {product.sellingPrice > 0 && (
-                          <span className="text-[#F6C90E] font-bold font-mono">
-                            ฿{product.sellingPrice.toLocaleString()}
-                          </span>
-                        )}
-                        {product.costPrice > 0 && (
-                          <span className="text-[#A0ABB5] text-[11px] font-mono">
-                            (ทุน: ฿{product.costPrice.toLocaleString()})
-                          </span>
-                        )}
-                        <span>•</span>
-                        <span className="text-[#EEEEEE]">{product.location || 'RACK A-01'}</span>
-                        {product.description && (
-                          <>
-                            <span>•</span>
-                            <span className="text-[#A0ABB5] truncate max-w-[130px]">
-                              {product.description}
+                  {/* Right Side: Product Details & Menu */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-sm font-bold text-[#EEEEEE] tracking-wide">
+                            {product.name || product.size}
+                          </h3>
+                          {product.unit && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
+                              {product.unit}
                             </span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 flex-shrink-0 ml-1">
-                    {/* Status badge */}
-                    {isChecked ? (
-                      <span className="flex items-center gap-1 text-[11px] text-[#F6C90E] font-medium bg-[#252C33] px-2 py-0.5 rounded-full border border-[#475662]">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#F6C90E]" />
-                        <span>ตรวจแล้ว</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[11px] text-[#A0ABB5]">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span>รอตรวจ</span>
-                      </span>
-                    )}
-
-                    {/* Menu button */}
-                    <div className="relative">
-                      <button
-                        onClick={() =>
-                          setActiveMenuTireId(activeMenuTireId === product.id ? null : product.id)
-                        }
-                        className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-
-                      {activeMenuTireId === product.id && (
-                        <div className="absolute right-0 top-6 z-20 w-36 bg-[#252C33] border border-[#475662] rounded-xl shadow-xl py-1 text-xs text-[#EEEEEE]">
-                          <button
-                            onClick={() => {
-                              onEditTire(product);
-                              setActiveMenuTireId(null);
-                            }}
-                            className="w-full px-3 py-1.5 text-left hover:bg-[#3A4750] flex items-center justify-between"
-                          >
-                            <span>แก้ไขข้อมูล</span>
-                            <ChevronRight className="w-3 h-3 text-[#A0ABB5]" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              onUpdateQty(product, product.systemQty);
-                              setActiveMenuTireId(null);
-                            }}
-                            className="w-full px-3 py-1.5 text-left hover:bg-[#3A4750] flex items-center justify-between text-[#F6C90E]"
-                          >
-                            <span>รีเซ็ตตามระบบ</span>
-                            <RotateCcw className="w-3 h-3" />
-                          </button>
-                          {onDeleteTire && (
-                            <button
-                              onClick={() => {
-                                onDeleteTire(product);
-                                setActiveMenuTireId(null);
-                              }}
-                              className="w-full px-3 py-1.5 text-left hover:bg-rose-950/40 flex items-center justify-between text-rose-400 border-t border-[#475662]"
-                            >
-                              <span>ลบรายการสินค้า</span>
-                              <Trash2 className="w-3 h-3" />
-                            </button>
                           )}
                         </div>
-                      )}
+
+                        {product.barcode && (
+                          <div className="mt-1">
+                            <span className="inline-flex text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 items-center gap-1">
+                              <ScanBarcode className="w-2.5 h-2.5" />
+                              <span>{product.barcode}</span>
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Subtitle: Prices & Location (ตัดการแสดงผลราคาต้นทุนออก) */}
+                        <div className="text-xs text-[#A0ABB5] mt-1 flex items-center gap-2 flex-wrap">
+                          {product.sellingPrice > 0 && (
+                            <span className="text-[#F6C90E] font-bold font-mono">
+                              ฿{product.sellingPrice.toLocaleString()}
+                            </span>
+                          )}
+                          <span>•</span>
+                          <span className="text-[#EEEEEE]">{product.location || 'RACK A-01'}</span>
+                          {product.description && (
+                            <>
+                              <span>•</span>
+                              <span className="text-[#A0ABB5] truncate max-w-[130px]">
+                                {product.description}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Status badge & Menu */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isChecked ? (
+                          <span className="flex items-center gap-1 text-[11px] text-[#F6C90E] font-medium bg-[#252C33] px-2 py-0.5 rounded-full border border-[#475662]">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-[#F6C90E]" />
+                            <span>ตรวจแล้ว</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[11px] text-[#A0ABB5]">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>รอตรวจ</span>
+                          </span>
+                        )}
+
+                        {/* Menu button */}
+                        <div className="relative">
+                          <button
+                            onClick={() =>
+                              setActiveMenuTireId(activeMenuTireId === product.id ? null : product.id)
+                            }
+                            className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          {activeMenuTireId === product.id && (
+                            <div className="absolute right-0 top-6 z-20 w-36 bg-[#252C33] border border-[#475662] rounded-xl shadow-xl py-1 text-xs text-[#EEEEEE]">
+                              <button
+                                onClick={() => {
+                                  onEditTire(product);
+                                  setActiveMenuTireId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-left hover:bg-[#3A4750] flex items-center justify-between"
+                              >
+                                <span>แก้ไขข้อมูล</span>
+                                <ChevronRight className="w-3 h-3 text-[#A0ABB5]" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  onUpdateQty(product, product.systemQty);
+                                  setActiveMenuTireId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-left hover:bg-[#3A4750] flex items-center justify-between text-[#F6C90E]"
+                              >
+                                <span>รีเซ็ตตามระบบ</span>
+                                <RotateCcw className="w-3 h-3" />
+                              </button>
+                              {onDeleteTire && (
+                                <button
+                                  onClick={() => {
+                                    onDeleteTire(product);
+                                    setActiveMenuTireId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-left hover:bg-rose-950/40 flex items-center justify-between text-rose-400 border-t border-[#475662]"
+                                >
+                                  <span>ลบรายการสินค้า</span>
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Count and Stepper Row */}
-                <div className="flex items-center justify-between mt-3 pt-2 border-t border-[#475662]/60">
+                {/* Bottom Row: Count and Stepper */}
+                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#475662]/60">
                   {/* Left: Actual Count Status badge */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-[#A0ABB5] font-medium">นับจริง:</span>
@@ -388,22 +393,33 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                     )}
                   </div>
 
-                  {/* Right: Stepper [-] [Number] [+] */}
-                  <div className="flex items-center gap-2">
+                  {/* Right: Stepper [-] [Number] [+] (พิมพ์กรอกตัวเลขได้) */}
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => onUpdateQty(product, Math.max(0, product.actualQty - 1))}
                       className="w-8 h-8 rounded-xl bg-[#252C33] hover:bg-[#2C353E] active:scale-95 text-[#EEEEEE] font-bold flex items-center justify-center border border-[#475662] transition-all text-base"
+                      title="ลดจำนวน"
                     >
                       -
                     </button>
 
-                    <span className="font-mono text-base font-extrabold text-[#F6C90E] min-w-[28px] text-center">
-                      {product.actualQty}
-                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={product.actualQty}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const parsed = parseInt(val, 10);
+                        onUpdateQty(product, isNaN(parsed) || parsed < 0 ? 0 : parsed);
+                      }}
+                      className="w-12 h-8 text-center font-mono text-base font-extrabold text-[#F6C90E] bg-[#252C33] border border-[#475662] rounded-xl focus:border-[#F6C90E] focus:outline-none px-1"
+                      title="พิมพ์กรอกจำนวนนับได้"
+                    />
 
                     <button
                       onClick={() => onUpdateQty(product, product.actualQty + 1)}
                       className="w-8 h-8 rounded-xl bg-[#252C33] hover:bg-[#2C353E] active:scale-95 text-[#EEEEEE] font-bold flex items-center justify-center border border-[#475662] transition-all text-base"
+                      title="เพิ่มจำนวน"
                     >
                       +
                     </button>

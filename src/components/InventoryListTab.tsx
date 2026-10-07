@@ -11,6 +11,7 @@ import {
   TrendingUp,
   X,
   Sparkles,
+  Maximize2,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -346,123 +347,132 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             return (
               <div
                 key={product.id}
-                className={`bg-[#3A4750] hover:bg-[#43525D] border rounded-2xl p-3.5 shadow-sm transition-all relative ${
+                className={`bg-[#3A4750] hover:bg-[#43525D] border rounded-2xl p-3.5 shadow-sm transition-all relative overflow-hidden ${
                   isSelected ? 'border-[#F6C90E] bg-[#43525D]' : 'border-[#475662]'
                 }`}
               >
-                {/* Top Row: Product Info & Actions */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    {isMultiSelectMode && (
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSelect(product.id)}
-                        className="w-4 h-4 rounded text-[#F6C90E] bg-[#252C33] border-[#475662] focus:ring-0 flex-shrink-0"
+                {/* Top Section: Left Photo (Red box in screenshot) + Right Info & Actions */}
+                <div className="flex items-start gap-3">
+                  {/* Left Side: Product Photo */}
+                  {product.imageUrl && product.imageUrl.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewProduct(product)}
+                      className="w-20 h-20 sm:w-22 sm:h-22 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-md relative group hover:border-[#F6C90E] transition-all active:scale-95 cursor-zoom-in"
+                      title="แตะเพื่อดูภาพขนาดใหญ่"
+                    >
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name || 'สินค้า'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       />
-                    )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <Maximize2 className="w-4 h-4 text-[#F6C90E]" />
+                      </div>
+                    </button>
+                  )}
 
-                    {/* Product Photo Thumbnail (only if uploaded) */}
-                    {product.imageUrl && product.imageUrl.trim() !== '' && (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewProduct(product)}
-                        className="w-12 h-12 rounded-xl overflow-hidden bg-[#252C33] border border-[#475662] flex-shrink-0 flex items-center justify-center shadow-md relative group hover:border-[#F6C90E] transition-all active:scale-95 cursor-zoom-in"
-                        title="กดเพื่อดูรูปภาพขนาดใหญ่"
-                      >
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name || 'สินค้า'}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
-                      </button>
-                    )}
+                  {/* Right Side: Product Details & Actions */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-1">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {isMultiSelectMode && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(product.id)}
+                            className="w-4 h-4 rounded text-[#F6C90E] bg-[#252C33] border-[#475662] focus:ring-0 flex-shrink-0"
+                          />
+                        )}
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="text-sm font-bold text-[#EEEEEE]">
-                          {product.name || product.size}
-                        </h4>
-                        {product.unit && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
-                            {product.unit}
-                          </span>
-                        )}
-                        {product.barcode && (
-                          <span className="text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 flex items-center gap-1">
-                            <ScanBarcode className="w-2.5 h-2.5" />
-                            <span>{product.barcode}</span>
-                          </span>
-                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="text-sm font-bold text-[#EEEEEE]">
+                              {product.name || product.size}
+                            </h4>
+                            {product.unit && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
+                                {product.unit}
+                              </span>
+                            )}
+                          </div>
+
+                          {product.barcode && (
+                            <div className="mt-1">
+                              <span className="inline-flex text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 items-center gap-1">
+                                <ScanBarcode className="w-2.5 h-2.5" />
+                                <span>{product.barcode}</span>
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Subtitle / Prices (ตัดการแสดงผลราคาต้นทุนออก) */}
+                          <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
+                            {product.sellingPrice > 0 && (
+                              <span className="text-[#F6C90E] font-bold font-mono">
+                                ฿{product.sellingPrice.toLocaleString()}
+                              </span>
+                            )}
+                            {product.description && (
+                              <span className="text-[#A0ABB5] text-xs truncate max-w-[130px]">
+                                • {product.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Subtitle / Prices */}
-                      <div className="flex items-center gap-2 mt-1 text-xs">
-                        {product.sellingPrice > 0 && (
-                          <span className="text-[#F6C90E] font-bold font-mono">
-                            ฿{product.sellingPrice.toLocaleString()}
+                      {/* Right Action buttons & Stock Badge */}
+                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
+                        {/* Stock Quantity Badge */}
+                        {isZero ? (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-rose-500/50 text-rose-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                            <span>หมด</span>
+                          </span>
+                        ) : isLow ? (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-[#F6C90E]/50 text-[#F6C90E] flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#F6C90E]" />
+                            <span>{product.actualQty} {unitLabel}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-emerald-500/40 text-emerald-400 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                            <span>{product.actualQty} {unitLabel}</span>
                           </span>
                         )}
-                        {product.costPrice > 0 && (
-                          <span className="text-[#A0ABB5] text-[11px] font-mono">
-                            (ทุน: ฿{product.costPrice.toLocaleString()})
-                          </span>
-                        )}
-                        {product.description && (
-                          <span className="text-[#A0ABB5] text-xs truncate max-w-[140px]">
-                            • {product.description}
-                          </span>
-                        )}
+
+                        <div className="flex items-center gap-1">
+                          {/* Quick PO Button */}
+                          <button
+                            onClick={() => onOpenPO(product)}
+                            title="สั่งซื้อเพิ่ม (PO)"
+                            className="p-1 text-[#A0ABB5] hover:text-[#F6C90E] rounded-lg transition-colors"
+                          >
+                            <TrendingUp className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => onEditTire(product)}
+                            title="แก้ไขข้อมูล"
+                            className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            onClick={() => onDeleteTire(product)}
+                            title="ลบรายการ"
+                            className="p-1 text-[#A0ABB5] hover:text-rose-400 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
-                    {/* Stock Quantity Badge */}
-                    {isZero ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-rose-500/50 text-rose-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                        <span>หมด</span>
-                      </span>
-                    ) : isLow ? (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-[#F6C90E]/50 text-[#F6C90E] flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#F6C90E]" />
-                        <span>{product.actualQty} {unitLabel}</span>
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-emerald-500/40 text-emerald-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                        <span>{product.actualQty} {unitLabel}</span>
-                      </span>
-                    )}
-
-                    {/* Quick PO Button */}
-                    <button
-                      onClick={() => onOpenPO(product)}
-                      title="สั่งซื้อเพิ่ม (PO)"
-                      className="p-1 text-[#A0ABB5] hover:text-[#F6C90E] rounded-lg transition-colors"
-                    >
-                      <TrendingUp className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Edit Button */}
-                    <button
-                      onClick={() => onEditTire(product)}
-                      title="แก้ไขข้อมูล"
-                      className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg transition-colors"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Delete Button */}
-                    <button
-                      onClick={() => onDeleteTire(product)}
-                      title="ลบรายการ"
-                      className="p-1 text-[#A0ABB5] hover:text-rose-400 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
 
