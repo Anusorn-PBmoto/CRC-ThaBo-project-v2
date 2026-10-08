@@ -15,11 +15,15 @@ import {
   Tag,
   DollarSign,
   TrendingUp,
+  Store,
+  Warehouse,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
 import { uploadProductImageToStorage } from '../firebase';
+import { getProductStockBreakdown } from '../utils/stockUtils';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -100,9 +104,12 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [sellingPrice, setSellingPrice] = useState<number | ''>('');
   const [imageUrl, setImageUrl] = useState('');
 
-  // Auxiliary fields
-  const [stockQty, setStockQty] = useState<number>(1);
+  // Multi-location Stock fields (หน้าร้าน vs คลังสินค้า)
+  const [frontQty, setFrontQty] = useState<number>(1);
+  const [warehouseQty, setWarehouseQty] = useState<number>(0);
+  const [frontLocation, setFrontLocation] = useState('');
   const [location, setLocation] = useState('');
+  const [minFrontStock, setMinFrontStock] = useState<number>(2);
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
@@ -119,6 +126,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
   useEffect(() => {
     if (currentItem) {
+      const breakdown = getProductStockBreakdown(currentItem);
       setBarcode(currentItem.barcode || '');
       setName(currentItem.name || currentItem.size || '');
       setUnit(currentItem.unit || 'ชิ้น');
@@ -131,8 +139,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           : ''
       );
       setImageUrl(currentItem.imageUrl || resolveProductImage(currentItem) || '');
-      setStockQty(currentItem.actualQty !== undefined ? currentItem.actualQty : 1);
-      setLocation(currentItem.location || '');
+      setFrontQty(breakdown.frontQty);
+      setWarehouseQty(breakdown.warehouseQty);
+      setFrontLocation(currentItem.frontLocation || 'หน้าร้าน / เชลฟ์โชว์');
+      setLocation(currentItem.location || 'RACK A-01');
+      setMinFrontStock(currentItem.minFrontStock !== undefined ? currentItem.minFrontStock : 2);
       setBrand(currentItem.brand || '');
       setCategory(currentItem.category || '');
       setDescription(currentItem.description || '');
@@ -143,8 +154,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setCostPrice('');
       setSellingPrice('');
       setImageUrl('');
-      setStockQty(1);
+      setFrontQty(1);
+      setWarehouseQty(0);
+      setFrontLocation('หน้าร้าน / เชลฟ์โชว์');
       setLocation('RACK A-01');
+      setMinFrontStock(2);
       setBrand('');
       setCategory('');
       setDescription('');
@@ -208,7 +222,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     try {
       const numericCost = Number(costPrice) || 0;
       const numericSell = Number(sellingPrice) || 0;
-      const numericQty = Number(stockQty) || 0;
+      const numFront = Math.max(0, Number(frontQty) || 0);
+      const numWarehouse = Math.max(0, Number(warehouseQty) || 0);
+      const totalNumericQty = numFront + numWarehouse;
 
       const productPayload: Omit<ProductItem, 'id'> = {
         barcode: barcode.trim(),
@@ -220,10 +236,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         category: category.trim() || '',
         brand: brand.trim() || '',
         location: location.trim() || 'RACK A-01',
-        systemQty: numericQty,
-        actualQty: numericQty,
+        frontLocation: frontLocation.trim() || 'หน้าร้าน / เชลฟ์โชว์',
+        frontQty: numFront,
+        warehouseQty: numWarehouse,
+        systemQty: totalNumericQty,
+        actualQty: totalNumericQty,
         status: 'checked',
         minStock: 2,
+        minFrontStock: Math.max(1, Number(minFrontStock) || 2),
         description: description.trim() || '',
         updatedAt: new Date().toISOString(),
         // Backwards compatibility fields
@@ -445,31 +465,89 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             </div>
           </div>
 
-          {/* Initial Stock Quantity & Storage Location */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[#A0ABB5] font-medium mb-1">
-                จำนวนสต็อกเริ่มต้น ({unit || 'ชิ้น'})
-              </label>
-              <input
-                type="number"
-                min="0"
-                value={stockQty}
-                onChange={(e) => setStockQty(Number(e.target.value))}
-                className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono"
-              />
+          {/* Multi-location Stock Quantity & Storage Location Section */}
+          <div className="p-3 bg-[#252C33] border border-[#475662] rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#EEEEEE] flex items-center gap-1.5">
+                <ArrowRightLeft className="w-3.5 h-3.5 text-[#F6C90E]" />
+                <span>การจัดการสต็อกและตำแหน่งจัดเก็บ (2 จุด)</span>
+              </span>
+              <div className="px-2 py-0.5 rounded-lg bg-[#3A4750] border border-[#475662] text-[11px] font-bold text-[#F6C90E] font-mono">
+                รวมทั้งหมด: {(Math.max(0, Number(frontQty) || 0) + Math.max(0, Number(warehouseQty) || 0))} {unit || 'ชิ้น'}
+              </div>
             </div>
-            <div>
-              <label className="block text-[#A0ABB5] font-medium mb-1">
-                ตำแหน่งจัดเก็บ / ชั้นวาง
-              </label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="เช่น RACK A-01, กล่อง 2"
-                className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none"
-              />
+
+            {/* Storefront Stock (หน้าร้าน) */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <div>
+                <label className="block text-[#EEEEEE] font-medium mb-1 text-[11px] flex items-center gap-1">
+                  <Store className="w-3 h-3 text-[#F6C90E]" />
+                  <span>สต็อกหน้าร้าน ({unit || 'ชิ้น'})</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={frontQty}
+                  onChange={(e) => setFrontQty(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-[#20262D] border border-[#475662] text-[#F6C90E] font-bold rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[#A0ABB5] font-medium mb-1 text-[11px]">
+                  ตำแหน่งชั้นวางหน้าร้าน
+                </label>
+                <input
+                  type="text"
+                  value={frontLocation}
+                  onChange={(e) => setFrontLocation(e.target.value)}
+                  placeholder="เช่น แผงโชว์ A, เคาน์เตอร์"
+                  className="w-full bg-[#20262D] border border-[#475662] text-[#EEEEEE] placeholder-[#788896] rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Warehouse Stock (คลังหลังร้าน) */}
+            <div className="grid grid-cols-2 gap-2.5 pt-1 border-t border-[#3A4750]">
+              <div>
+                <label className="block text-[#EEEEEE] font-medium mb-1 text-[11px] flex items-center gap-1">
+                  <Warehouse className="w-3 h-3 text-sky-400" />
+                  <span>สต็อกคลังหลังร้าน ({unit || 'ชิ้น'})</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={warehouseQty}
+                  onChange={(e) => setWarehouseQty(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className="w-full bg-[#20262D] border border-[#475662] text-[#EEEEEE] font-bold rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[#A0ABB5] font-medium mb-1 text-[11px]">
+                  ตำแหน่งในคลังหลังร้าน
+                </label>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="เช่น RACK A-01, กล่อง 2"
+                  className="w-full bg-[#20262D] border border-[#475662] text-[#EEEEEE] placeholder-[#788896] rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Min Front Stock Warning threshold */}
+            <div className="pt-1 flex items-center justify-between text-[11px] text-[#A0ABB5]">
+              <span>เตือนเมื่อหน้าร้านเหลือน้อยกว่า:</span>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="1"
+                  value={minFrontStock}
+                  onChange={(e) => setMinFrontStock(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                  className="w-14 bg-[#20262D] border border-[#475662] text-center text-[#F6C90E] font-bold rounded-lg py-0.5 text-xs font-mono"
+                />
+                <span>{unit || 'ชิ้น'}</span>
+              </div>
             </div>
           </div>
 

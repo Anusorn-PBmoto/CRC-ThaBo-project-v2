@@ -1,5 +1,7 @@
 export type StockStatus = 'pending' | 'checked' | 'discrepancy';
 
+export type StockLocation = 'front' | 'warehouse';
+
 export interface ProductItem {
   id: string;
   barcode: string;           // 1. ระบบแสกนบาร์โค้ด และรหัสสินค้า
@@ -10,11 +12,15 @@ export interface ProductItem {
   imageUrl?: string;         // 6. ถ่ายภาพสินค้า
   category?: string;         // หมวดหมู่ (เช่น อะไหล่เครื่องยนต์, ระบบส่งกำลัง, ระบบเบรก, น้ำมันเครื่อง ฯลฯ)
   brand?: string;            // ยี่ห้อ (เช่น Honda, Yamaha, Castrol, Bando, DID, NGK, YSS ฯลฯ)
-  location?: string;         // ช่องจัดเก็บ/ชั้นวาง (เช่น RACK A-01, กล่อง 1, ชั้น 2)
-  systemQty: number;         // ยอดตามระบบ
-  actualQty: number;         // ยอดคงเหลือจริง
+  location?: string;         // ช่องจัดเก็บ/ชั้นวางในคลังหลังร้าน (เช่น RACK A-01, กล่อง 1, ชั้น 2)
+  frontLocation?: string;    // ช่องจัดเก็บ/ชั้นวางหน้าร้าน (เช่น ชั้นโชว์ A, เคาน์เตอร์, แผงแขวน 1)
+  frontQty?: number;         // สต็อกหน้าร้าน (Storefront stock)
+  warehouseQty?: number;     // สต็อกคลังหลังร้าน (Warehouse stock)
+  systemQty: number;         // ยอดรวมตามระบบ (frontQty + warehouseQty)
+  actualQty: number;         // ยอดรวมคงเหลือจริง
   status: StockStatus;       // สถานะตรวจนับ
-  minStock?: number;         // จุดเตือนสต็อกต่ำ
+  minStock?: number;         // จุดเตือนสต็อกรวมต่ำ
+  minFrontStock?: number;    // จุดเตือนเติมของหน้าร้านต่ำ
   description?: string;      // รุ่นรถที่รองรับ / รายละเอียด
   updatedAt: string;
 
@@ -31,6 +37,20 @@ export interface ProductItem {
 
 // Seamless alias for parts
 export type TireItem = ProductItem;
+
+export interface StockTransfer {
+  id: string;
+  productId: string;
+  productName: string;
+  brand?: string;
+  barcode?: string;
+  fromLocation: 'warehouse' | 'front';
+  toLocation: 'warehouse' | 'front';
+  quantity: number;
+  note?: string;
+  operator?: string;
+  timestamp: string;
+}
 
 export interface AuditSession {
   id: string;
@@ -70,6 +90,7 @@ export interface Transaction {
   unitPrice: number;
   totalPrice: number;
   customerOrSupplier: string;
+  locationTarget?: 'front' | 'warehouse'; // แหล่งตัดสต็อก (ขาย) หรือ แหล่งเก็บเข้า (ซื้อ)
   note?: string;
   createdAt: string;
   tireId?: string;

@@ -8,6 +8,7 @@ import {
   fetchAuditLogs,
   fetchTransactions,
   executeTransaction,
+  executeStockTransfer,
   updateTireActualQty,
   addNewTire,
   updateTireItem,
@@ -24,7 +25,7 @@ import {
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { AlertTriangle, CloudOff, RefreshCw, Download } from 'lucide-react';
-import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus } from './types';
+import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus, StockTransfer } from './types';
 import { INITIAL_PRODUCTS, INITIAL_TIRES } from './initialData';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
@@ -41,6 +42,7 @@ import { ProfileModal } from './components/ProfileModal';
 import { AppSheetSyncModal } from './components/AppSheetSyncModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { ImageMatchBackupModal } from './components/ImageMatchBackupModal';
+import { StockTransferModal } from './components/StockTransferModal';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -183,6 +185,8 @@ export default function App() {
   const [appSheetToast, setAppSheetToast] = useState<string | null>(null);
   const [productToDelete, setProductToDelete] = useState<ProductItem | null>(null);
   const [isImageMatchOpen, setIsImageMatchOpen] = useState(false);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferProduct, setTransferProduct] = useState<ProductItem | null>(null);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isFirestoreQuotaExhausted());
   const [isRetryingCloud, setIsRetryingCloud] = useState(false);
 
@@ -582,6 +586,53 @@ export default function App() {
     }
   };
 
+  // Stock Transfer between Warehouse & Storefront
+  const handleOpenTransferModal = (product: ProductItem) => {
+    setTransferProduct(product);
+    setIsTransferOpen(true);
+  };
+
+  const handleConfirmStockTransfer = async (
+    transfer: StockTransfer,
+    updatedProduct: ProductItem
+  ) => {
+    // 1. Optimistic update of products list + localStorage
+    persistTires((prev) =>
+      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+    );
+
+    // 2. Optimistic update of audit logs + localStorage
+    const logEntry: AuditLog = {
+      id: `log-txf-${Date.now()}`,
+      productId: updatedProduct.id,
+      productName: updatedProduct.name || updatedProduct.size || 'สินค้า',
+      brand: updatedProduct.brand,
+      diff: transfer.quantity,
+      previousQty: updatedProduct.actualQty,
+      newQty: updatedProduct.actualQty,
+      action:
+        transfer.fromLocation === 'warehouse'
+          ? 'โอนย้าย: คลัง ➡️ หน้าร้าน'
+          : 'โอนย้าย: หน้าร้าน ➡️ คลัง',
+      timestamp: transfer.timestamp,
+      note: transfer.note || `โอนย้ายจำนวน ${transfer.quantity} ${updatedProduct.unit || 'ชิ้น'}`,
+    };
+    persistLogs((prev) => [logEntry, ...prev]);
+
+    // 3. Persist to Firestore Cloud
+    try {
+      await executeStockTransfer(transfer, updatedProduct);
+    } catch (err) {
+      console.warn('executeStockTransfer error:', err);
+    }
+
+    setAppSheetToast(
+      transfer.fromLocation === 'warehouse'
+        ? `✅ เติมสต็อกหน้าร้าน (+${transfer.quantity} ${updatedProduct.unit || 'ชิ้น'}) เรียบร้อย`
+        : `✅ ส่งคืนคลังสินค้า (+${transfer.quantity} ${updatedProduct.unit || 'ชิ้น'}) เรียบร้อย`
+    );
+  };
+
   // Quick navigation helpers
   const handleJumpToAudit = (tire: TireItem) => {
     setCurrentTab('audit');
@@ -602,7 +653,8 @@ export default function App() {
     type: 'sale' | 'purchase',
     items: { tire: TireItem; quantity: number; unitPrice: number }[],
     customerOrSupplier: string,
-    note?: string
+    note?: string,
+    locationTarget: 'front' | 'warehouse' = 'front'
   ) => {
     // 1. Instant optimistic update of tire stocks in UI + localStorage
     persistTires((prevTires) => {
@@ -615,8 +667,43 @@ export default function App() {
             const nextActualQty = Math.max(0, t.actualQty + delta);
             const diff = nextActualQty - nextSystemQty;
             const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
+
+            // Calculate front and warehouse allocation
+            let currFront = t.frontQty ?? Math.min(t.actualQty, 2);
+            let currWarehouse = t.warehouseQty ?? Math.max(0, t.actualQty - currFront);
+            let nextFront = currFront;
+            let nextWarehouse = currWarehouse;
+
+            if (type === 'sale') {
+              if (locationTarget === 'front') {
+                if (nextFront >= item.quantity) {
+                  nextFront -= item.quantity;
+                } else {
+                  const rem = item.quantity - nextFront;
+                  nextFront = 0;
+                  nextWarehouse = Math.max(0, nextWarehouse - rem);
+                }
+              } else {
+                if (nextWarehouse >= item.quantity) {
+                  nextWarehouse -= item.quantity;
+                } else {
+                  const rem = item.quantity - nextWarehouse;
+                  nextWarehouse = 0;
+                  nextFront = Math.max(0, nextFront - rem);
+                }
+              }
+            } else {
+              if (locationTarget === 'front') {
+                nextFront += item.quantity;
+              } else {
+                nextWarehouse += item.quantity;
+              }
+            }
+
             return {
               ...t,
+              frontQty: nextFront,
+              warehouseQty: nextWarehouse,
               systemQty: nextSystemQty,
               actualQty: nextActualQty,
               status: nextStatus,
@@ -643,6 +730,7 @@ export default function App() {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.quantity * item.unitPrice,
+        locationTarget,
         customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
         note: note?.trim() || '',
         createdAt: new Date().toISOString(),
@@ -665,7 +753,10 @@ export default function App() {
         diff: delta,
         previousQty: item.tire.actualQty,
         newQty: Math.max(0, item.tire.actualQty + delta),
-        action: type === 'sale' ? `ตัดสต็อกขายออก (-${item.quantity} ${unitLabel})` : `รับเข้าคลัง (+${item.quantity} ${unitLabel})`,
+        action:
+          type === 'sale'
+            ? `ตัดสต็อกขาย (${locationTarget === 'front' ? 'หน้าร้าน' : 'คลัง'}) -${item.quantity} ${unitLabel}`
+            : `รับเข้าสต็อก (${locationTarget === 'front' ? 'หน้าร้าน' : 'คลัง'}) +${item.quantity} ${unitLabel}`,
         timestamp: new Date().toISOString(),
         note: `${type === 'sale' ? 'ขายให้: ' : 'รับจาก: '}${customerOrSupplier.trim() || 'หน้าร้าน'} ${note ? `(${note})` : ''}`,
       };
@@ -674,7 +765,7 @@ export default function App() {
 
     // 4. Background persist to Firestore safely
     try {
-      await executeTransaction(type, items, customerOrSupplier, note);
+      await executeTransaction(type, items, customerOrSupplier, note, locationTarget);
     } catch (err) {
       console.warn('executeTransaction Firestore sync warning:', err);
     }
@@ -786,6 +877,7 @@ export default function App() {
                 onOpenPO={handleOpenSinglePO}
                 onOpenBatchPO={handleOpenBatchPO}
                 onOpenImageMatch={() => setIsImageMatchOpen(true)}
+                onOpenTransferModal={handleOpenTransferModal}
               />
             )}
 
@@ -899,6 +991,16 @@ export default function App() {
         onClose={() => setIsImageMatchOpen(false)}
         products={tires}
         onUpdateProducts={handleBatchUpdateProducts}
+      />
+
+      <StockTransferModal
+        isOpen={isTransferOpen}
+        onClose={() => {
+          setIsTransferOpen(false);
+          setTransferProduct(null);
+        }}
+        product={transferProduct}
+        onConfirmTransfer={handleConfirmStockTransfer}
       />
     </div>
   );

@@ -18,9 +18,12 @@ import {
   Fuel,
   Filter,
   AlertTriangle,
+  Store,
+  Warehouse,
 } from 'lucide-react';
 import { ProductItem, AuditSession } from '../types';
 import { resolveProductImage } from '../utils/productImages';
+import { getProductStockBreakdown } from '../utils/stockUtils';
 
 interface QuickAuditTabProps {
   tires: ProductItem[];
@@ -450,6 +453,7 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
           </div>
         ) : (
           filteredProducts.map((product) => {
+            const breakdown = getProductStockBreakdown(product);
             const isMatch = product.actualQty === product.systemQty;
             const diff = product.actualQty - product.systemQty;
             const isChecked = product.status === 'checked';
@@ -507,7 +511,7 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                           </div>
                         )}
 
-                        {/* Subtitle: Prices & Location (ตัดการแสดงผลราคาต้นทุนออก) */}
+                        {/* Subtitle: Prices & Location */}
                         <div className="text-xs text-[#A0ABB5] mt-1 flex items-center gap-2 flex-wrap">
                           {product.sellingPrice > 0 && (
                             <span className="text-[#F6C90E] font-bold font-mono">
@@ -515,7 +519,15 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                             </span>
                           )}
                           <span>•</span>
-                          <span className="text-[#EEEEEE]">{product.location || 'RACK A-01'}</span>
+                          <span className="text-[#EEEEEE] flex items-center gap-1">
+                            <Store className="w-3 h-3 text-[#F6C90E]" />
+                            <span>{breakdown.frontLocation}: {breakdown.frontQty}</span>
+                          </span>
+                          <span>•</span>
+                          <span className="text-sky-300 flex items-center gap-1">
+                            <Warehouse className="w-3 h-3" />
+                            <span>{breakdown.warehouseLocation}: {breakdown.warehouseQty}</span>
+                          </span>
                           {product.description && (
                             <>
                               <span>•</span>

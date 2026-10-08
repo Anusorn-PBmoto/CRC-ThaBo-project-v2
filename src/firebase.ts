@@ -21,7 +21,7 @@ import {
   setLogLevel,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction } from './types';
+import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction, StockTransfer } from './types';
 import { INITIAL_TIRES } from './initialData';
 
 const app = initializeApp(firebaseConfig);
@@ -368,10 +368,14 @@ export function subscribeToTires(
             category: data.category || '',
             brand: data.brand || '',
             location: data.location || 'RACK A-01',
+            frontLocation: data.frontLocation || 'หน้าร้าน / เชลฟ์โชว์',
+            frontQty: typeof data.frontQty === 'number' ? data.frontQty : undefined,
+            warehouseQty: typeof data.warehouseQty === 'number' ? data.warehouseQty : undefined,
             actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
             systemQty: typeof data.systemQty === 'number' ? data.systemQty : 0,
             status: data.status || 'checked',
             minStock: typeof data.minStock === 'number' ? data.minStock : 2,
+            minFrontStock: typeof data.minFrontStock === 'number' ? data.minFrontStock : 2,
             description: data.description || '',
             updatedAt: data.updatedAt || new Date().toISOString(),
             // Compatibility aliases
@@ -758,7 +762,7 @@ export function subscribeToTransactions(
   };
 }
 
-// Execute Buy/Sell with Automatic Stock Cutting (OPTIMIZED: Atomic writeBatch, eliminates redundant audit_logs write)
+// Execute Buy/Sell with Automatic Stock Cutting (supports front/warehouse allocation)
 export async function executeTransaction(
   type: 'sale' | 'purchase',
   items: {
@@ -767,7 +771,8 @@ export async function executeTransaction(
     unitPrice: number;
   }[],
   customerOrSupplier: string,
-  note?: string
+  note?: string,
+  locationTarget: 'front' | 'warehouse' = 'front'
 ): Promise<void> {
   if (isFirestoreQuotaExhausted()) return;
 
@@ -784,6 +789,40 @@ export async function executeTransaction(
       const diff = nextActualQty - nextSystemQty;
       const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
+      // Distribute to frontQty vs warehouseQty
+      let currFront = item.tire.frontQty ?? Math.min(item.tire.actualQty, 2);
+      let currWarehouse = item.tire.warehouseQty ?? Math.max(0, item.tire.actualQty - currFront);
+
+      let nextFront = currFront;
+      let nextWarehouse = currWarehouse;
+
+      if (type === 'sale') {
+        if (locationTarget === 'front') {
+          if (nextFront >= item.quantity) {
+            nextFront -= item.quantity;
+          } else {
+            const remainder = item.quantity - nextFront;
+            nextFront = 0;
+            nextWarehouse = Math.max(0, nextWarehouse - remainder);
+          }
+        } else {
+          if (nextWarehouse >= item.quantity) {
+            nextWarehouse -= item.quantity;
+          } else {
+            const remainder = item.quantity - nextWarehouse;
+            nextWarehouse = 0;
+            nextFront = Math.max(0, nextFront - remainder);
+          }
+        }
+      } else {
+        // Purchase (Restock)
+        if (locationTarget === 'front') {
+          nextFront += item.quantity;
+        } else {
+          nextWarehouse += item.quantity;
+        }
+      }
+
       // 1. Update Product Stock in Batch
       const prodRef = doc(db, pathProducts, item.tire.id);
       batch.set(
@@ -791,6 +830,8 @@ export async function executeTransaction(
         {
           ...item.tire,
           id: item.tire.id,
+          frontQty: nextFront,
+          warehouseQty: nextWarehouse,
           systemQty: nextSystemQty,
           actualQty: nextActualQty,
           status: nextStatus,
@@ -811,6 +852,7 @@ export async function executeTransaction(
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice,
+        locationTarget,
         customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าทั่วไป' : 'ผู้แทนจำหน่าย'),
         note: note?.trim() || '',
         createdAt: new Date().toISOString(),
@@ -826,4 +868,46 @@ export async function executeTransaction(
     console.warn('executeTransaction Firestore batch error (handled safely):', error);
   }
 }
+
+// Execute stock transfer between warehouse and storefront
+export async function executeStockTransfer(
+  transfer: StockTransfer,
+  updatedProduct: ProductItem
+): Promise<void> {
+  if (isFirestoreQuotaExhausted()) return;
+
+  try {
+    const batch = writeBatch(db);
+
+    // 1. Update product with new frontQty and warehouseQty
+    const prodRef = doc(db, 'products', updatedProduct.id);
+    batch.set(prodRef, sanitizeForFirestore(updatedProduct), { merge: true });
+
+    // 2. Log transfer record into audit_logs
+    const logRef = doc(collection(db, 'audit_logs'));
+    batch.set(logRef, {
+      id: logRef.id,
+      productId: updatedProduct.id,
+      productName: updatedProduct.name || updatedProduct.size || 'สินค้า',
+      brand: updatedProduct.brand || '',
+      diff: transfer.quantity,
+      previousQty: updatedProduct.actualQty,
+      newQty: updatedProduct.actualQty,
+      action:
+        transfer.fromLocation === 'warehouse'
+          ? 'โอนย้าย: คลัง ➡️ หน้าร้าน'
+          : 'โอนย้าย: หน้าร้าน ➡️ คลัง',
+      timestamp: transfer.timestamp,
+      note: transfer.note || `โอนย้ายจำนวน ${transfer.quantity} ${updatedProduct.unit || 'ชิ้น'}`,
+    });
+
+    await batch.commit();
+  } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
+    console.warn('executeStockTransfer error:', error);
+  }
+}
+
 

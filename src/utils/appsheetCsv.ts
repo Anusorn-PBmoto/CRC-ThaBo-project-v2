@@ -1,4 +1,5 @@
 import { ProductItem } from '../types';
+import { getProductStockBreakdown } from './stockUtils';
 
 export const APPSHEET_CSV_FILENAME = 'crc-thano-project-v2.csv';
 export const LOCAL_STORAGE_KEY_AUTO_CSV = 'crc_thano_auto_csv_export';
@@ -30,6 +31,9 @@ export function generateAppSheetCsv(products: ProductItem[]): string {
     'Profit',
     'ActualQty',
     'SystemQty',
+    'FrontQty',
+    'WarehouseQty',
+    'FrontLocation',
     'Location',
     'Brand',
     'Category',
@@ -43,6 +47,7 @@ export function generateAppSheetCsv(products: ProductItem[]): string {
     const sell = item.sellingPrice || item.price || 0;
     const profit = sell - cost;
     const name = item.name || item.size || '';
+    const breakdown = getProductStockBreakdown(item);
 
     return [
       escapeCsvField(item.id),
@@ -54,7 +59,10 @@ export function generateAppSheetCsv(products: ProductItem[]): string {
       escapeCsvField(profit),
       escapeCsvField(item.actualQty ?? 0),
       escapeCsvField(item.systemQty ?? 0),
-      escapeCsvField(item.location || 'RACK A-01'),
+      escapeCsvField(breakdown.frontQty),
+      escapeCsvField(breakdown.warehouseQty),
+      escapeCsvField(breakdown.frontLocation),
+      escapeCsvField(breakdown.warehouseLocation),
       escapeCsvField(item.brand || ''),
       escapeCsvField(item.category || ''),
       escapeCsvField(item.imageUrl || ''),

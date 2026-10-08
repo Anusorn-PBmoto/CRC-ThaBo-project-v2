@@ -17,10 +17,13 @@ import {
   Sparkles,
   Layers,
   Banknote,
+  Store,
+  Warehouse,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem, Transaction } from '../types';
 import { resolveProductImage } from '../utils/productImages';
+import { getProductStockBreakdown } from '../utils/stockUtils';
 
 interface BuySellTabProps {
   tires: TireItem[];
@@ -29,7 +32,8 @@ interface BuySellTabProps {
     type: 'sale' | 'purchase',
     items: { tire: TireItem; quantity: number; unitPrice: number }[],
     customerOrSupplier: string,
-    note?: string
+    note?: string,
+    locationTarget?: 'front' | 'warehouse'
   ) => Promise<void>;
   onOpenScanner: () => void;
 }
@@ -47,6 +51,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   onOpenScanner,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
+  const [locationTarget, setLocationTarget] = useState<'front' | 'warehouse'>('front');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState('');
   const [note, setNote] = useState('');
@@ -183,7 +188,8 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           unitPrice: item.unitPrice,
         })),
         customer.trim() || (transactionType === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ซัพพลายเออร์ทั่วไป'),
-        note.trim() || undefined
+        note.trim() || undefined,
+        locationTarget
       );
 
       // Trigger celebratory confetti
@@ -230,7 +236,10 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         </button>
 
         <button
-          onClick={() => setTransactionType('purchase')}
+          onClick={() => {
+            setTransactionType('purchase');
+            setLocationTarget('warehouse');
+          }}
           className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
             transactionType === 'purchase'
               ? 'bg-[#252C33] text-[#EEEEEE] border border-[#475662] shadow-md'
@@ -240,6 +249,50 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           <PackagePlus className="w-4 h-4 text-[#F6C90E]" />
           <span>ซื้อเข้า / รับของ</span>
         </button>
+      </div>
+
+      {/* Target Location Toggle (หน้าร้าน vs คลังหลังร้าน) */}
+      <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-2.5 flex items-center justify-between text-xs">
+        <span className="text-[#A0ABB5] text-[11px] font-medium flex items-center gap-1">
+          {transactionType === 'sale' ? (
+            <>
+              <Store className="w-3.5 h-3.5 text-[#F6C90E]" />
+              <span>ตัดสต็อกจาก:</span>
+            </>
+          ) : (
+            <>
+              <Warehouse className="w-3.5 h-3.5 text-sky-400" />
+              <span>นำเข้าจัดเก็บที่:</span>
+            </>
+          )}
+        </span>
+
+        <div className="flex items-center gap-1 bg-[#20262D] p-0.5 rounded-xl border border-[#3A4750]">
+          <button
+            type="button"
+            onClick={() => setLocationTarget('front')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+              locationTarget === 'front'
+                ? 'bg-[#F6C90E] text-[#252C33] shadow-sm'
+                : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+            }`}
+          >
+            <Store className="w-3 h-3" />
+            <span>หน้าร้าน</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLocationTarget('warehouse')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+              locationTarget === 'warehouse'
+                ? 'bg-[#F6C90E] text-[#252C33] shadow-sm'
+                : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+            }`}
+          >
+            <Warehouse className="w-3 h-3" />
+            <span>คลังหลังร้าน</span>
+          </button>
+        </div>
       </div>
 
       {/* Success Notification Banner */}
@@ -471,6 +524,8 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         <div className="grid grid-cols-1 gap-2">
           {filteredTires.map((tire) => {
             const price = getSuggestedPrice(tire);
+            const breakdown = getProductStockBreakdown(tire);
+            const targetQty = locationTarget === 'front' ? breakdown.frontQty : breakdown.warehouseQty;
             const isZero = tire.actualQty === 0;
             const tireImg = resolveProductImage(tire);
 
@@ -504,8 +559,18 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-[#A0ABB5] mt-0.5">
-                      ช่อง: {tire.location || 'RACK A-01'} {tire.description ? `• ${tire.description}` : ''}
+                    <div className="text-[11px] text-[#A0ABB5] mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>
+                        {locationTarget === 'front' ? `ชั้นโชว์: ${breakdown.frontLocation}` : `ช่อง: ${breakdown.warehouseLocation}`}
+                      </span>
+                      <span>•</span>
+                      <span className="text-[#F6C90E]">
+                        หน้าร้าน: {breakdown.frontQty}
+                      </span>
+                      <span>•</span>
+                      <span className="text-sky-300">
+                        คลัง: {breakdown.warehouseQty}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -517,10 +582,12 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     </span>
                     <span
                       className={`text-[10px] font-semibold ${
-                        isZero ? 'text-rose-400' : 'text-[#EEEEEE]'
+                        targetQty === 0 ? 'text-amber-400' : isZero ? 'text-rose-400' : 'text-[#EEEEEE]'
                       }`}
                     >
-                      {isZero ? 'หมด (0)' : `เหลือ ${tire.actualQty} ${tire.unit || 'ชิ้น'}`}
+                      {locationTarget === 'front'
+                        ? `หน้าร้าน ${breakdown.frontQty} ${tire.unit || 'ชิ้น'}`
+                        : `ในคลัง ${breakdown.warehouseQty} ${tire.unit || 'ชิ้น'}`}
                     </span>
                   </div>
 
