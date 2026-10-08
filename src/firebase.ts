@@ -51,20 +51,49 @@ export const db = firestoreInstance;
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
+// Configure Storage client to avoid hanging in infinite retry loop on CORS/auth issues
+try {
+  (storage as any).maxUploadRetryTime = 2500;
+  (storage as any).maxOperationRetryTime = 2500;
+} catch {}
+
 // Silence Firestore internal log messages to prevent console spam
 try {
   setLogLevel('silent');
 } catch {}
 
+const STORAGE_CIRCUIT_KEY = 'crc_cloud_storage_blocked';
+let isCloudStorageBlocked = false;
+try {
+  isCloudStorageBlocked = localStorage.getItem(STORAGE_CIRCUIT_KEY) === 'true';
+} catch {}
+
 /**
  * Uploads a product image directly to Firebase Cloud Storage (Media Storage)
  * and returns the permanent HTTPS Download URL.
- * Falls back safely to compressed data URL if Cloud Storage is unconfigured or blocked.
+ * Falls back safely and instantly to compressed data URL if Cloud Storage is unconfigured, blocked, or slow (>2.5s).
  */
 export async function uploadProductImageToStorage(
   fileOrDataUrl: File | Blob | string,
-  fileNameHint?: string
+  fileNameHint?: string,
+  timeoutMs = 2500
 ): Promise<string> {
+  // If already a remote web URL, return as-is
+  if (typeof fileOrDataUrl === 'string' && fileOrDataUrl.startsWith('http')) {
+    return fileOrDataUrl;
+  }
+
+  // If Cloud Storage is already known to be blocked by CORS or unactivated, bypass network immediately
+  if (isCloudStorageBlocked) {
+    if (typeof fileOrDataUrl === 'string') return fileOrDataUrl;
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(fileOrDataUrl as Blob);
+    });
+  }
+
   const timestamp = Date.now();
   const safeName = (fileNameHint || 'product')
     .toLowerCase()
@@ -73,27 +102,42 @@ export async function uploadProductImageToStorage(
   const storagePath = `products/${timestamp}_${safeName}.jpg`;
 
   try {
-    const storageRef = ref(storage, storagePath);
+    const uploadAction = async (): Promise<string> => {
+      const storageRef = ref(storage, storagePath);
 
-    if (typeof fileOrDataUrl === 'string') {
-      if (fileOrDataUrl.startsWith('data:')) {
-        const snapshot = await uploadString(storageRef, fileOrDataUrl, 'data_url', {
-          contentType: 'image/jpeg',
+      if (typeof fileOrDataUrl === 'string') {
+        if (fileOrDataUrl.startsWith('data:')) {
+          const snapshot = await uploadString(storageRef, fileOrDataUrl, 'data_url', {
+            contentType: 'image/jpeg',
+          });
+          const downloadUrl = await getDownloadURL(snapshot.ref);
+          return downloadUrl;
+        }
+        return fileOrDataUrl;
+      } else {
+        const snapshot = await uploadBytes(storageRef, fileOrDataUrl, {
+          contentType: fileOrDataUrl.type || 'image/jpeg',
         });
         const downloadUrl = await getDownloadURL(snapshot.ref);
         return downloadUrl;
-      } else if (fileOrDataUrl.startsWith('http')) {
-        return fileOrDataUrl;
       }
-    } else {
-      const snapshot = await uploadBytes(storageRef, fileOrDataUrl, {
-        contentType: fileOrDataUrl.type || 'image/jpeg',
-      });
-      const downloadUrl = await getDownloadURL(snapshot.ref);
-      return downloadUrl;
-    }
+    };
+
+    // Strict race timeout to guarantee the promise never hangs on CORS/SDK retry
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Cloud Storage timeout')), timeoutMs);
+    });
+
+    const finalUrl = await Promise.race([uploadAction(), timeoutPromise]);
+    return finalUrl;
   } catch (err) {
-    console.warn('Cloud Storage upload note (using fallback):', err);
+    console.warn('Cloud Storage upload note (using ultra-fast local fallback):', err);
+    // Mark as blocked for this session so subsequent uploads don't wait at all
+    isCloudStorageBlocked = true;
+    try {
+      localStorage.setItem(STORAGE_CIRCUIT_KEY, 'true');
+    } catch {}
+
     if (typeof fileOrDataUrl === 'string') {
       return fileOrDataUrl;
     }

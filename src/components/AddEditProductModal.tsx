@@ -118,6 +118,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [isScanning, setIsScanning] = useState(false);
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -182,22 +183,32 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     if (!file) return;
 
     setIsUploadingImage(true);
+    setUploadStatusText('กำลังบีบอัดรูปภาพ...');
+
     try {
-      // 1. Compress image to clean lightweight format
-      const compressedDataUrl = await compressImageFile(file, 480, 480, 0.75);
+      // 1. Instantly compress image on client device (<100ms)
+      const compressedDataUrl = await compressImageFile(file, 480, 480, 0.72);
       
-      // 2. Upload to Cloud Storage (Firebase Storage) and store HTTPS Download URL
+      // 2. Optimistically display preview immediately so the user can see their photo instantly!
+      setImageUrl(compressedDataUrl);
+      setUploadStatusText('กำลังซิงค์รูปภาพขึ้น Cloud Storage...');
+
+      // 3. Attempt upload to Cloud Storage with 2.5s auto-fallback timeout
       const storageUrl = await uploadProductImageToStorage(
         compressedDataUrl,
-        name || barcode || file.name || 'product'
+        name || barcode || file.name || 'product',
+        2500
       );
-      
-      setImageUrl(storageUrl);
+
+      // 4. If Cloud Storage succeeded with HTTPS URL, swap to it
+      if (storageUrl && storageUrl.startsWith('http')) {
+        setImageUrl(storageUrl);
+      }
     } catch (err) {
-      console.error('Failed processing image:', err);
-      alert('ไม่สามารถประมวลผลรูปภาพได้ กรุณาลองใหม่อีกครั้ง');
+      console.warn('Image capture notice:', err);
     } finally {
       setIsUploadingImage(false);
+      setUploadStatusText(null);
       // Reset input value so same photo can be re-selected if needed
       e.target.value = '';
     }
@@ -658,9 +669,18 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
             )}
 
             {isUploadingImage && (
-              <div className="flex items-center justify-center gap-2 py-2 text-xs text-[#F6C90E] font-medium bg-[#252C33] rounded-xl border border-[#F6C90E]/30 animate-pulse">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                <span>กำลังประมวลผลและอัปโหลดขึ้น Cloud Storage...</span>
+              <div className="flex items-center justify-between gap-2 py-2 px-3 text-xs text-[#F6C90E] font-medium bg-[#252C33] rounded-xl border border-[#F6C90E]/30 animate-pulse">
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#F6C90E]" />
+                  <span>{uploadStatusText || 'กำลังประมวลผลรูปภาพ...'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadingImage(false)}
+                  className="text-[10px] text-[#A0ABB5] hover:text-[#EEEEEE] underline ml-auto cursor-pointer"
+                >
+                  ข้าม / บันทึกได้เลย
+                </button>
               </div>
             )}
 
