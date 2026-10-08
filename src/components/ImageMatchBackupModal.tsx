@@ -25,7 +25,9 @@ import {
   matchImageFileNameToProduct,
   MatchResult,
   resolveProductImage,
+  compressImage,
 } from '../utils/productImages';
+import { uploadProductImageToStorage } from '../firebase';
 
 interface ImageMatchBackupModalProps {
   isOpen: boolean;
@@ -150,7 +152,7 @@ export const ImageMatchBackupModal: React.FC<ImageMatchBackupModalProps> = ({
     showToast(`โหลดรูปภาพ ${newMatches.length} ไฟล์ พร้อมจับคู่ข้อมูลอัตโนมัติ`);
   };
 
-  // 3. Save uploaded & matched images into products
+  // 3. Save uploaded & matched images into products (Compressed & Stored on Cloud Storage)
   const handleSaveUploadedMatches = async () => {
     const validMatches = uploadedMatches.filter((m) => m.selectedProductId);
     if (validMatches.length === 0) {
@@ -160,14 +162,27 @@ export const ImageMatchBackupModal: React.FC<ImageMatchBackupModalProps> = ({
 
     setIsProcessing(true);
     try {
+      showToast(`กำลังบีบอัดรูปภาพและส่งขึ้น Cloud Storage (${validMatches.length} ไฟล์)...`);
       const matchMap = new Map<string, string>();
-      validMatches.forEach((m) => {
-        // Use dataUrl if ready, otherwise fallback to previewUrl
-        const imgUrl = m.dataUrl || m.previewUrl;
-        if (imgUrl) {
-          matchMap.set(m.selectedProductId, imgUrl);
+
+      // Process and compress each match, then upload to Cloud Storage for minimal bandwidth
+      for (const m of validMatches) {
+        try {
+          const rawSource = m.file || m.dataUrl || m.previewUrl;
+          // Compress to lightweight JPEG (<50KB)
+          const compressed = await compressImage(rawSource, 500, 500, 0.75);
+          // Upload to Firebase Storage and get permanent HTTPS URL
+          const targetProduct = products.find((p) => p.id === m.selectedProductId);
+          const safeName = targetProduct?.name || targetProduct?.barcode || m.fileName;
+          const storageUrl = await uploadProductImageToStorage(compressed, safeName);
+          matchMap.set(m.selectedProductId, storageUrl);
+        } catch (itemErr) {
+          console.warn('Could not compress or upload item image to storage, using fallback:', itemErr);
+          if (m.dataUrl) {
+            matchMap.set(m.selectedProductId, m.dataUrl);
+          }
         }
-      });
+      }
 
       let updatedCount = 0;
       const nextProducts = products.map((prod) => {
@@ -184,7 +199,7 @@ export const ImageMatchBackupModal: React.FC<ImageMatchBackupModalProps> = ({
 
       await onUpdateProducts(nextProducts);
       setUploadedMatches([]);
-      showToast(`บันทึกรูปภาพสำเร็จ ${updatedCount} รายการ และสำรองข้อมูลเรียบร้อย`);
+      showToast(`บันทึกรูปภาพสำเร็จ ${updatedCount} รายการ และอัปโหลดขึ้น Cloud Storage เรียบร้อย`);
     } catch (e) {
       console.error(e);
       showToast('เกิดข้อผิดพลาดในการบันทึกรูปภาพ');

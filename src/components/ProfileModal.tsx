@@ -93,10 +93,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="p-2.5 rounded-xl bg-[#252C33] border border-[#475662] space-y-1.5">
             <div className="flex items-center gap-1.5 text-[#F6C90E] font-bold text-xs">
               <Smartphone className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
-              <span>การใช้งานร่วมกับมือถือและแชร์ลิงก์</span>
+              <span>รองรับโหมดออฟไลน์ & ซิงค์อัตโนมัติ (Offline-First)</span>
             </div>
             <p className="text-[11px] text-[#EEEEEE] leading-relaxed">
-              ข้อมูลจะถูกบันทึกลงใน <span className="text-[#F6C90E] font-semibold">Firebase Firestore</span> อัตโนมัติ เมื่อเปิดใช้งานบนมือถือหรือแชร์ลิงก์ ข้อมูลจะอัปเดตตรงกันทุกอุปกรณ์แบบ Real-Time ทันที
+              คุณสามารถใช้งาน ตรวจนับสต็อก สแกนบาร์โค้ด และซื้อขายได้แม้ <span className="text-[#F6C90E] font-semibold">ไม่มีสัญญาณอินเทอร์เน็ต</span> ระบบจะบันทึกข้อมูลไว้ในเครื่องอย่างปลอดภัย และทำการซิงค์ขึ้น <span className="text-[#F6C90E] font-semibold">Firestore คลาวด์</span> ให้ทันทีเมื่อต่อเน็ต
             </p>
           </div>
 
@@ -127,10 +127,10 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 />
                 <span>
                   {isQuotaMode
-                    ? 'โหมดออฟไลน์ (โควต้า Cloud เต็มชั่วคราว)'
+                    ? 'โหมดออฟไลน์ (ทำงานในเครื่อง)'
                     : isOnline
                     ? 'ออนไลน์แบบเรียลไทม์'
-                    : 'ออฟไลน์'}
+                    : 'โหมดออฟไลน์ (จะซิงค์เมื่อต่อเน็ต)'}
                 </span>
               </span>
             </div>

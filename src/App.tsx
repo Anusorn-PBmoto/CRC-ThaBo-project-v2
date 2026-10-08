@@ -202,6 +202,33 @@ export default function App() {
     }
   };
 
+  // Listen to browser network online/offline events for seamless offline-first experience
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setAppSheetToast('🟢 เชื่อมต่ออินเทอร์เน็ตแล้ว: ระบบกำลังซิงค์ข้อมูลกับคลาวด์ Firestore อัตโนมัติ');
+      setTimeout(() => setAppSheetToast(null), 4000);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setAppSheetToast('📶 โหมดออฟไลน์: บันทึกข้อมูลลงในเครื่องได้ตามปกติ และจะซิงค์ขึ้นคลาวด์ทันทีเมื่อต่อเน็ต');
+      setTimeout(() => setAppSheetToast(null), 4500);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOnline(false);
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Initialize and subscribe (Streamlined: Single product listener, zero eager fetches)
   useEffect(() => {
     let unsubscribeTires: (() => void) | undefined;
@@ -432,12 +459,17 @@ export default function App() {
       return;
     }
     try {
-      const batch = writeBatch(db);
-      updatedList.forEach((item) => {
-        const ref = doc(db, 'products', item.id);
-        batch.set(ref, sanitizeForFirestore(item), { merge: true });
-      });
-      await batch.commit();
+      // Chunk batch updates into batches of 80 items to avoid Firestore batch size limit & timeouts
+      const CHUNK_SIZE = 80;
+      for (let i = 0; i < updatedList.length; i += CHUNK_SIZE) {
+        const chunk = updatedList.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((item) => {
+          const ref = doc(db, 'products', item.id);
+          batch.set(ref, sanitizeForFirestore(item), { merge: true });
+        });
+        await batch.commit();
+      }
       console.log('Successfully batch updated products to Firestore:', updatedList.length);
     } catch (err) {
       if (isQuotaError(err)) {
