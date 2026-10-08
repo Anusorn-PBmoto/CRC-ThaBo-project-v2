@@ -164,16 +164,16 @@ const QUOTA_STORAGE_KEY = 'crc_firestore_quota_exhausted_date';
 export function isQuotaExhaustedToday(): boolean {
   try {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(QUOTA_STORAGE_KEY) : null;
-    if (saved === 'false') return false;
-    return true; // Default to quota protected mode on this project
+    if (!saved || saved === 'false') return false;
+    return saved === new Date().toDateString();
   } catch {
-    return true;
+    return false;
   }
 }
 
 let quotaExhaustedMemory = isQuotaExhaustedToday();
 
-// Automatically disable network immediately if in quota protection mode
+// Only disable network if quota was genuinely exhausted today
 if (quotaExhaustedMemory) {
   try {
     disableNetwork(db).catch(() => {});
@@ -566,13 +566,10 @@ export async function updateTireActualQty(
   _tireName?: string,
   _brand?: string
 ): Promise<void> {
-  if (isFirestoreQuotaExhausted()) return;
-
   const diff = newActualQty - systemQty;
   const status: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
 
   try {
-    // 1 Write only - updates the product doc directly without generating redundant audit log docs per tick
     await setDoc(
       doc(db, 'products', tireId),
       {
@@ -602,19 +599,15 @@ export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Rec
 }
 
 // Add new product
-export async function addNewTire(item: Omit<ProductItem, 'id'>): Promise<string> {
-  const newDocRef = doc(collection(db, 'products'));
+export async function addNewTire(item: Omit<ProductItem, 'id'>, customId?: string): Promise<string> {
+  const newDocRef = customId ? doc(db, 'products', customId) : doc(collection(db, 'products'));
   const newId = newDocRef.id;
-
-  if (isFirestoreQuotaExhausted()) {
-    return newId;
-  }
 
   try {
     const payload = sanitizeForFirestore({
       ...item,
       id: newId,
-      updatedAt: new Date().toISOString(),
+      updatedAt: item.updatedAt || new Date().toISOString(),
     });
     await setDoc(newDocRef, payload);
     console.log('Successfully saved product to Firestore with ID:', newId);
@@ -631,14 +624,13 @@ export const addNewProduct = addNewTire;
 
 // Update product details
 export async function updateTireItem(tireId: string, updates: Partial<ProductItem>): Promise<void> {
-  if (isFirestoreQuotaExhausted()) return;
-
   try {
     const payload = sanitizeForFirestore({
       ...updates,
-      updatedAt: new Date().toISOString(),
+      updatedAt: updates.updatedAt || new Date().toISOString(),
     });
     await setDoc(doc(db, 'products', tireId), payload, { merge: true });
+    console.log('Successfully updated product in Firestore:', tireId);
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaExhausted();
@@ -651,10 +643,9 @@ export const updateProductItem = updateTireItem;
 
 // Delete product
 export async function deleteTireItem(tireId: string): Promise<void> {
-  if (isFirestoreQuotaExhausted()) return;
-
   try {
     await deleteDoc(doc(db, 'products', tireId));
+    console.log('Successfully deleted product from Firestore:', tireId);
   } catch (error) {
     if (isQuotaError(error)) {
       markQuotaExhausted();
@@ -774,8 +765,6 @@ export async function executeTransaction(
   note?: string,
   locationTarget: 'front' | 'warehouse' = 'front'
 ): Promise<void> {
-  if (isFirestoreQuotaExhausted()) return;
-
   const pathTx = 'transactions';
   const pathProducts = 'products';
 
@@ -874,8 +863,6 @@ export async function executeStockTransfer(
   transfer: StockTransfer,
   updatedProduct: ProductItem
 ): Promise<void> {
-  if (isFirestoreQuotaExhausted()) return;
-
   try {
     const batch = writeBatch(db);
 

@@ -64,18 +64,13 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const enrichedParsed = parsed.map((p: ProductItem) => {
+          return parsed.map((p: ProductItem) => {
             const recImg = resolveProductImage(p);
             if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
               return { ...p, imageUrl: recImg };
             }
             return p;
           });
-          const existingIds = new Set(enrichedParsed.map((p: ProductItem) => p.id));
-          const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
-          const merged = [...missingRecovered, ...enrichedParsed];
-          localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(merged));
-          return merged;
         }
       }
 
@@ -84,18 +79,13 @@ export default function App() {
       if (legacySaved) {
         const parsed = JSON.parse(legacySaved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const enrichedParsed = parsed.map((p: ProductItem) => {
+          return parsed.map((p: ProductItem) => {
             const recImg = resolveProductImage(p);
             if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
               return { ...p, imageUrl: recImg };
             }
             return p;
           });
-          const existingIds = new Set(enrichedParsed.map((p: ProductItem) => p.id));
-          const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
-          const merged = [...missingRecovered, ...enrichedParsed];
-          localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(merged));
-          return merged;
         }
       }
     } catch (e) {
@@ -229,16 +219,42 @@ export default function App() {
         unsubscribeTires = subscribeToTires(
           (remoteData) => {
             if (remoteData && remoteData.length > 0) {
-              const existingIds = new Set(remoteData.map((p) => p.id));
-              const missingRecovered = INITIAL_PRODUCTS.filter((p) => !existingIds.has(p.id));
-              const enriched = remoteData.map((p) => {
-                const recoveredImg = resolveProductImage(p);
-                if ((!p.imageUrl || p.imageUrl.trim() === '') && recoveredImg) {
-                  return { ...p, imageUrl: recoveredImg };
-                }
-                return p;
+              setTires((currentTires) => {
+                const localMap = new Map(currentTires.map((t) => [t.id, t]));
+                const remoteIds = new Set(remoteData.map((p) => p.id));
+
+                const mergedRemote = remoteData.map((remoteItem) => {
+                  const localItem = localMap.get(remoteItem.id);
+                  const recoveredImg = resolveProductImage(remoteItem);
+                  const effectiveImg =
+                    remoteItem.imageUrl && remoteItem.imageUrl.trim() !== ''
+                      ? remoteItem.imageUrl
+                      : localItem?.imageUrl && localItem.imageUrl.trim() !== ''
+                      ? localItem.imageUrl
+                      : recoveredImg || '';
+
+                  // Preserve local front/warehouse quantities if remote has not persisted them yet
+                  const hasLocalFront = localItem && typeof localItem.frontQty === 'number';
+                  const hasRemoteFront = typeof remoteItem.frontQty === 'number';
+
+                  return {
+                    ...remoteItem,
+                    imageUrl: effectiveImg,
+                    frontQty: hasRemoteFront ? remoteItem.frontQty : hasLocalFront ? localItem.frontQty : undefined,
+                    warehouseQty: hasRemoteFront ? remoteItem.warehouseQty : hasLocalFront ? localItem.warehouseQty : undefined,
+                    frontLocation: remoteItem.frontLocation || localItem?.frontLocation || 'หน้าร้าน / เชลฟ์โชว์',
+                  };
+                });
+
+                // Preserve any product that was created locally and not yet synced to remoteData
+                const locallyAdded = currentTires.filter((t) => !remoteIds.has(t.id));
+
+                const nextCombined = [...locallyAdded, ...mergedRemote];
+                try {
+                  localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(nextCombined));
+                } catch (e) {}
+                return nextCombined;
               });
-              persistTires([...missingRecovered, ...enriched]);
             } else {
               // Remote collection is empty: check if local storage has products that need preserving
               try {
@@ -375,20 +391,17 @@ export default function App() {
         persistTires(nextList);
         await updateTireItem(id, tireData);
       } else {
-        // Optimistic add with unique ID
-        const tempId = `crc-new-${Date.now()}`;
+        // Generate permanent Firestore document ID upfront
+        const newId = doc(collection(db, 'products')).id;
         const newTire: TireItem = {
           ...tireData,
-          id: tempId,
+          id: newId,
+          updatedAt: new Date().toISOString(),
         };
         nextList = [newTire, ...tires];
         persistTires(nextList);
 
-        const realId = await addNewTire(tireData);
-        if (realId && realId !== tempId) {
-          nextList = nextList.map((t) => (t.id === tempId ? { ...t, id: realId } : t));
-          persistTires(nextList);
-        }
+        await addNewTire(tireData, newId);
       }
 
       // Cache latest CSV data quietly in background without triggering browser download popup
