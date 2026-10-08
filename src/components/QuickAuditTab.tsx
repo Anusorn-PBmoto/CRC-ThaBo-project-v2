@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Store,
   Warehouse,
+  Mic,
 } from 'lucide-react';
 import { ProductItem, AuditSession } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -31,9 +32,12 @@ interface QuickAuditTabProps {
   onUpdateQty: (product: ProductItem, newQty: number) => void;
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
+  onOpenGeminiFlashScan?: () => void;
+  onOpenVoiceSearch?: () => void;
   onSaveAudit: () => void;
   onEditTire: (product: ProductItem) => void;
   onDeleteTire?: (product: ProductItem) => void;
+  incomingSearchQuery?: string;
 }
 
 type AuditStatusFilter = 'all' | 'pending' | 'checked' | 'discrepancy';
@@ -44,11 +48,14 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
   onUpdateQty,
   onOpenAddModal,
   onOpenScanner,
+  onOpenGeminiFlashScan,
+  onOpenVoiceSearch,
   onSaveAudit,
   onEditTire,
   onDeleteTire,
+  incomingSearchQuery,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
   const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
   const [statusFilter, setStatusFilter] = useState<AuditStatusFilter>('all');
   const [activeMenuTireId, setActiveMenuTireId] = useState<string | null>(null);
@@ -243,6 +250,29 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
               </button>
             )}
           </div>
+
+          {/* Gemini Flash AI Tire & Label Scanner Button */}
+          {onOpenGeminiFlashScan && (
+            <button
+              onClick={onOpenGeminiFlashScan}
+              title="สแกนแก้มยางด้วย Gemini Flash AI"
+              className="p-2 rounded-xl bg-gradient-to-tr from-amber-500/20 to-[#F6C90E]/30 border border-[#F6C90E]/60 text-[#F6C90E] hover:bg-[#F6C90E] hover:text-[#252C33] transition-all active:scale-95 shadow-sm flex-shrink-0 flex items-center gap-1 font-bold text-xs"
+            >
+              <Sparkles className="w-4 h-4 text-[#F6C90E]" />
+              <span className="hidden sm:inline">Flash</span>
+            </button>
+          )}
+
+          {/* Gemini Flash Voice Search Button */}
+          {onOpenVoiceSearch && (
+            <button
+              onClick={onOpenVoiceSearch}
+              title="ค้นหาด้วยเสียง (Flash AI)"
+              className="p-2 rounded-xl bg-gradient-to-tr from-amber-500/20 to-[#F6C90E]/30 border border-[#F6C90E]/60 text-[#F6C90E] hover:bg-[#F6C90E] hover:text-[#252C33] transition-all active:scale-95 shadow-sm flex-shrink-0"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Quick Scanner Action Button */}
           <button

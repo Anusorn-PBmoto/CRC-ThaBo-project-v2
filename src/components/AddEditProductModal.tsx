@@ -18,12 +18,14 @@ import {
   Store,
   Warehouse,
   ArrowRightLeft,
+  Loader2,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
 import { uploadProductImageToStorage } from '../firebase';
 import { getProductStockBreakdown } from '../utils/stockUtils';
+import { analyzeTireImageWithGeminiFlash } from '../utils/geminiClient';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -119,11 +121,38 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
+  const [isGeminiAnalyzing, setIsGeminiAnalyzing] = useState(false);
+  const [geminiNotice, setGeminiNotice] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Gemini Flash Auto-reader
+  const handleRunGeminiFlashOcr = async (imgToAnalyze?: string) => {
+    const targetImg = imgToAnalyze || imageUrl;
+    if (!targetImg) return;
+    setIsGeminiAnalyzing(true);
+    setGeminiNotice(null);
+    try {
+      const res = await analyzeTireImageWithGeminiFlash(targetImg);
+      if (res.data) {
+        if (res.data.suggestedName) setName(res.data.suggestedName);
+        if (res.data.brand) setBrand(res.data.brand);
+        if (res.data.barcode && !barcode) setBarcode(res.data.barcode);
+        if (res.data.unit) setUnit(res.data.unit);
+        if (res.data.category) setCategory(res.data.category);
+        setGeminiNotice(
+          `⚡ Gemini Flash อ่านข้อมูลสำเร็จ: ${res.data.suggestedName} (${Math.round(res.durationMs)} ms)`
+        );
+      }
+    } catch (err: any) {
+      setGeminiNotice(`การอ่านรูปภาพล้มเหลว: ${err?.message || ''}`);
+    } finally {
+      setIsGeminiAnalyzing(false);
+    }
+  };
 
   useEffect(() => {
     if (currentItem) {
@@ -602,40 +631,66 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
             {/* If Image exists, show preview */}
             {imageUrl ? (
-              <div className="relative rounded-2xl overflow-hidden border border-[#F6C90E]/40 bg-[#252C33] group">
-                <div className="w-full h-44 overflow-hidden flex items-center justify-center bg-[#20262D]">
-                  <img
-                    src={imageUrl}
-                    alt={name || 'สินค้า'}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                {/* Floating badge */}
-                <div className="absolute top-2 left-2 bg-[#252C33]/90 backdrop-blur-md text-[#F6C90E] border border-[#F6C90E]/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
-                  <Sparkles className="w-3 h-3 text-[#F6C90E]" />
-                  <span>ภาพถ่ายสินค้าจริง</span>
+              <div className="space-y-2">
+                <div className="relative rounded-2xl overflow-hidden border border-[#F6C90E]/40 bg-[#252C33] group">
+                  <div className="w-full h-44 overflow-hidden flex items-center justify-center bg-[#20262D]">
+                    <img
+                      src={imageUrl}
+                      alt={name || 'สินค้า'}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  {/* Floating badge */}
+                  <div className="absolute top-2 left-2 bg-[#252C33]/90 backdrop-blur-md text-[#F6C90E] border border-[#F6C90E]/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+                    <Sparkles className="w-3 h-3 text-[#F6C90E]" />
+                    <span>ภาพถ่ายสินค้าจริง</span>
+                  </div>
+
+                  {/* Gemini Flash OCR Action button */}
+                  <div className="absolute top-2 right-2">
+                    <button
+                      type="button"
+                      disabled={isGeminiAnalyzing}
+                      onClick={() => handleRunGeminiFlashOcr()}
+                      className="bg-gradient-to-r from-amber-500 to-[#F6C90E] hover:from-amber-600 hover:to-[#E5B800] text-[#252C33] text-[10px] font-bold px-2.5 py-1 rounded-xl shadow-lg flex items-center gap-1 active:scale-95 transition-all disabled:opacity-60"
+                    >
+                      {isGeminiAnalyzing ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      <span>{isGeminiAnalyzing ? 'กำลังอ่าน...' : '⚡ Gemini Flash อ่านสเปก'}</span>
+                    </button>
+                  </div>
+
+                  {/* Floating actions */}
+                  <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
+                    >
+                      <Camera className="w-3 h-3 text-[#F6C90E]" />
+                      <span>ถ่ายใหม่</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => galleryInputRef.current?.click()}
+                      className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
+                    >
+                      <Upload className="w-3 h-3 text-[#F6C90E]" />
+                      <span>เปลี่ยนรูป</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Floating actions */}
-                <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
-                  >
-                    <Camera className="w-3 h-3 text-[#F6C90E]" />
-                    <span>ถ่ายใหม่</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => galleryInputRef.current?.click()}
-                    className="bg-[#252C33]/90 hover:bg-[#252C33] text-[#EEEEEE] text-[11px] font-semibold px-2.5 py-1 rounded-xl border border-[#475662] flex items-center gap-1 backdrop-blur-md active:scale-95 transition-all"
-                  >
-                    <Upload className="w-3 h-3 text-[#F6C90E]" />
-                    <span>เปลี่ยนรูป</span>
-                  </button>
-                </div>
+                {geminiNotice && (
+                  <div className="p-2.5 bg-[#252C33] border border-[#F6C90E]/50 rounded-xl flex items-center gap-2 text-xs text-[#EEEEEE] animate-in fade-in">
+                    <Sparkles className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
+                    <span className="font-medium text-[11px]">{geminiNotice}</span>
+                  </div>
+                )}
               </div>
             ) : (
               /* If No Image, show photo take / upload buttons */

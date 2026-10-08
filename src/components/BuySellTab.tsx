@@ -19,6 +19,7 @@ import {
   Banknote,
   Store,
   Warehouse,
+  Mic,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem, Transaction } from '../types';
@@ -36,6 +37,9 @@ interface BuySellTabProps {
     locationTarget?: 'front' | 'warehouse'
   ) => Promise<void>;
   onOpenScanner: () => void;
+  onOpenInvoiceScan?: () => void;
+  onOpenVoiceSearch?: () => void;
+  incomingSearchQuery?: string;
 }
 
 interface CartItem {
@@ -49,13 +53,16 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   transactions,
   onExecuteTransaction,
   onOpenScanner,
+  onOpenInvoiceScan,
+  onOpenVoiceSearch,
+  incomingSearchQuery,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
   const [locationTarget, setLocationTarget] = useState<'front' | 'warehouse'>('front');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState('');
   const [note, setNote] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
   const [selectedBrand, setSelectedBrand] = useState('ทั้งหมด');
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -250,6 +257,36 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           <span>ซื้อเข้า / รับของ</span>
         </button>
       </div>
+
+      {/* AI Invoice Receiving Banner when on Purchase Intake mode */}
+      {transactionType === 'purchase' && onOpenInvoiceScan && (
+        <div className="bg-gradient-to-r from-amber-500/20 via-[#F6C90E]/20 to-amber-500/20 border border-[#F6C90E]/50 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#F6C90E] text-[#252C33] flex items-center justify-center font-bold flex-shrink-0 shadow-md">
+              <Receipt className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-[#EEEEEE] flex items-center gap-1.5">
+                <span>รับเข้าสินค้าด้วยภาพถ่ายบิล</span>
+                <span className="text-[9px] bg-[#F6C90E] text-[#252C33] px-1.5 py-0.2 rounded font-black">
+                  FLASH AI
+                </span>
+              </div>
+              <p className="text-[10px] text-[#A0ABB5] truncate">
+                ถ่ายภาพใบเสร็จ/บิลส่งของ AI จะสกัดรายการรับเข้าให้ทันที
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={onOpenInvoiceScan}
+            className="px-3 py-1.5 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs flex items-center gap-1 flex-shrink-0 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20"
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>ถ่ายบิล</span>
+          </button>
+        </div>
+      )}
 
       {/* Target Location Toggle (หน้าร้าน vs คลังหลังร้าน) */}
       <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-2.5 flex items-center justify-between text-xs">
@@ -494,6 +531,16 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           >
             <ScanBarcode className="w-4 h-4" />
           </button>
+
+          {onOpenVoiceSearch && (
+            <button
+              onClick={onOpenVoiceSearch}
+              title="ค้นหาด้วยเสียง (Flash AI)"
+              className="p-2 bg-gradient-to-r from-amber-500/20 to-[#F6C90E]/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 text-[#F6C90E] rounded-xl border border-[#F6C90E]/50 active:scale-95 transition-all shadow-sm"
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Brand chips */}

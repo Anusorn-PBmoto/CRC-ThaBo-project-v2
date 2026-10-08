@@ -1,11 +1,14 @@
 import React from 'react';
-import { QrCode, User, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, Image as ImageIcon, Sparkles, Receipt, Mic } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
   onOpenProfile: () => void;
   onOpenAppSheet?: () => void;
   onOpenImageMatch?: () => void;
+  onOpenGeminiFlashScan?: () => void;
+  onOpenInvoiceScan?: () => void;
+  onOpenVoiceSearch?: () => void;
   isOnline: boolean;
   isQuotaMode?: boolean;
   activeZone?: string;
@@ -17,52 +20,61 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfile,
   onOpenAppSheet,
   onOpenImageMatch,
+  onOpenGeminiFlashScan,
+  onOpenInvoiceScan,
+  onOpenVoiceSearch,
   isOnline,
   isQuotaMode = false,
-  activeZone = 'คลังอะไหล่มอเตอร์ไซค์',
-  subtitle = 'ระบบสต็อกอะไหล่ • CRC ThaBo',
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-b border-[#3A4750] px-4 py-3">
+    <header className="sticky top-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-b border-[#3A4750] px-4 py-2.5">
       <div className="max-w-md mx-auto flex items-center justify-between">
-        {/* Left: App Logo & Zone */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#F6C90E] to-[#DDA600] p-[1.5px] shadow-lg shadow-[#F6C90E]/20 flex-shrink-0">
-            <div className="w-full h-full bg-[#252C33] rounded-[10px] flex items-center justify-center text-[#F6C90E]">
-              <svg className="w-6 h-6 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="9" />
-                <circle cx="12" cy="12" r="3.5" />
-                <path d="M12 3v3" />
-                <path d="M12 18v3" />
-                <path d="M3 12h3" />
-                <path d="M18 12h3" />
-                <path d="m5.6 5.6 2.1 2.1" />
-                <path d="m16.3 16.3 2.1 2.1" />
-                <path d="m5.6 18.4 2.1-2.1" />
-                <path d="m16.3 7.7 2.1-2.1" />
-              </svg>
-            </div>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-bold tracking-wider text-[#F6C90E] leading-tight">
-                CRC THABO
-              </h1>
-              {activeZone && (
-                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#3A4750] border border-[#475662] text-[#EEEEEE]">
-                  {activeZone}
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-[#A0ABB5] leading-tight mt-0.5">
-              {subtitle}
-            </p>
-          </div>
+        {/* Brand Title */}
+        <div className="flex items-center">
+          <h1 className="text-lg font-black tracking-wider text-[#F6C90E] leading-none">
+            CRC THABO
+          </h1>
         </div>
 
         {/* Right Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Voice Search button (Flash AI) */}
+          {onOpenVoiceSearch && (
+            <button
+              onClick={onOpenVoiceSearch}
+              aria-label="ค้นหาด้วยเสียง"
+              title="ค้นหาด้วยเสียงภาษาไทย (Gemini Flash AI)"
+              className="w-9 h-9 rounded-lg bg-gradient-to-r from-amber-500/20 to-[#F6C90E]/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 text-[#F6C90E] border border-[#F6C90E]/50 flex items-center justify-center transition-all active:scale-95 shadow-sm"
+            >
+              <Mic className="w-4 h-4 text-[#F6C90E]" />
+            </button>
+          )}
+
+          {/* Invoice OCR Intake button */}
+          {onOpenInvoiceScan && (
+            <button
+              onClick={onOpenInvoiceScan}
+              aria-label="รับเข้าสินค้าด้วยภาพถ่ายบิล"
+              title="ถ่ายรูปบิลรับเข้าสินค้า (Gemini Flash OCR)"
+              className="w-9 h-9 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#F6C90E] border border-[#475662] flex items-center justify-center transition-all active:scale-95 shadow-sm"
+            >
+              <Receipt className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Gemini Flash Smart Tire Scanner button */}
+          {onOpenGeminiFlashScan && (
+            <button
+              onClick={onOpenGeminiFlashScan}
+              aria-label="Gemini Flash สแกนแก้มยางด้วย AI"
+              title="สแกนแก้มยาง/ฉลากด้วย Gemini Flash AI"
+              className="h-9 px-2 rounded-lg bg-gradient-to-r from-amber-500/20 via-[#F6C90E]/20 to-amber-500/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 text-[#F6C90E] border border-[#F6C90E]/50 flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#F6C90E]" />
+              <span className="text-[10px] font-bold tracking-tight">Flash</span>
+            </button>
+          )}
+
           {/* AppSheet CSV Sync button */}
           {onOpenAppSheet && (
             <button

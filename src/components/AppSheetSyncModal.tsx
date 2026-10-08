@@ -8,13 +8,17 @@ import {
   FolderDown,
   Info,
   CheckCircle2,
-  ExternalLink,
+  FileText,
+  AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import {
   APPSHEET_CSV_FILENAME,
+  APPSHEET_EXCEL_FILENAME,
   generateAppSheetCsv,
   downloadAppSheetCsv,
+  downloadAppSheetExcel,
   isAutoCsvExportEnabled,
   setAutoCsvExportEnabled,
 } from '../utils/appsheetCsv';
@@ -32,7 +36,9 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
 }) => {
   const [autoExport, setAutoExport] = useState(isAutoCsvExportEnabled);
   const [copied, setCopied] = useState(false);
-  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadCsvSuccess, setDownloadCsvSuccess] = useState(false);
+  const [downloadExcelSuccess, setDownloadExcelSuccess] = useState(false);
+  const [showTroubleshoot, setShowTroubleshoot] = useState(true);
 
   if (!isOpen) return null;
 
@@ -42,10 +48,16 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
     setAutoCsvExportEnabled(val);
   };
 
-  const handleDownload = () => {
+  const handleDownloadCsv = () => {
     downloadAppSheetCsv(products);
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 3500);
+    setDownloadCsvSuccess(true);
+    setTimeout(() => setDownloadCsvSuccess(false), 3500);
+  };
+
+  const handleDownloadExcel = () => {
+    downloadAppSheetExcel(products);
+    setDownloadExcelSuccess(true);
+    setTimeout(() => setDownloadExcelSuccess(false), 3500);
   };
 
   const handleCopy = async () => {
@@ -61,7 +73,7 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150 font-['Prompt',sans-serif]">
-      <div className="w-full max-w-md bg-[#111c2e] border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-lg bg-[#111c2e] border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3.5 bg-[#0d1626] border-b border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -70,13 +82,13 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
-                <span>ฐานข้อมูล AppSheet</span>
+                <span>ส่งออกฐานข้อมูลคลังสินค้า & AppSheet</span>
                 <span className="text-[10px] px-1.5 py-0.2 bg-emerald-950 text-emerald-300 border border-emerald-500/40 rounded font-mono font-bold">
-                  .CSV
+                  PRO
                 </span>
               </h3>
               <p className="text-[10px] text-slate-400 font-mono">
-                {APPSHEET_CSV_FILENAME}
+                {APPSHEET_CSV_FILENAME} • {products.length} รายการ
               </p>
             </div>
           </div>
@@ -95,75 +107,120 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>พร้อมส่งออกฐานข้อมูล AppSheet</span>
+                <span>พร้อมส่งออกข้อมูลแบบ Clean Format (ไม่แตกแถว)</span>
               </span>
               <span className="font-mono text-[11px] font-bold text-slate-200 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
                 {products.length} รายการ
               </span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              ไฟล์ <span className="font-mono text-emerald-300 font-semibold">{APPSHEET_CSV_FILENAME}</span> เข้ารหัส UTF-8 BOM รองรับภาษาไทย 100% ใช้งานร่วมกับ AppSheet และ Google Sheets
+              แก้ไขปัญหารูปภาพ Base64 ล้นเซลล์ และบาร์โค้ดเพี้ยนเป็นเลขยกกำลังเรียบร้อยแล้ว รองรับทั้ง <strong>Google Sheets</strong>, <strong>AppSheet</strong> และ <strong>Microsoft Excel</strong>
             </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-2">
+          {/* Action Buttons: 2 formats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Excel Button */}
             <button
-              onClick={handleDownload}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all text-sm"
+              onClick={handleDownloadExcel}
+              className="py-3 px-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 active:scale-95 text-white font-bold flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-900/30 transition-all text-xs border border-teal-400/30"
             >
-              <Download className="w-4 h-4" />
-              <span>{downloadSuccess ? 'ดาวน์โหลดเรียบร้อยแล้ว!' : 'กดดาวน์โหลดไฟล์ ' + APPSHEET_CSV_FILENAME}</span>
+              <div className="flex items-center gap-1.5">
+                <FileSpreadsheet className="w-4 h-4 text-teal-200" />
+                <span>{downloadExcelSuccess ? 'ดาวน์โหลดแล้ว!' : 'ดาวน์โหลด Excel (.XLSX)'}</span>
+              </div>
+              <span className="text-[10px] font-normal text-teal-100/80">
+                แนะนำสำหรับเปิดในเครื่อง (บาร์โค้ดไม่เพี้ยน)
+              </span>
             </button>
 
+            {/* CSV Button */}
             <button
-              onClick={handleCopy}
-              className="w-full py-2.5 px-3 rounded-xl bg-[#172740] hover:bg-[#1e3456] active:scale-95 text-slate-200 hover:text-white border border-slate-700 font-semibold flex items-center justify-center gap-1.5 transition-all text-xs"
+              onClick={handleDownloadCsv}
+              className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 font-bold flex flex-col items-center justify-center gap-1 shadow transition-all text-xs border border-slate-600"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
-              <span>{copied ? 'คัดลอกข้อมูล CSV ทั้งหมดแล้ว!' : 'คัดลอกข้อมูล CSV (สำหรับนำไปวางใน Google Sheets)'}</span>
+              <div className="flex items-center gap-1.5">
+                <Download className="w-4 h-4 text-cyan-400" />
+                <span>{downloadCsvSuccess ? 'ดาวน์โหลดแล้ว!' : 'ดาวน์โหลด CSV (.CSV)'}</span>
+              </div>
+              <span className="text-[10px] font-normal text-slate-400">
+                UTF-8 BOM สำหรับ AppSheet / Drive
+              </span>
             </button>
           </div>
 
-          {/* Where is the file saved? */}
-          <div className="p-3 rounded-xl bg-[#132238] border border-slate-700/80 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-amber-300 font-bold text-xs">
-              <FolderDown className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              <span>ไฟล์ที่ดาวน์โหลดจะไปอยู่ที่ไหน?</span>
-            </div>
-            <ul className="space-y-1 text-[11px] text-slate-300 leading-relaxed list-disc list-inside">
-              <li>
-                <strong>บนมือถือ iPhone/iPad:</strong> ไฟล์จะอยู่ในแอป <strong>"ไฟล์" (Files) &gt; "รายการดาวน์โหลด" (Downloads)</strong>
-              </li>
-              <li>
-                <strong>บนมือถือ Android:</strong> ไฟล์จะอยู่ในแอป <strong>"Files" หรือ "ตัวจัดการไฟล์" &gt; โฟลเดอร์ Download</strong>
-              </li>
-              <li>
-                <strong>บนคอมพิวเตอร์:</strong> ไฟล์จะอยู่ในโฟลเดอร์ <strong>Downloads</strong>
-              </li>
-            </ul>
+          <button
+            onClick={handleCopy}
+            className="w-full py-2.5 px-3 rounded-xl bg-[#172740] hover:bg-[#1e3456] active:scale-95 text-slate-200 hover:text-white border border-slate-700 font-semibold flex items-center justify-center gap-1.5 transition-all text-xs"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+            <span>{copied ? 'คัดลอกข้อมูล CSV ทั้งหมดแล้ว!' : 'คัดลอกข้อความ CSV (เพื่อนำไป Paste ลง Google Sheets โดยตรง)'}</span>
+          </button>
+
+          {/* Explanation Box: Why was the file messy previously? */}
+          <div className="p-3 rounded-xl bg-[#132238] border border-cyan-500/30 space-y-2">
+            <button
+              onClick={() => setShowTroubleshoot(!showTroubleshoot)}
+              className="w-full flex items-center justify-between text-left font-bold text-cyan-300 text-xs hover:text-cyan-200"
+            >
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                <span>สาเหตุที่ตารางเคยดูไม่เรียบร้อย และวิธีแก้ไข</span>
+              </span>
+              <span className="text-[10px] font-mono text-cyan-400">
+                {showTroubleshoot ? 'ซ่อน ▲' : 'ดูรายละเอียด ▼'}
+              </span>
+            </button>
+
+            {showTroubleshoot && (
+              <div className="space-y-2 text-[11px] text-slate-300 leading-relaxed pt-1 border-t border-slate-800">
+                <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800 space-y-1">
+                  <div className="font-semibold text-amber-300 flex items-center gap-1">
+                    <span>1. คอลัมน์ ImageURL ขนาดยาวเกินขีดจำกัด (เกิน 32,767 ตัวอักษร)</span>
+                  </div>
+                  <p className="text-slate-400">
+                    เมื่อถ่ายภาพจากกล้อง ข้อมูลภาพจะถูกเก็บเป็นรหัส <strong>Base64</strong> ซึ่งยาวหลายแสนตัวอักษร เมื่อเปิดใน Excel เซลล์จะล้นเกินขีดจำกัด ทำให้แถวแตกตัวอักษร และคอลัมน์ถัดไป (Status, วันที่) ถูกดันกระเด็นไปคนละช่อง
+                  </p>
+                  <p className="text-emerald-300 font-medium">
+                    ✅ <strong>แก้ไขแล้ว:</strong> ระบบแปลง ImageURL เป็นชื่อไฟล์ Clean Path (เช่น <code className="text-xs bg-black/40 px-1 py-0.5 rounded">products/xxxx.jpg</code>) ทำให้ตารางเรียงสวย ไม่แตกแถว และพร้อมนำไปใช้ใน AppSheet ได้ทันที
+                  </p>
+                </div>
+
+                <div className="p-2 rounded-lg bg-slate-900/70 border border-slate-800 space-y-1">
+                  <div className="font-semibold text-amber-300 flex items-center gap-1">
+                    <span>2. บาร์โค้ด 13 หลัก กลายเป็นเลขยกกำลัง (เช่น 8.85E+12)</span>
+                  </div>
+                  <p className="text-slate-400">
+                    เกิดจาก Excel มองรหัสบาร์โค้ดเป็นตัวเลขยาว จึงย่อเป็นรูปสัญกรณ์วิทยาศาสตร์
+                  </p>
+                  <p className="text-emerald-300 font-medium">
+                    ✅ <strong>แก้ไขแล้ว:</strong> แนะนำให้กดปุ่ม <strong>"ดาวน์โหลด Excel (.XLSX)"</strong> ซึ่งล็อกประเภทเซลล์เป็น Text ให้โดยตรง หรือหากนำเข้า Google Sheets ให้ไปที่เมนู <em>ไฟล์ &gt; นำเข้า (Import)</em> และเอาติ๊กถูกที่ <em>"แปลงข้อความเป็นตัวเลข วันที่ และสูตร"</em> ออก
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Guide for AppSheet */}
+          {/* Guide for AppSheet & Google Sheets */}
           <div className="p-3 rounded-xl bg-[#0e1726] border border-slate-800 space-y-2">
             <div className="flex items-center gap-1.5 text-slate-200 font-bold text-xs">
               <Info className="w-3.5 h-3.5 text-cyan-400" />
-              <span>วิธีนำไฟล์ไปใช้ใน AppSheet</span>
+              <span>วิธีนำไปใช้งานต่อใน Google Sheets & AppSheet</span>
             </div>
             <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-slate-400 leading-relaxed">
               <li>
-                นำไฟล์ <span className="font-mono text-emerald-300">{APPSHEET_CSV_FILENAME}</span> อัปโหลดขึ้นไปยัง <strong>Google Drive</strong> ของคุณ
+                <strong>เปิดใน Google Sheets:</strong> เปิด Google Sheets เปล่า &gt; ไปที่ <strong>ไฟล์ (File) &gt; นำเข้า (Import) &gt; อัปโหลด</strong> &gt; เลือกไฟล์ <span className="font-mono text-emerald-300">{APPSHEET_CSV_FILENAME}</span>
               </li>
               <li>
-                ใน AppSheet กดสร้างแอปใหม่ (<strong>Create &gt; App &gt; Start with existing data</strong>)
+                <strong>สำหรับ AppSheet:</strong> วางไฟล์นี้ในโฟลเดอร์ Google Drive ของคุณ จากนั้นเชื่อมโยง Source ใน AppSheet ได้ทันที
               </li>
               <li>
-                เลือก <strong>Google Sheets / Google Drive</strong> แล้วเลือกไฟล์ <span className="font-mono text-emerald-300">{APPSHEET_CSV_FILENAME}</span> นี้ได้ทันที
+                <strong>สำหรับเปิดดูใน Excel บนคอมพิวเตอร์:</strong> แนะนำกดดาวน์โหลดปุ่มสีเขียว <strong>.XLSX</strong> จะเปิดได้สวยงามทันทีโดยไม่ต้องตั้งค่าใดๆ เพิ่มเติม
               </li>
             </ol>
           </div>
 
-          {/* Optional Auto Export Toggle (Default off) */}
+          {/* Optional Auto Export Toggle */}
           <div className="pt-1">
             <label className="flex items-start gap-2.5 p-2.5 rounded-xl bg-[#0d1626] border border-slate-800/80 cursor-pointer hover:border-slate-700 transition-colors">
               <input
@@ -177,7 +234,7 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
                   ดาวน์โหลดไฟล์ .csv อัตโนมัติทุกครั้งที่กดบันทึกสินค้า
                 </span>
                 <span className="text-[10px] text-slate-500 block">
-                  (ปิดไว้เพื่อไม่ให้มือถือเด้งหน้าต่างดาวน์โหลดขึ้นมาทุกครั้ง)
+                  (ปิดไว้เพื่อไม่ให้หน้าต่างดาวน์โหลดเด้งรบกวนบ่อยๆ)
                 </span>
               </div>
             </label>
@@ -185,10 +242,13 @@ export const AppSheetSyncModal: React.FC<AppSheetSyncModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-[#0d1626] border-t border-slate-800">
+        <div className="p-3 bg-[#0d1626] border-t border-slate-800 flex items-center justify-between gap-3">
+          <span className="text-[11px] text-slate-400">
+            ระบบ CRC THABO V2.0
+          </span>
           <button
             onClick={onClose}
-            className="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors"
+            className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition-colors"
           >
             ปิดหน้าต่าง
           </button>

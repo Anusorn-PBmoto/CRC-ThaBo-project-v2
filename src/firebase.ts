@@ -962,4 +962,43 @@ export async function executeStockTransfer(
   }
 }
 
+// Execute batch stock transfers between warehouse and storefront
+export async function executeBatchStockTransfer(
+  transfers: { transfer: StockTransfer; updatedProduct: ProductItem }[]
+): Promise<void> {
+  if (transfers.length === 0) return;
+  try {
+    const batch = writeBatch(db);
+
+    for (const item of transfers) {
+      const prodRef = doc(db, 'products', item.updatedProduct.id);
+      batch.set(prodRef, sanitizeForFirestore(item.updatedProduct), { merge: true });
+
+      const logRef = doc(collection(db, 'audit_logs'));
+      batch.set(logRef, {
+        id: logRef.id,
+        productId: item.updatedProduct.id,
+        productName: item.updatedProduct.name || item.updatedProduct.size || 'สินค้า',
+        brand: item.updatedProduct.brand || '',
+        diff: item.transfer.quantity,
+        previousQty: item.updatedProduct.actualQty,
+        newQty: item.updatedProduct.actualQty,
+        action:
+          item.transfer.fromLocation === 'warehouse'
+            ? 'โอนย้าย: คลัง ➡️ หน้าร้าน'
+            : 'โอนย้าย: หน้าร้าน ➡️ คลัง',
+        timestamp: item.transfer.timestamp,
+        note: item.transfer.note || `โอนย้ายจำนวน ${item.transfer.quantity} ${item.updatedProduct.unit || 'ชิ้น'}`,
+      });
+    }
+
+    await batch.commit();
+  } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
+    console.warn('executeBatchStockTransfer error:', error);
+  }
+}
+
 

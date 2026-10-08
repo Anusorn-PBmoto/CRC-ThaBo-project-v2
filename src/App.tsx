@@ -9,6 +9,7 @@ import {
   fetchTransactions,
   executeTransaction,
   executeStockTransfer,
+  executeBatchStockTransfer,
   updateTireActualQty,
   addNewTire,
   updateTireItem,
@@ -43,6 +44,10 @@ import { AppSheetSyncModal } from './components/AppSheetSyncModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { ImageMatchBackupModal } from './components/ImageMatchBackupModal';
 import { StockTransferModal } from './components/StockTransferModal';
+import { BatchStockTransferModal } from './components/BatchStockTransferModal';
+import { GeminiFlashScanModal } from './components/GeminiFlashScanModal';
+import { GeminiInvoiceIntakeModal } from './components/GeminiInvoiceIntakeModal';
+import { GeminiVoiceSearchModal } from './components/GeminiVoiceSearchModal';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -167,6 +172,10 @@ export default function App() {
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingTire, setEditingTire] = useState<TireItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isGeminiScanOpen, setIsGeminiScanOpen] = useState(false);
+  const [isInvoiceScanOpen, setIsInvoiceScanOpen] = useState(false);
+  const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
+  const [activeVoiceQuery, setActiveVoiceQuery] = useState('');
   const [isPOOpen, setIsPOOpen] = useState(false);
   const [poItems, setPoItems] = useState<TireItem[]>([]);
   const [isAuditConfirmOpen, setIsAuditConfirmOpen] = useState(false);
@@ -177,6 +186,8 @@ export default function App() {
   const [isImageMatchOpen, setIsImageMatchOpen] = useState(false);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferProduct, setTransferProduct] = useState<ProductItem | null>(null);
+  const [isBatchTransferOpen, setIsBatchTransferOpen] = useState(false);
+  const [batchTransferItems, setBatchTransferItems] = useState<ProductItem[]>([]);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isFirestoreQuotaExhausted());
   const [isRetryingCloud, setIsRetryingCloud] = useState(false);
 
@@ -678,6 +689,59 @@ export default function App() {
     );
   };
 
+  // Batch Stock Transfer
+  const handleOpenBatchTransfer = (selectedProducts: ProductItem[]) => {
+    setBatchTransferItems(selectedProducts);
+    setIsBatchTransferOpen(true);
+  };
+
+  const handleConfirmBatchStockTransfer = async (
+    batchList: { transfer: StockTransfer; updatedProduct: ProductItem }[]
+  ) => {
+    if (batchList.length === 0) return;
+
+    // 1. Optimistic update of tires state + localStorage
+    const updatedMap = new Map(
+      batchList.map((item) => [item.updatedProduct.id, item.updatedProduct])
+    );
+    persistTires((prev) => prev.map((p) => updatedMap.get(p.id) || p));
+
+    // 2. Optimistic update of audit logs + localStorage
+    const newLogs: AuditLog[] = batchList.map((item) => ({
+      id: `log-txf-${Date.now()}-${item.updatedProduct.id}`,
+      productId: item.updatedProduct.id,
+      productName: item.updatedProduct.name || item.updatedProduct.size || 'สินค้า',
+      brand: item.updatedProduct.brand,
+      diff: item.transfer.quantity,
+      previousQty: item.updatedProduct.actualQty,
+      newQty: item.updatedProduct.actualQty,
+      action:
+        item.transfer.fromLocation === 'warehouse'
+          ? 'โอนย้าย: คลัง ➡️ หน้าร้าน'
+          : 'โอนย้าย: หน้าร้าน ➡️ คลัง',
+      timestamp: item.transfer.timestamp,
+      note:
+        item.transfer.note ||
+        `โอนย้ายจำนวน ${item.transfer.quantity} ${item.updatedProduct.unit || 'ชิ้น'}`,
+    }));
+    persistLogs((prev) => [...newLogs, ...prev]);
+
+    // 3. Persist to Firebase Cloud
+    try {
+      await executeBatchStockTransfer(batchList);
+    } catch (err) {
+      console.warn('executeBatchStockTransfer error:', err);
+    }
+
+    const totalQty = batchList.reduce(
+      (acc, curr) => acc + curr.transfer.quantity,
+      0
+    );
+    setAppSheetToast(
+      `✅ โอนย้ายสต็อกสำเร็จ ${batchList.length} รายการ (รวม ${totalQty} ชิ้น) เรียบร้อย`
+    );
+  };
+
   // Quick navigation helpers
   const handleJumpToAudit = (tire: TireItem) => {
     setCurrentTab('audit');
@@ -839,6 +903,9 @@ export default function App() {
       {/* Top Header */}
       <Header
         onOpenScanner={() => setIsScannerOpen(true)}
+        onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
+        onOpenInvoiceScan={() => setIsInvoiceScanOpen(true)}
+        onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
         isOnline={isOnline && !isQuotaExceeded}
@@ -896,6 +963,9 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
+                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
+                incomingSearchQuery={activeVoiceQuery}
                 onSaveAudit={() => setIsAuditConfirmOpen(true)}
                 onEditTire={(tire) => {
                   setEditingTire(tire);
@@ -913,6 +983,8 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
+                incomingSearchQuery={activeVoiceQuery}
                 onEditTire={(tire) => {
                   setEditingTire(tire);
                   setIsAddEditOpen(true);
@@ -923,6 +995,7 @@ export default function App() {
                 onOpenBatchPO={handleOpenBatchPO}
                 onOpenImageMatch={() => setIsImageMatchOpen(true)}
                 onOpenTransferModal={handleOpenTransferModal}
+                onOpenBatchTransfer={handleOpenBatchTransfer}
               />
             )}
 
@@ -932,6 +1005,9 @@ export default function App() {
                 transactions={transactions}
                 onExecuteTransaction={handleExecuteTransaction}
                 onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenInvoiceScan={() => setIsInvoiceScanOpen(true)}
+                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
+                incomingSearchQuery={activeVoiceQuery}
               />
             )}
 
@@ -984,6 +1060,62 @@ export default function App() {
         onOpenAddModalWithBarcode={() => {
           setEditingTire(null);
           setIsAddEditOpen(true);
+        }}
+        onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
+      />
+
+      <GeminiFlashScanModal
+        isOpen={isGeminiScanOpen}
+        onClose={() => setIsGeminiScanOpen(false)}
+        catalog={tires}
+        onSelectProduct={(product) => {
+          if (currentTab !== 'buysell') {
+            setCurrentTab('audit');
+          }
+        }}
+        onOpenAddWithAiData={(aiData) => {
+          setEditingTire(aiData as any);
+          setIsAddEditOpen(true);
+        }}
+      />
+
+      <GeminiInvoiceIntakeModal
+        isOpen={isInvoiceScanOpen}
+        onClose={() => setIsInvoiceScanOpen(false)}
+        catalog={tires}
+        onConfirmBatchIntake={async (supplier, invoiceNo, items, note) => {
+          await handleExecuteTransaction(
+            'purchase',
+            items.map((i) => ({
+              tire: i.product,
+              quantity: i.quantity,
+              unitPrice: i.costPrice,
+            })),
+            supplier,
+            `${invoiceNo ? `เลขที่บิล: ${invoiceNo} • ` : ''}${note || ''}`,
+            'warehouse'
+          );
+        }}
+        onOpenAddNewProduct={(prefilled) => {
+          setEditingTire(prefilled as any);
+          setIsAddEditOpen(true);
+        }}
+      />
+
+      <GeminiVoiceSearchModal
+        isOpen={isVoiceSearchOpen}
+        onClose={() => setIsVoiceSearchOpen(false)}
+        catalog={tires}
+        onSelectProduct={(product) => {
+          if (currentTab === 'buysell') {
+            // Selected item will be visible
+          } else {
+            setCurrentTab('inventory');
+          }
+          setActiveVoiceQuery(product.name || product.size || '');
+        }}
+        onApplySearchText={(keyword) => {
+          setActiveVoiceQuery(keyword);
         }}
       />
 
@@ -1046,6 +1178,16 @@ export default function App() {
         }}
         product={transferProduct}
         onConfirmTransfer={handleConfirmStockTransfer}
+      />
+
+      <BatchStockTransferModal
+        isOpen={isBatchTransferOpen}
+        onClose={() => {
+          setIsBatchTransferOpen(false);
+          setBatchTransferItems([]);
+        }}
+        items={batchTransferItems}
+        onConfirmBatchTransfer={handleConfirmBatchStockTransfer}
       />
     </div>
   );

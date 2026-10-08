@@ -17,6 +17,7 @@ import {
   Warehouse,
   ArrowRightLeft,
   AlertTriangle,
+  Mic,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -26,6 +27,7 @@ interface InventoryListTabProps {
   tires: ProductItem[];
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
+  onOpenVoiceSearch?: () => void;
   onEditTire: (product: ProductItem) => void;
   onDeleteTire: (product: ProductItem) => void;
   onJumpToAudit: (product: ProductItem) => void;
@@ -33,6 +35,8 @@ interface InventoryListTabProps {
   onOpenBatchPO: (selectedProducts: ProductItem[]) => void;
   onOpenImageMatch?: () => void;
   onOpenTransferModal?: (product: ProductItem) => void;
+  onOpenBatchTransfer?: (selectedProducts: ProductItem[]) => void;
+  incomingSearchQuery?: string;
 }
 
 type StockFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
@@ -42,6 +46,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   tires,
   onOpenAddModal,
   onOpenScanner,
+  onOpenVoiceSearch,
   onEditTire,
   onDeleteTire,
   onJumpToAudit,
@@ -49,8 +54,10 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   onOpenBatchPO,
   onOpenImageMatch,
   onOpenTransferModal,
+  onOpenBatchTransfer,
+  incomingSearchQuery,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
   const [locationFilter, setLocationFilter] = useState<LocationFilter>('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
@@ -177,6 +184,15 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
     }
   };
 
+  const handleBatchTransferAction = () => {
+    const selected = tires.filter((t) => selectedIds.has(t.id));
+    if (selected.length > 0 && onOpenBatchTransfer) {
+      onOpenBatchTransfer(selected);
+      setSelectedIds(new Set());
+      setIsMultiSelectMode(false);
+    }
+  };
+
   return (
     <div className="pb-32 pt-2 px-3 space-y-3 max-w-md mx-auto font-['Prompt',sans-serif]">
       {/* 1. Header Catalog Overview Card */}
@@ -194,14 +210,19 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
 
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
+              onClick={() => {
+                if (isMultiSelectMode) {
+                  setSelectedIds(new Set());
+                }
+                setIsMultiSelectMode(!isMultiSelectMode);
+              }}
               className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
                 isMultiSelectMode
                   ? 'bg-[#F6C90E] text-[#252C33] border-[#F6C90E] font-bold'
                   : 'bg-[#252C33] text-[#EEEEEE] border-[#475662] hover:bg-[#43525D]'
               }`}
             >
-              {isMultiSelectMode ? 'ยกเลิกเลือก' : 'เลือกสั่งซื้อ'}
+              {isMultiSelectMode ? 'ยกเลิก' : 'เลือกหลายรายการ'}
             </button>
 
             <button
@@ -323,17 +344,48 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
       )}
 
       {/* Multi-select action banner */}
-      {isMultiSelectMode && selectedIds.size > 0 && (
-        <div className="bg-[#F6C90E]/15 border border-[#F6C90E]/50 rounded-xl p-2.5 flex items-center justify-between text-xs animate-in fade-in">
-          <span className="text-[#F6C90E] font-medium">
-            เลือกไว้ <strong>{selectedIds.size}</strong> รายการ
-          </span>
-          <button
-            onClick={handleBatchPOAction}
-            className="px-3 py-1 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-lg text-xs flex items-center gap-1 active:scale-95"
-          >
-            <span>สร้างใบสั่งซื้อ (PO)</span>
-          </button>
+      {isMultiSelectMode && (
+        <div className="bg-[#2C353E] border border-[#F6C90E]/50 rounded-2xl p-3 space-y-2 text-xs animate-in fade-in shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#F6C90E] animate-pulse" />
+              <span className="text-[#EEEEEE] font-medium">
+                เลือกไว้ <strong className="text-[#F6C90E] text-sm">{selectedIds.size}</strong> / {filteredProducts.length} รายการ
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="px-2 py-1 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] text-[11px] font-semibold transition-all active:scale-95"
+              >
+                {selectedIds.size === filteredProducts.length ? 'ล้างทั้งหมด' : 'เลือกทั้งหมด'}
+              </button>
+            </div>
+          </div>
+
+          {selectedIds.size > 0 && (
+            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#3A4750]">
+              {onOpenBatchTransfer && (
+                <button
+                  type="button"
+                  onClick={handleBatchTransferAction}
+                  className="py-2 px-3 bg-gradient-to-r from-[#F6C90E] to-amber-500 hover:from-[#E5B800] hover:to-amber-600 text-[#252C33] font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#F6C90E]/20 active:scale-95 transition-all"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+                  <span>โอนย้ายสต็อก ({selectedIds.size})</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleBatchPOAction}
+                className="py-2 px-3 bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-[#475662] active:scale-95 transition-all"
+              >
+                <Package className="w-3.5 h-3.5 text-[#F6C90E]" />
+                <span>สั่งซื้อ PO ({selectedIds.size})</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -356,6 +408,16 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         >
           <ScanBarcode className="w-4 h-4" />
         </button>
+
+        {onOpenVoiceSearch && (
+          <button
+            onClick={onOpenVoiceSearch}
+            title="ค้นหาด้วยเสียง (Flash AI)"
+            className="p-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-[#F6C90E]/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 border border-[#F6C90E]/50 text-[#F6C90E] transition-all active:scale-95 shadow-sm"
+          >
+            <Mic className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* 3. Stock Status Filters */}

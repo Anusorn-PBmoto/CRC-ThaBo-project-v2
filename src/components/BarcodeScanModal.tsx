@@ -11,6 +11,7 @@ import {
   Link,
   Plus,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { TireItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
@@ -23,6 +24,7 @@ interface BarcodeScanModalProps {
   onSelectTire: (tire: TireItem) => void;
   onBindBarcode?: (tireId: string, barcode: string) => void;
   onOpenAddModalWithBarcode?: (barcode: string) => void;
+  onOpenGeminiFlashScan?: () => void;
 }
 
 // Known Thai motorcycle tire EAN-13 barcodes dictionary
@@ -48,6 +50,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   onSelectTire,
   onBindBarcode,
   onOpenAddModalWithBarcode,
+  onOpenGeminiFlashScan,
 }) => {
   const [activeMode, setActiveMode] = useState<'camera' | 'manual'>('camera');
   const [manualCode, setManualCode] = useState('');
@@ -219,6 +222,27 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
             <span>⚡ ค้นหา / พิมพ์รหัส</span>
           </button>
         </div>
+
+        {/* Gemini Flash Smart Tire & Label AI Scanner option */}
+        {onOpenGeminiFlashScan && (
+          <div className="px-3 pt-2 pb-1 bg-[#252C33] border-b border-[#475662]">
+            <button
+              onClick={() => {
+                onClose();
+                onOpenGeminiFlashScan();
+              }}
+              className="w-full py-2 px-3 bg-gradient-to-r from-amber-500/20 via-[#F6C90E]/20 to-amber-500/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 border border-[#F6C90E]/50 text-[#F6C90E] rounded-xl text-xs font-bold flex items-center justify-between active:scale-95 transition-all shadow-sm group"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#F6C90E] group-hover:scale-110 transition-transform" />
+                <span>สแกนแก้มยางด้วย Gemini Flash AI</span>
+              </div>
+              <span className="text-[9px] bg-[#F6C90E] text-[#252C33] px-2 py-0.5 rounded-md font-black tracking-wider">
+                ⚡ FLASH
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Main Content */}
         <div className="p-3.5 space-y-3 overflow-y-auto flex-1 text-xs">
