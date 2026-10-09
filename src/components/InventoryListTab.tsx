@@ -122,7 +122,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
       }
 
       return matchSearch && matchCategory && matchStock;
-    });
+    }).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
   }, [tires, searchQuery, selectedCategory, stockFilter, locationFilter]);
 
   // Overall catalog summary stats

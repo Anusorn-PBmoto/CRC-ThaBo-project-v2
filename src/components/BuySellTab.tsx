@@ -171,20 +171,22 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
 
   // Filter tires for selection list
   const filteredTires = useMemo(() => {
-    return tires.filter((t) => {
-      const q = searchQuery.toLowerCase();
-      const matchQuery =
-        (t.name || t.size || '').toLowerCase().includes(q) ||
-        (t.brand || '').toLowerCase().includes(q) ||
-        (t.barcode || '').toLowerCase().includes(q) ||
-        (t.location || '').toLowerCase().includes(q) ||
-        (t.category || '').toLowerCase().includes(q);
+    return tires
+      .filter((t) => {
+        const q = searchQuery.toLowerCase();
+        const matchQuery =
+          (t.name || t.size || '').toLowerCase().includes(q) ||
+          (t.brand || '').toLowerCase().includes(q) ||
+          (t.barcode || '').toLowerCase().includes(q) ||
+          (t.location || '').toLowerCase().includes(q) ||
+          (t.category || '').toLowerCase().includes(q);
 
-      const matchBrand =
-        selectedBrand === 'ทั้งหมด' || (t.brand || '').toLowerCase() === selectedBrand.toLowerCase();
+        const matchBrand =
+          selectedBrand === 'ทั้งหมด' || (t.brand || '').toLowerCase() === selectedBrand.toLowerCase();
 
-      return matchQuery && matchBrand;
-    });
+        return matchQuery && matchBrand;
+      })
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
   }, [tires, searchQuery, selectedBrand]);
 
   // Execute transaction (Stock cut or Purchase intake)

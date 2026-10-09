@@ -108,64 +108,68 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   // Filter products: Brand, Search, and Storefront Availability
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return tires.filter((p) => {
-      const breakdown = getProductStockBreakdown(p);
+    return tires
+      .filter((p) => {
+        const breakdown = getProductStockBreakdown(p);
 
-      // Only show items available in storefront if in 'available_only' mode
-      if (stockScope === 'available_only' && breakdown.frontQty <= 0) {
-        return false;
-      }
+        // Only show items available in storefront if in 'available_only' mode
+        if (stockScope === 'available_only' && breakdown.frontQty <= 0) {
+          return false;
+        }
 
-      const matchBrand =
-        selectedBrand === 'ทั้งหมด' ||
-        (p.brand || '').toLowerCase() === selectedBrand.toLowerCase();
+        const matchBrand =
+          selectedBrand === 'ทั้งหมด' ||
+          (p.brand || '').toLowerCase() === selectedBrand.toLowerCase();
 
-      const matchQuery =
-        !q ||
-        (p.name || p.size || '').toLowerCase().includes(q) ||
-        (p.barcode || '').toLowerCase().includes(q) ||
-        (p.brand || '').toLowerCase().includes(q) ||
-        (p.category || '').toLowerCase().includes(q) ||
-        (p.frontLocation || '').toLowerCase().includes(q);
+        const matchQuery =
+          !q ||
+          (p.name || p.size || '').toLowerCase().includes(q) ||
+          (p.barcode || '').toLowerCase().includes(q) ||
+          (p.brand || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q) ||
+          (p.frontLocation || '').toLowerCase().includes(q);
 
-      return matchBrand && matchQuery;
-    });
+        return matchBrand && matchQuery;
+      })
+      .sort((a, b) => {
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      });
   }, [tires, searchQuery, selectedBrand, stockScope]);
 
   // Handle click on product card: sell in subUnit directly if available, otherwise main unit
   const handleProductCardClick = (product: ProductItem) => {
     const breakdown = getProductStockBreakdown(product);
-    const maxStock = breakdown.frontQty;
+    const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
+    const sellAsSub = Boolean(product.subUnit && rate > 1);
+    const maxStock = sellAsSub ? breakdown.frontQty * rate : breakdown.frontQty;
 
     if (maxStock <= 0) {
       showToast(
-        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น)`,
+        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${sellAsSub ? breakdown.warehouseQty * rate : breakdown.warehouseQty} ${sellAsSub ? product.subUnit : (product.unit || 'ชิ้น')})`,
         'warn'
       );
       return;
     }
 
-    // Sell in subUnit directly if defined, otherwise main unit
-    const sellAsSub = Boolean(product.subUnit && product.conversionRate && product.conversionRate > 1);
     addToCart(product, sellAsSub);
   };
 
   // Add product to cart with strict storefront stock limit
   const addToCart = (product: ProductItem, isSubUnit: boolean = false) => {
     const breakdown = getProductStockBreakdown(product);
-    const maxStock = breakdown.frontQty; // Main units in stock
+    const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
+    const maxStock = isSubUnit ? breakdown.frontQty * rate : breakdown.frontQty; // Max units/subUnits in stock
 
     setCart((prev) => {
       const existing = prev.find((item) => item.tire.id === product.id && item.isSubUnit === isSubUnit);
       const basePrice = product.sellingPrice || product.price || 0;
-      const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
       
-      // If selling by subUnit, price per subUnit can be estimated as basePrice / rate or kept
+      // If selling by subUnit, price per subUnit is basePrice / rate
       const unitPrice = isSubUnit ? Math.round((basePrice / rate) * 100) / 100 : basePrice;
 
       if (existing) {
-        if (!isSubUnit && existing.quantity >= maxStock) {
-          showToast(`⚠️ สต็อกหน้าร้านมีเพียง ${maxStock} ${product.unit || 'ชิ้น'}`, 'warn');
+        if (existing.quantity >= maxStock) {
+          showToast(`⚠️ สต็อกหน้าร้านมีเพียง ${maxStock} ${isSubUnit ? product.subUnit : (product.unit || 'ชิ้น')}`, 'warn');
           return prev;
         }
 
@@ -185,7 +189,8 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   // Listen to external barcode scans
   useEffect(() => {
     if (scannedProduct) {
-      addToCart(scannedProduct);
+      const sellAsSub = Boolean(scannedProduct.subUnit && scannedProduct.conversionRate && scannedProduct.conversionRate > 1);
+      addToCart(scannedProduct, sellAsSub);
       if (onClearScannedProduct) onClearScannedProduct();
     }
   }, [scannedProduct]);
@@ -197,8 +202,8 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
         .map((item) => {
           if (item.tire.id === productId && item.isSubUnit === isSubUnit) {
             const newQty = item.quantity + delta;
-            if (!isSubUnit && newQty > item.maxStorefrontStock) {
-              showToast(`⚠️ สต็อกหน้าร้านมีจำกัดเพียง ${item.maxStorefrontStock} ชิ้น`, 'warn');
+            if (newQty > item.maxStorefrontStock) {
+              showToast(`⚠️ สต็อกหน้าร้านมีจำกัดเพียง ${item.maxStorefrontStock} ${isSubUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น')}`, 'warn');
               return item;
             }
             return newQty > 0 ? { ...item, quantity: newQty } : null;
@@ -480,11 +485,14 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
             {filteredProducts.map((tire) => {
               const breakdown = getProductStockBreakdown(tire);
               const price = tire.sellingPrice || tire.price || 0;
-              const frontStock = breakdown.frontQty;
-              const hasFrontStock = frontStock > 0;
+              const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
+              const hasSub = Boolean(tire.subUnit && rate > 1);
+              const unitPrice = hasSub ? Math.round((price / rate) * 100) / 100 : price;
+              const displayStock = hasSub ? breakdown.frontQty * rate : breakdown.frontQty;
+              const hasFrontStock = displayStock > 0;
               const tireImg = resolveProductImage(tire);
-              const inCartItem = cart.find((c) => c.tire.id === tire.id);
-              const isCartAtMax = inCartItem ? inCartItem.quantity >= frontStock : false;
+              const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
+              const isCartAtMax = inCartItem ? inCartItem.quantity >= displayStock : false;
 
               return (
                 <div
@@ -541,7 +549,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
 
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black font-mono text-amber-300">
-                        ฿{price.toLocaleString()}
+                        ฿{unitPrice.toLocaleString()}
                       </span>
                       <span
                         className={`text-[9px] font-bold px-1 rounded ${
@@ -550,7 +558,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                             : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         }`}
                       >
-                        {!hasFrontStock ? 'หมด' : `หน้าร้าน: ${frontStock}`}
+                        {!hasFrontStock ? 'หมด' : `หน้าร้าน: ${displayStock}`}
                       </span>
                     </div>
                   </div>

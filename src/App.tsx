@@ -864,7 +864,7 @@ export default function App() {
   // Execute Buy / Sell transaction with auto stock deduction
   const handleExecuteTransaction = async (
     type: 'sale' | 'purchase',
-    items: { tire: TireItem; quantity: number; unitPrice: number }[],
+    items: { tire: TireItem; quantity: number; unitPrice: number; isSubUnit?: boolean }[],
     customerOrSupplier: string,
     note?: string,
     locationTarget: 'front' | 'warehouse' = 'front'
@@ -873,7 +873,12 @@ export default function App() {
     persistTires((prevTires) => {
       let updated = [...prevTires];
       for (const item of items) {
-        const delta = type === 'sale' ? -item.quantity : item.quantity;
+        const rate = item.tire.conversionRate && item.tire.conversionRate > 1 ? item.tire.conversionRate : 1;
+        const effectiveQty = (type === 'sale' && item.isSubUnit && rate > 1)
+          ? item.quantity / rate
+          : item.quantity;
+        const delta = type === 'sale' ? -effectiveQty : effectiveQty;
+
         updated = updated.map((t) => {
           if (t.id === item.tire.id) {
             const nextSystemQty = Math.max(0, t.systemQty + delta);
@@ -889,27 +894,27 @@ export default function App() {
 
             if (type === 'sale') {
               if (locationTarget === 'front') {
-                if (nextFront >= item.quantity) {
-                  nextFront -= item.quantity;
+                if (nextFront >= effectiveQty) {
+                  nextFront -= effectiveQty;
                 } else {
-                  const rem = item.quantity - nextFront;
+                  const rem = effectiveQty - nextFront;
                   nextFront = 0;
                   nextWarehouse = Math.max(0, nextWarehouse - rem);
                 }
               } else {
-                if (nextWarehouse >= item.quantity) {
-                  nextWarehouse -= item.quantity;
+                if (nextWarehouse >= effectiveQty) {
+                  nextWarehouse -= effectiveQty;
                 } else {
-                  const rem = item.quantity - nextWarehouse;
+                  const rem = effectiveQty - nextWarehouse;
                   nextWarehouse = 0;
                   nextFront = Math.max(0, nextFront - rem);
                 }
               }
             } else {
               if (locationTarget === 'front') {
-                nextFront += item.quantity;
+                nextFront += effectiveQty;
               } else {
-                nextWarehouse += item.quantity;
+                nextWarehouse += effectiveQty;
               }
             }
 
