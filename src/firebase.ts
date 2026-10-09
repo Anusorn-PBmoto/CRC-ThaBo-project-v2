@@ -433,7 +433,7 @@ export function subscribeToTires(
             category: data.category || '',
             brand: data.brand || '',
             location: data.location || 'RACK A-01',
-            frontLocation: data.frontLocation || 'หน้าร้าน / เชลฟ์โชว์',
+            frontLocation: data.frontLocation || 'หน้าร้าน',
             frontQty: typeof data.frontQty === 'number' ? data.frontQty : undefined,
             warehouseQty: typeof data.warehouseQty === 'number' ? data.warehouseQty : undefined,
             actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,

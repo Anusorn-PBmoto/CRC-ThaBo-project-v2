@@ -50,7 +50,7 @@ export function getProductStockBreakdown(product: ProductItem): {
     totalQty: front + warehouse,
     isFrontLow,
     canRestockFromWarehouse,
-    frontLocation: product.frontLocation || 'หน้าร้าน / เชลฟ์โชว์',
+    frontLocation: product.frontLocation || 'หน้าร้าน',
     warehouseLocation: product.location || 'RACK A-01',
   };
 }

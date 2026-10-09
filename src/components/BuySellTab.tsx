@@ -608,7 +608,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     </div>
                     <div className="text-[11px] text-[#A0ABB5] mt-0.5 flex items-center gap-2 flex-wrap">
                       <span>
-                        {locationTarget === 'front' ? `ชั้นโชว์: ${breakdown.frontLocation}` : `ช่อง: ${breakdown.warehouseLocation}`}
+                        {locationTarget === 'front' ? `หน้าร้าน: ${breakdown.frontLocation}` : `ช่อง: ${breakdown.warehouseLocation}`}
                       </span>
                       <span>•</span>
                       <span className="text-[#F6C90E]">

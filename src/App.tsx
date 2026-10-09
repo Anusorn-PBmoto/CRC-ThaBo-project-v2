@@ -280,7 +280,7 @@ export default function App() {
                     imageUrl: effectiveImg,
                     frontQty: hasRemoteFront ? remoteItem.frontQty : hasLocalFront ? localItem.frontQty : undefined,
                     warehouseQty: hasRemoteFront ? remoteItem.warehouseQty : hasLocalFront ? localItem.warehouseQty : undefined,
-                    frontLocation: remoteItem.frontLocation || localItem?.frontLocation || 'หน้าร้าน / เชลฟ์โชว์',
+                    frontLocation: remoteItem.frontLocation || localItem?.frontLocation || 'หน้าร้าน',
                   };
                 });
 

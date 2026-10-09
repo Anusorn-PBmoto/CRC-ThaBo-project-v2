@@ -274,38 +274,33 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </button>
         </div>
 
-        {/* Storefront vs Warehouse Ratio Split Bar */}
-        <div className="bg-[#252C33] rounded-xl p-2.5 border border-[#475662]/75 space-y-1.5">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="flex items-center gap-1 text-[#F6C90E] font-bold">
-              <Store className="w-3.5 h-3.5" />
-              <span>หน้าร้าน: {storefrontTotalPieces.toLocaleString()} ชิ้น</span>
+        {/* Simple & Clean Stock Breakdown (Storefront vs Warehouse vs Total) */}
+        <div className="bg-[#252C33] rounded-xl p-2.5 border border-[#475662]/75 grid grid-cols-3 gap-2 text-center">
+          <div className="bg-[#1F252B] rounded-lg p-1.5 border border-[#475662]/50">
+            <span className="text-[10px] text-[#A0ABB5] block flex items-center justify-center gap-1">
+              <Store className="w-3 h-3 text-[#F6C90E]" /> หน้าร้าน
             </span>
-            <span className="flex items-center gap-1 text-sky-300 font-bold">
-              <Warehouse className="w-3.5 h-3.5" />
-              <span>คลังหลังร้าน: {warehouseTotalPieces.toLocaleString()} ชิ้น</span>
+            <span className="text-xs font-bold text-[#F6C90E] font-mono">
+              {storefrontTotalPieces.toLocaleString()} <span className="text-[9px] font-normal text-[#A0ABB5]">ชิ้น</span>
             </span>
           </div>
-          {/* Dual Progress Bar */}
-          <div className="w-full h-2.5 bg-[#1F252B] rounded-full overflow-hidden flex shadow-inner">
-            <div
-              className="bg-[#F6C90E] h-full transition-all duration-300"
-              style={{
-                width: `${availablePieces > 0 ? (storefrontTotalPieces / availablePieces) * 100 : 0}%`,
-              }}
-              title={`หน้าร้าน ${storefrontTotalPieces} ชิ้น`}
-            />
-            <div
-              className="bg-sky-400 h-full transition-all duration-300"
-              style={{
-                width: `${availablePieces > 0 ? (warehouseTotalPieces / availablePieces) * 100 : 0}%`,
-              }}
-              title={`คลังหลังร้าน ${warehouseTotalPieces} ชิ้น`}
-            />
+
+          <div className="bg-[#1F252B] rounded-lg p-1.5 border border-[#475662]/50">
+            <span className="text-[10px] text-[#A0ABB5] block flex items-center justify-center gap-1">
+              <Warehouse className="w-3 h-3 text-sky-400" /> คลังหลังร้าน
+            </span>
+            <span className="text-xs font-bold text-sky-300 font-mono">
+              {warehouseTotalPieces.toLocaleString()} <span className="text-[9px] font-normal text-[#A0ABB5]">ชิ้น</span>
+            </span>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-[#A0ABB5]">
-            <span>สัดส่วน: หน้าร้าน <strong className="text-[#F6C90E] font-mono">{availablePieces > 0 ? Math.round((storefrontTotalPieces / availablePieces) * 100) : 0}%</strong> / คลัง <strong className="text-sky-300 font-mono">{availablePieces > 0 ? Math.round((warehouseTotalPieces / availablePieces) * 100) : 0}%</strong></span>
-            <span>รวม <strong className="text-[#EEEEEE] font-mono">{availablePieces.toLocaleString()} ชิ้น</strong></span>
+
+          <div className="bg-[#1F252B] rounded-lg p-1.5 border border-[#475662]/50">
+            <span className="text-[10px] text-[#A0ABB5] block flex items-center justify-center gap-1">
+              <Package className="w-3 h-3 text-[#EEEEEE]" /> รวมทั้งหมด
+            </span>
+            <span className="text-xs font-bold text-[#EEEEEE] font-mono">
+              {availablePieces.toLocaleString()} <span className="text-[9px] font-normal text-[#A0ABB5]">ชิ้น</span>
+            </span>
           </div>
         </div>
 
@@ -661,29 +656,19 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                             )}
                           </div>
 
-                          {/* Dual Location Stock Breakdown & Ratio Bar */}
-                          <div className="bg-[#252C33]/90 border border-[#475662]/70 rounded-xl p-2 mt-2 space-y-1.5 text-[11px]">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="flex items-center gap-1 text-[#F6C90E] font-medium" title={`ที่ชั้น: ${breakdown.frontLocation}`}>
-                                <Store className="w-3 h-3 text-[#F6C90E]" />
-                                <span>หน้าร้าน: <strong className="font-mono">{breakdown.frontQty}</strong> {unitLabel}</span>
-                              </span>
-                              <span className="flex items-center gap-1 text-sky-300 font-medium" title={`ช่อง: ${breakdown.warehouseLocation}`}>
-                                <Warehouse className="w-3 h-3 text-sky-400" />
-                                <span>คลัง: <strong className="font-mono text-[#EEEEEE]">{breakdown.warehouseQty}</strong> {unitLabel}</span>
-                              </span>
-                            </div>
-                            {/* Mini Ratio Bar */}
-                            <div className="w-full h-1.5 bg-[#1F252B] rounded-full overflow-hidden flex">
-                              <div
-                                className="bg-[#F6C90E] h-full"
-                                style={{ width: `${breakdown.totalQty > 0 ? (breakdown.frontQty / breakdown.totalQty) * 100 : 0}%` }}
-                              />
-                              <div
-                                className="bg-sky-400 h-full"
-                                style={{ width: `${breakdown.totalQty > 0 ? (breakdown.warehouseQty / breakdown.totalQty) * 100 : 0}%` }}
-                              />
-                            </div>
+                          {/* Clean Stock Breakdown per item (Storefront | Warehouse | Total) */}
+                          <div className="bg-[#252C33]/90 border border-[#475662]/70 rounded-xl px-2.5 py-1.5 mt-2 flex items-center justify-between text-[11px] font-mono">
+                            <span className="text-[#F6C90E]">
+                              หน้าร้าน: <strong>{breakdown.frontQty}</strong>
+                            </span>
+                            <span className="text-[#A0ABB5]">|</span>
+                            <span className="text-sky-300">
+                              คลัง: <strong>{breakdown.warehouseQty}</strong>
+                            </span>
+                            <span className="text-[#A0ABB5]">|</span>
+                            <span className="text-[#EEEEEE]">
+                              รวม: <strong>{breakdown.totalQty}</strong> {unitLabel}
+                            </span>
                           </div>
                         </div>
                       </div>

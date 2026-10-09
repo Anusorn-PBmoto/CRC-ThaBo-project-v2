@@ -171,7 +171,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setImageUrl(currentItem.imageUrl || resolveProductImage(currentItem) || '');
       setFrontQty(breakdown.frontQty);
       setWarehouseQty(breakdown.warehouseQty);
-      setFrontLocation(currentItem.frontLocation || 'หน้าร้าน / เชลฟ์โชว์');
+      setFrontLocation(currentItem.frontLocation || 'หน้าร้าน');
       setLocation(currentItem.location || 'RACK A-01');
       setMinFrontStock(currentItem.minFrontStock !== undefined ? currentItem.minFrontStock : 2);
       setBrand(currentItem.brand || '');
@@ -186,7 +186,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setImageUrl('');
       setFrontQty(1);
       setWarehouseQty(0);
-      setFrontLocation('หน้าร้าน / เชลฟ์โชว์');
+      setFrontLocation('หน้าร้าน');
       setLocation('RACK A-01');
       setMinFrontStock(2);
       setBrand('');
@@ -276,7 +276,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         category: category.trim() || '',
         brand: brand.trim() || '',
         location: location.trim() || 'RACK A-01',
-        frontLocation: frontLocation.trim() || 'หน้าร้าน / เชลฟ์โชว์',
+        frontLocation: frontLocation.trim() || 'หน้าร้าน',
         frontQty: numFront,
         warehouseQty: numWarehouse,
         systemQty: totalNumericQty,
