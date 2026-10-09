@@ -51,7 +51,71 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   if (!isOpen || !receipt) return null;
 
   const handlePrint = () => {
-    window.print();
+    // Open print dialog or print printable receipt element directly
+    try {
+      const printContents = document.getElementById('printable-receipt')?.innerHTML;
+      if (!printContents) {
+        window.print();
+        return;
+      }
+
+      const printWindow = window.open('', '_blank', 'height=600,width=400');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html>
+            <head>
+              <title>ใบเสร็จรับเงิน - ${receipt.receiptNo}</title>
+              <style>
+                body {
+                  font-family: 'Prompt', sans-serif, sans-serif;
+                  padding: 16px;
+                  color: #000;
+                  background: #fff;
+                  max-width: 80mm;
+                  margin: 0 auto;
+                }
+                .text-center { text-align: center; }
+                .font-black { font-weight: 900; }
+                .font-bold { font-weight: 700; }
+                .font-mono { font-family: monospace; }
+                .border-b { border-bottom: 1px solid #ccc; }
+                .border-dashed { border-style: dashed; }
+                .flex { display: flex; }
+                .justify-between { justify-content: space-between; }
+                .items-baseline { align-items: baseline; }
+                .text-xs { font-size: 12px; }
+                .text-sm { font-size: 14px; }
+                .text-base { font-size: 16px; }
+                .space-y-1 > * + * { margin-top: 4px; }
+                .space-y-3 > * + * { margin-top: 12px; }
+                .pt-2 { padding-top: 8px; }
+                .pb-2 { padding-bottom: 8px; }
+                .mt-2 { margin-top: 8px; }
+                .py-1 { padding-top: 4px; padding-bottom: 4px; }
+                .bg-emerald-50 { background: #ecfdf5; color: #047857; }
+                .border-emerald-200 { border: 1px solid #a7f3d0; }
+                .rounded-lg { border-radius: 8px; }
+                .text-center { text-align: center; }
+              </style>
+            </head>
+            <body>
+              ${printContents}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+          printWindow.print();
+          printWindow.close();
+        }, 300);
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      console.warn('Fallback to standard window.print', err);
+      window.print();
+    }
   };
 
   const handleCopyText = async () => {

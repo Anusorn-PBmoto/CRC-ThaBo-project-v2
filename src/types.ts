@@ -22,6 +22,11 @@ export interface ProductItem {
   minStock?: number;         // จุดเตือนสต็อกรวมต่ำ
   minFrontStock?: number;    // จุดเตือนเติมของหน้าร้านต่ำ
   description?: string;      // รุ่นรถที่รองรับ / รายละเอียด
+  
+  // Unit conversion for retail / wholesale (e.g. 1 carton = 24 cans)
+  subUnit?: string;          // หน่วยย่อย (เช่น ป๋อง, ชิ้น)
+  conversionRate?: number;   // อัตราส่วนแปลง (เช่น 24)
+
   updatedAt: string;
 
   // Compatibility aliases

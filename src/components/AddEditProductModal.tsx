@@ -112,6 +112,10 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
+  
+  // Unit conversion for retail / wholesale
+  const [subUnit, setSubUnit] = useState('');
+  const [conversionRate, setConversionRate] = useState<number | ''>('');
 
   // Scanner & UI states
   const [isScanning, setIsScanning] = useState(false);
@@ -147,6 +151,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setBrand(currentItem.brand || '');
       setCategory(currentItem.category || '');
       setDescription(currentItem.description || '');
+      setSubUnit(currentItem.subUnit || '');
+      setConversionRate(currentItem.conversionRate !== undefined ? currentItem.conversionRate : '');
     } else {
       setBarcode('');
       setName('');
@@ -162,6 +168,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setBrand('');
       setCategory('');
       setDescription('');
+      setSubUnit('');
+      setConversionRate('');
     }
     setIsScanning(false);
     setScanSuccessMsg(null);
@@ -255,6 +263,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         minStock: 2,
         minFrontStock: Math.max(1, Number(minFrontStock) || 2),
         description: description.trim() || '',
+        subUnit: subUnit.trim() || '',
+        conversionRate: conversionRate !== '' ? Number(conversionRate) : undefined,
         updatedAt: new Date().toISOString(),
         // Backwards compatibility fields
         size: name.trim(),
@@ -428,6 +438,37 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               placeholder="พิมพ์หน่วยนับเอง เช่น ชุด, ลัง, ม้วน"
               className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none text-xs"
             />
+
+            {/* Optional Unit Conversion (e.g. 1 ลัง = 24 ป๋อง) */}
+            <div className="mt-2.5 p-3 bg-[#20262D] border border-[#475662] rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs text-[#EEEEEE]">
+                <span className="font-semibold text-amber-400">⚡ ตั้งค่าแปลงหน่วยย่อย (สำหรับขายปลีก-ส่ง)</span>
+                <span className="text-[10px] text-[#A0ABB5]">เว้นว่างไว้ถ้าไม่ใช้</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-[#A0ABB5] mb-1">หน่วยย่อย (เช่น ป๋อง, ชิ้น)</label>
+                  <input
+                    type="text"
+                    value={subUnit}
+                    onChange={(e) => setSubUnit(e.target.value)}
+                    placeholder="เช่น ป๋อง"
+                    className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] rounded-lg px-2.5 py-1.5 text-xs focus:border-[#F6C90E] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-[#A0ABB5] mb-1">1 {unit || 'หน่วยใหญ่'} เท่ากับกี่ {subUnit || 'หน่วยย่อย'}</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={conversionRate}
+                    onChange={(e) => setConversionRate(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                    placeholder="เช่น 24"
+                    className="w-full bg-[#252C33] border border-[#475662] text-amber-400 font-bold rounded-lg px-2.5 py-1.5 text-xs focus:border-[#F6C90E] focus:outline-none font-mono"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* ============================================================ */}
