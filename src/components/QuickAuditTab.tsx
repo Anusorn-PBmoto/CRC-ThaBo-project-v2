@@ -7,7 +7,6 @@ import {
   Clock,
   MoreVertical,
   RotateCcw,
-  Sparkles,
   Layers,
   ChevronRight,
   Trash2,
@@ -20,7 +19,7 @@ import {
   AlertTriangle,
   Store,
   Warehouse,
-  Mic,
+  ArrowUp,
 } from 'lucide-react';
 import { ProductItem, AuditSession } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -32,8 +31,6 @@ interface QuickAuditTabProps {
   onUpdateQty: (product: ProductItem, newQty: number) => void;
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
-  onOpenGeminiFlashScan?: () => void;
-  onOpenVoiceSearch?: () => void;
   onSaveAudit: () => void;
   onEditTire: (product: ProductItem) => void;
   onDeleteTire?: (product: ProductItem) => void;
@@ -48,8 +45,6 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
   onUpdateQty,
   onOpenAddModal,
   onOpenScanner,
-  onOpenGeminiFlashScan,
-  onOpenVoiceSearch,
   onSaveAudit,
   onEditTire,
   onDeleteTire,
@@ -250,29 +245,6 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
               </button>
             )}
           </div>
-
-          {/* Gemini Flash AI Tire & Label Scanner Button */}
-          {onOpenGeminiFlashScan && (
-            <button
-              onClick={onOpenGeminiFlashScan}
-              title="สแกนแก้มยางด้วย Gemini Flash AI"
-              className="p-2 rounded-xl bg-gradient-to-tr from-amber-500/20 to-[#F6C90E]/30 border border-[#F6C90E]/60 text-[#F6C90E] hover:bg-[#F6C90E] hover:text-[#252C33] transition-all active:scale-95 shadow-sm flex-shrink-0 flex items-center gap-1 font-bold text-xs"
-            >
-              <Sparkles className="w-4 h-4 text-[#F6C90E]" />
-              <span className="hidden sm:inline">Flash</span>
-            </button>
-          )}
-
-          {/* Gemini Flash Voice Search Button */}
-          {onOpenVoiceSearch && (
-            <button
-              onClick={onOpenVoiceSearch}
-              title="ค้นหาด้วยเสียง (Flash AI)"
-              className="p-2 rounded-xl bg-gradient-to-tr from-amber-500/20 to-[#F6C90E]/30 border border-[#F6C90E]/60 text-[#F6C90E] hover:bg-[#F6C90E] hover:text-[#252C33] transition-all active:scale-95 shadow-sm flex-shrink-0"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-          )}
 
           {/* Quick Scanner Action Button */}
           <button
@@ -551,12 +523,12 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                           <span>•</span>
                           <span className="text-[#EEEEEE] flex items-center gap-1">
                             <Store className="w-3 h-3 text-[#F6C90E]" />
-                            <span>{breakdown.frontLocation}: {breakdown.frontQty}</span>
+                            <span>หน้าร้าน: {breakdown.frontQty}</span>
                           </span>
                           <span>•</span>
                           <span className="text-sky-300 flex items-center gap-1">
-                            <Warehouse className="w-3 h-3" />
-                            <span>{breakdown.warehouseLocation}: {breakdown.warehouseQty}</span>
+                            <Warehouse className="w-3 h-3 text-sky-400" />
+                            <span>คลัง: {breakdown.warehouseQty}</span>
                           </span>
                           {product.description && (
                             <>
@@ -694,6 +666,20 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
         )}
       </div>
 
+      {/* End of list scroll to top shortcut */}
+      {filteredProducts.length > 5 && (
+        <div className="pt-2 pb-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#20262D] hover:bg-[#2A333C] text-[#F6C90E] border border-[#475662] hover:border-[#F6C90E] text-xs font-bold transition-all active:scale-95 shadow-md cursor-pointer"
+          >
+            <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>กลับขึ้นไปด้านบนสุด ({filteredProducts.length} รายการ)</span>
+          </button>
+        </div>
+      )}
+
       {/* 5. Floating Bottom Save Bar */}
       {totalCount > 0 && modifiedCount > 0 && (
         <div className="fixed bottom-16 left-0 right-0 p-3 z-20 pointer-events-none">
@@ -712,7 +698,7 @@ export const QuickAuditTab: React.FC<QuickAuditTabProps> = ({
                 onClick={onSaveAudit}
                 className="py-2.5 px-4 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-[#F6C90E]/25 active:scale-95 transition-all"
               >
-                <Sparkles className="w-4 h-4 text-[#252C33]" />
+                <CheckCircle2 className="w-4 h-4 text-[#252C33]" />
                 <span>บันทึกผลการนับ</span>
               </button>
             </div>

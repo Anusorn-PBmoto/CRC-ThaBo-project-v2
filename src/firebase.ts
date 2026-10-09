@@ -27,6 +27,7 @@ import {
 import firebaseConfig from '../firebase-applet-config.json';
 import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction, StockTransfer } from './types';
 import { INITIAL_TIRES } from './initialData';
+import { cleanLocationName } from './utils/stockUtils';
 
 const app = initializeApp(firebaseConfig);
 const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
@@ -432,8 +433,8 @@ export function subscribeToTires(
             imageUrl: data.imageUrl || '',
             category: data.category || '',
             brand: data.brand || '',
-            location: data.location || 'RACK A-01',
-            frontLocation: data.frontLocation || 'หน้าร้าน',
+            location: cleanLocationName(data.location || 'RACK A-01'),
+            frontLocation: cleanLocationName(data.frontLocation),
             frontQty: typeof data.frontQty === 'number' ? data.frontQty : undefined,
             warehouseQty: typeof data.warehouseQty === 'number' ? data.warehouseQty : undefined,
             actualQty: typeof data.actualQty === 'number' ? data.actualQty : 0,
@@ -652,12 +653,18 @@ export async function updateTireActualQty(
   }
 }
 
-// Sanitizes object for Firestore by removing any undefined values
+// Sanitizes object for Firestore by removing any undefined values and cleaning location strings
 export function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
   const clean: Record<string, any> = {};
   for (const [key, val] of Object.entries(obj)) {
     if (val !== undefined) {
-      clean[key] = val;
+      if (key === 'frontLocation' && typeof val === 'string') {
+        clean[key] = cleanLocationName(val);
+      } else if (key === 'location' && typeof val === 'string') {
+        clean[key] = cleanLocationName(val);
+      } else {
+        clean[key] = val;
+      }
     }
   }
   return clean;

@@ -9,7 +9,6 @@ import {
   CheckCircle,
   Trash2,
   RefreshCw,
-  Sparkles,
   ExternalLink,
   Layers,
   Tag,
@@ -18,14 +17,12 @@ import {
   Store,
   Warehouse,
   ArrowRightLeft,
-  Loader2,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
 import { uploadProductImageToStorage } from '../firebase';
-import { getProductStockBreakdown } from '../utils/stockUtils';
-import { analyzeTireImageWithGeminiFlash } from '../utils/geminiClient';
+import { getProductStockBreakdown, cleanLocationName } from '../utils/stockUtils';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -121,38 +118,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
-  const [isGeminiAnalyzing, setIsGeminiAnalyzing] = useState(false);
-  const [geminiNotice, setGeminiNotice] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Gemini Flash Auto-reader
-  const handleRunGeminiFlashOcr = async (imgToAnalyze?: string) => {
-    const targetImg = imgToAnalyze || imageUrl;
-    if (!targetImg) return;
-    setIsGeminiAnalyzing(true);
-    setGeminiNotice(null);
-    try {
-      const res = await analyzeTireImageWithGeminiFlash(targetImg);
-      if (res.data) {
-        if (res.data.suggestedName) setName(res.data.suggestedName);
-        if (res.data.brand) setBrand(res.data.brand);
-        if (res.data.barcode && !barcode) setBarcode(res.data.barcode);
-        if (res.data.unit) setUnit(res.data.unit);
-        if (res.data.category) setCategory(res.data.category);
-        setGeminiNotice(
-          `⚡ Gemini Flash อ่านข้อมูลสำเร็จ: ${res.data.suggestedName} (${Math.round(res.durationMs)} ms)`
-        );
-      }
-    } catch (err: any) {
-      setGeminiNotice(`การอ่านรูปภาพล้มเหลว: ${err?.message || ''}`);
-    } finally {
-      setIsGeminiAnalyzing(false);
-    }
-  };
 
   useEffect(() => {
     if (currentItem) {
@@ -171,8 +141,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setImageUrl(currentItem.imageUrl || resolveProductImage(currentItem) || '');
       setFrontQty(breakdown.frontQty);
       setWarehouseQty(breakdown.warehouseQty);
-      setFrontLocation(currentItem.frontLocation || 'หน้าร้าน');
-      setLocation(currentItem.location || 'RACK A-01');
+      setFrontLocation(cleanLocationName(currentItem.frontLocation));
+      setLocation(cleanLocationName(currentItem.location || 'RACK A-01'));
       setMinFrontStock(currentItem.minFrontStock !== undefined ? currentItem.minFrontStock : 2);
       setBrand(currentItem.brand || '');
       setCategory(currentItem.category || '');
@@ -275,8 +245,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         imageUrl: imageUrl.trim() || '',
         category: category.trim() || '',
         brand: brand.trim() || '',
-        location: location.trim() || 'RACK A-01',
-        frontLocation: frontLocation.trim() || 'หน้าร้าน',
+        location: cleanLocationName(location),
+        frontLocation: cleanLocationName(frontLocation),
         frontQty: numFront,
         warehouseQty: numWarehouse,
         systemQty: totalNumericQty,
@@ -540,7 +510,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   type="text"
                   value={frontLocation}
                   onChange={(e) => setFrontLocation(e.target.value)}
-                  placeholder="เช่น แผงโชว์ A, เคาน์เตอร์"
+                  placeholder="เช่น หน้าร้าน A, เคาน์เตอร์"
                   className="w-full bg-[#20262D] border border-[#475662] text-[#EEEEEE] placeholder-[#788896] rounded-xl px-3 py-1.5 focus:border-[#F6C90E] focus:outline-none text-xs"
                 />
               </div>
@@ -643,25 +613,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   </div>
                   {/* Floating badge */}
                   <div className="absolute top-2 left-2 bg-[#252C33]/90 backdrop-blur-md text-[#F6C90E] border border-[#F6C90E]/40 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
-                    <Sparkles className="w-3 h-3 text-[#F6C90E]" />
                     <span>ภาพถ่ายสินค้าจริง</span>
-                  </div>
-
-                  {/* Gemini Flash OCR Action button */}
-                  <div className="absolute top-2 right-2">
-                    <button
-                      type="button"
-                      disabled={isGeminiAnalyzing}
-                      onClick={() => handleRunGeminiFlashOcr()}
-                      className="bg-gradient-to-r from-amber-500 to-[#F6C90E] hover:from-amber-600 hover:to-[#E5B800] text-[#252C33] text-[10px] font-bold px-2.5 py-1 rounded-xl shadow-lg flex items-center gap-1 active:scale-95 transition-all disabled:opacity-60"
-                    >
-                      {isGeminiAnalyzing ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
-                      )}
-                      <span>{isGeminiAnalyzing ? 'กำลังอ่าน...' : '⚡ Gemini Flash อ่านสเปก'}</span>
-                    </button>
                   </div>
 
                   {/* Floating actions */}
@@ -684,13 +636,6 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     </button>
                   </div>
                 </div>
-
-                {geminiNotice && (
-                  <div className="p-2.5 bg-[#252C33] border border-[#F6C90E]/50 rounded-xl flex items-center gap-2 text-xs text-[#EEEEEE] animate-in fade-in">
-                    <Sparkles className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
-                    <span className="font-medium text-[11px]">{geminiNotice}</span>
-                  </div>
-                )}
               </div>
             ) : (
               /* If No Image, show photo take / upload buttons */

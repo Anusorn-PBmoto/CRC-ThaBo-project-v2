@@ -14,12 +14,10 @@ import {
   Clock,
   ArrowDownRight,
   ArrowUpRight,
-  Sparkles,
   Layers,
   Banknote,
   Store,
   Warehouse,
-  Mic,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem, Transaction } from '../types';
@@ -37,8 +35,6 @@ interface BuySellTabProps {
     locationTarget?: 'front' | 'warehouse'
   ) => Promise<void>;
   onOpenScanner: () => void;
-  onOpenInvoiceScan?: () => void;
-  onOpenVoiceSearch?: () => void;
   incomingSearchQuery?: string;
 }
 
@@ -53,8 +49,6 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   transactions,
   onExecuteTransaction,
   onOpenScanner,
-  onOpenInvoiceScan,
-  onOpenVoiceSearch,
   incomingSearchQuery,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
@@ -258,75 +252,63 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         </button>
       </div>
 
-      {/* AI Invoice Receiving Banner when on Purchase Intake mode */}
-      {transactionType === 'purchase' && onOpenInvoiceScan && (
-        <div className="bg-gradient-to-r from-amber-500/20 via-[#F6C90E]/20 to-amber-500/20 border border-[#F6C90E]/50 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[#F6C90E] text-[#252C33] flex items-center justify-center font-bold flex-shrink-0 shadow-md">
-              <Receipt className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-[#EEEEEE] flex items-center gap-1.5">
-                <span>รับเข้าสินค้าด้วยภาพถ่ายบิล</span>
-                <span className="text-[9px] bg-[#F6C90E] text-[#252C33] px-1.5 py-0.2 rounded font-black">
-                  FLASH AI
-                </span>
-              </div>
-              <p className="text-[10px] text-[#A0ABB5] truncate">
-                ถ่ายภาพใบเสร็จ/บิลส่งของ AI จะสกัดรายการรับเข้าให้ทันที
-              </p>
-            </div>
-          </div>
+      {/* Target Location Toggle (หน้าร้าน vs คลังหลังร้าน) - Full Width & Distinct Colors */}
+      <div className="bg-[#20262D] border border-[#475662] rounded-2xl p-3 shadow-md space-y-2">
+        <div className="flex items-center justify-between text-xs px-0.5">
+          <span className="text-[#A0ABB5] text-[11px] font-medium flex items-center gap-1.5">
+            {transactionType === 'sale' ? (
+              <>
+                <Store className="w-3.5 h-3.5 text-[#F6C90E]" />
+                <span>ตำแหน่งที่จะตัดสต็อก:</span>
+              </>
+            ) : (
+              <>
+                <Warehouse className="w-3.5 h-3.5 text-sky-400" />
+                <span>ตำแหน่งที่จะรับเข้าจัดเก็บ:</span>
+              </>
+            )}
+          </span>
 
-          <button
-            onClick={onOpenInvoiceScan}
-            className="px-3 py-1.5 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs flex items-center gap-1 flex-shrink-0 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20"
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>ถ่ายบิล</span>
-          </button>
+          <span className="text-[11px] font-bold">
+            {locationTarget === 'front' ? (
+              <span className="text-[#F6C90E] bg-[#F6C90E]/15 border border-[#F6C90E]/40 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                <Store className="w-3 h-3" /> หน้าร้าน
+              </span>
+            ) : (
+              <span className="text-sky-300 bg-sky-500/15 border border-sky-400/40 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                <Warehouse className="w-3 h-3 text-sky-400" /> คลังหลังร้าน
+              </span>
+            )}
+          </span>
         </div>
-      )}
 
-      {/* Target Location Toggle (หน้าร้าน vs คลังหลังร้าน) */}
-      <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-2.5 flex items-center justify-between text-xs">
-        <span className="text-[#A0ABB5] text-[11px] font-medium flex items-center gap-1">
-          {transactionType === 'sale' ? (
-            <>
-              <Store className="w-3.5 h-3.5 text-[#F6C90E]" />
-              <span>ตัดสต็อกจาก:</span>
-            </>
-          ) : (
-            <>
-              <Warehouse className="w-3.5 h-3.5 text-sky-400" />
-              <span>นำเข้าจัดเก็บที่:</span>
-            </>
-          )}
-        </span>
-
-        <div className="flex items-center gap-1 bg-[#20262D] p-0.5 rounded-xl border border-[#3A4750]">
+        {/* Full-width 2-column segmented bar spanning edge-to-edge */}
+        <div className="grid grid-cols-2 gap-2 w-full p-1 bg-[#1A1F26] rounded-xl border border-[#3A4750]">
+          {/* หน้าร้าน (Gold theme) */}
           <button
             type="button"
             onClick={() => setLocationTarget('front')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+            className={`w-full py-2.5 sm:py-3 px-3 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer ${
               locationTarget === 'front'
-                ? 'bg-[#F6C90E] text-[#252C33] shadow-sm'
-                : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+                ? 'bg-[#F6C90E] text-[#20262D] shadow-md shadow-[#F6C90E]/25 border border-[#F6C90E]'
+                : 'bg-[#252C33] text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#2C353F] border border-[#3A4750]'
             }`}
           >
-            <Store className="w-3 h-3" />
+            <Store className={`w-4 h-4 ${locationTarget === 'front' ? 'text-[#20262D]' : 'text-[#F6C90E]'}`} />
             <span>หน้าร้าน</span>
           </button>
+
+          {/* คลังหลังร้าน (Vibrant Blue theme) */}
           <button
             type="button"
             onClick={() => setLocationTarget('warehouse')}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all ${
+            className={`w-full py-2.5 sm:py-3 px-3 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] cursor-pointer ${
               locationTarget === 'warehouse'
-                ? 'bg-[#F6C90E] text-[#252C33] shadow-sm'
-                : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+                ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-md shadow-sky-500/30 border border-sky-400'
+                : 'bg-[#252C33] text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#2C353F] border border-[#3A4750]'
             }`}
           >
-            <Warehouse className="w-3 h-3" />
+            <Warehouse className={`w-4 h-4 ${locationTarget === 'warehouse' ? 'text-white' : 'text-sky-400'}`} />
             <span>คลังหลังร้าน</span>
           </button>
         </div>
@@ -352,11 +334,20 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
       {cart.length > 0 && (
         <div className="bg-[#3A4750] border border-[#F6C90E]/40 rounded-2xl p-3.5 shadow-xl space-y-3">
           <div className="flex items-center justify-between pb-2 border-b border-[#475662]">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-[#EEEEEE]">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#EEEEEE] flex-wrap">
               <Receipt className="w-4 h-4 text-[#F6C90E]" />
               <span>
                 {transactionType === 'sale' ? 'รายการตัดสต็อกขาย' : 'รายการรับเข้าสต็อก'} ({cart.length})
               </span>
+              {locationTarget === 'front' ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F6C90E]/20 text-[#F6C90E] border border-[#F6C90E]/40 inline-flex items-center gap-1">
+                  <Store className="w-2.5 h-2.5" /> หน้าร้าน
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40 inline-flex items-center gap-1">
+                  <Warehouse className="w-2.5 h-2.5" /> คลังหลังร้าน
+                </span>
+              )}
             </div>
             <button
               onClick={() => setCart([])}
@@ -531,16 +522,6 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           >
             <ScanBarcode className="w-4 h-4" />
           </button>
-
-          {onOpenVoiceSearch && (
-            <button
-              onClick={onOpenVoiceSearch}
-              title="ค้นหาด้วยเสียง (Flash AI)"
-              className="p-2 bg-gradient-to-r from-amber-500/20 to-[#F6C90E]/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 text-[#F6C90E] rounded-xl border border-[#F6C90E]/50 active:scale-95 transition-all shadow-sm"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         {/* Brand chips */}
@@ -629,7 +610,13 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     </span>
                     <span
                       className={`text-[10px] font-semibold ${
-                        targetQty === 0 ? 'text-amber-400' : isZero ? 'text-rose-400' : 'text-[#EEEEEE]'
+                        targetQty === 0
+                          ? 'text-amber-400'
+                          : isZero
+                          ? 'text-rose-400'
+                          : locationTarget === 'warehouse'
+                          ? 'text-sky-300 font-bold'
+                          : 'text-[#F6C90E] font-bold'
                       }`}
                     >
                       {locationTarget === 'front'

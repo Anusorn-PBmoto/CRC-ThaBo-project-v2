@@ -12,7 +12,6 @@ import {
   Send,
 } from 'lucide-react';
 import { TireItem } from '../types';
-import { GeminiStockAdvisorCard } from './GeminiStockAdvisorCard';
 
 interface SummaryAlertsTabProps {
   tires: TireItem[];
@@ -104,9 +103,6 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Gemini Flash AI Stock Advisor */}
-      <GeminiStockAdvisorCard tires={tires} />
 
       {/* 2. Audit Discrepancies Section */}
       <div className="space-y-2">

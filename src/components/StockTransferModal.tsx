@@ -372,7 +372,7 @@ export const StockTransferModal: React.FC<StockTransferModalProps> = ({
               type="text"
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="เช่น เติมชั้นโชว์หน้าร้าน, ลูกค้าจอง, เบิกเปลี่ยนสินค้า"
+              placeholder="เช่น เติมสต็อกหน้าร้าน, ลูกค้าจอง, เบิกเปลี่ยนสินค้า"
               className="w-full bg-[#20262D] border border-[#3A4750] rounded-xl px-3 py-2 text-xs text-[#EEEEEE] placeholder-[#788896] focus:outline-none focus:border-[#F6C90E]"
             />
           </div>

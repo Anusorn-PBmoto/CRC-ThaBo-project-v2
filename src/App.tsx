@@ -45,22 +45,25 @@ import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { ImageMatchBackupModal } from './components/ImageMatchBackupModal';
 import { StockTransferModal } from './components/StockTransferModal';
 import { BatchStockTransferModal } from './components/BatchStockTransferModal';
-import { GeminiFlashScanModal } from './components/GeminiFlashScanModal';
-import { GeminiInvoiceIntakeModal } from './components/GeminiInvoiceIntakeModal';
-import { GeminiVoiceSearchModal } from './components/GeminiVoiceSearchModal';
+import { ScrollToTopButton } from './components/ScrollToTopButton';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
   APPSHEET_CSV_FILENAME,
 } from './utils/appsheetCsv';
 import { resolveProductImage } from './utils/productImages';
+import { cleanLocationName } from './utils/stockUtils';
 
 const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v5';
 const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v5';
 const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v5';
 const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v5';
 
-const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS;
+const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS.map((p) => ({
+  ...p,
+  frontLocation: cleanLocationName(p.frontLocation),
+  location: cleanLocationName(p.location || 'RACK A-01'),
+}));
 
 export default function App() {
   const [tires, setTires] = useState<ProductItem[]>(() => {
@@ -69,13 +72,19 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((p: ProductItem) => {
+          const cleaned = parsed.map((p: ProductItem) => {
             const recImg = resolveProductImage(p);
-            if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
-              return { ...p, imageUrl: recImg };
-            }
-            return p;
+            return {
+              ...p,
+              imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
+              frontLocation: cleanLocationName(p.frontLocation),
+              location: cleanLocationName(p.location || 'RACK A-01'),
+            };
           });
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(cleaned));
+          } catch {}
+          return cleaned;
         }
       }
 
@@ -84,13 +93,19 @@ export default function App() {
       if (legacySaved) {
         const parsed = JSON.parse(legacySaved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((p: ProductItem) => {
+          const cleaned = parsed.map((p: ProductItem) => {
             const recImg = resolveProductImage(p);
-            if ((!p.imageUrl || p.imageUrl.trim() === '') && recImg) {
-              return { ...p, imageUrl: recImg };
-            }
-            return p;
+            return {
+              ...p,
+              imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
+              frontLocation: cleanLocationName(p.frontLocation),
+              location: cleanLocationName(p.location || 'RACK A-01'),
+            };
           });
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(cleaned));
+          } catch {}
+          return cleaned;
         }
       }
     } catch (e) {
@@ -172,10 +187,6 @@ export default function App() {
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingTire, setEditingTire] = useState<TireItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [isGeminiScanOpen, setIsGeminiScanOpen] = useState(false);
-  const [isInvoiceScanOpen, setIsInvoiceScanOpen] = useState(false);
-  const [isVoiceSearchOpen, setIsVoiceSearchOpen] = useState(false);
-  const [activeVoiceQuery, setActiveVoiceQuery] = useState('');
   const [isPOOpen, setIsPOOpen] = useState(false);
   const [poItems, setPoItems] = useState<TireItem[]>([]);
   const [isAuditConfirmOpen, setIsAuditConfirmOpen] = useState(false);
@@ -234,6 +245,27 @@ export default function App() {
       setIsOnline(false);
     }
 
+    // Proactively clean any legacy keys or stale localStorage entries
+    try {
+      const keys = [LOCAL_STORAGE_KEY_TIRES, 'crc_thabo_parts_itemdetails_v4', 'crc_thabo_tires_inventory_v3'];
+      for (const k of keys) {
+        const raw = localStorage.getItem(k);
+        if (raw && (raw.includes('เชลฟ์') || raw.includes('โชว์'))) {
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              const cleaned = arr.map((item: any) => ({
+                ...item,
+                frontLocation: cleanLocationName(item.frontLocation),
+                location: cleanLocationName(item.location || 'RACK A-01'),
+              }));
+              localStorage.setItem(k, JSON.stringify(cleaned));
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -280,7 +312,8 @@ export default function App() {
                     imageUrl: effectiveImg,
                     frontQty: hasRemoteFront ? remoteItem.frontQty : hasLocalFront ? localItem.frontQty : undefined,
                     warehouseQty: hasRemoteFront ? remoteItem.warehouseQty : hasLocalFront ? localItem.warehouseQty : undefined,
-                    frontLocation: remoteItem.frontLocation || localItem?.frontLocation || 'หน้าร้าน',
+                    frontLocation: cleanLocationName(remoteItem.frontLocation || localItem?.frontLocation),
+                    location: cleanLocationName(remoteItem.location || localItem?.location || 'RACK A-01'),
                   };
                 });
 
@@ -419,27 +452,32 @@ export default function App() {
   // Add / Edit Product
   const handleSaveTire = async (tireData: Omit<TireItem, 'id'>, id?: string) => {
     try {
+      const sanitizedTireData: Omit<TireItem, 'id'> = {
+        ...tireData,
+        frontLocation: cleanLocationName(tireData.frontLocation),
+        location: cleanLocationName(tireData.location || 'RACK A-01'),
+      };
       let nextList: ProductItem[] = [];
 
       if (id) {
         // Optimistic update
         nextList = tires.map((t) =>
-          t.id === id ? { ...t, ...tireData, updatedAt: new Date().toISOString() } : t
+          t.id === id ? { ...t, ...sanitizedTireData, updatedAt: new Date().toISOString() } : t
         );
         persistTires(nextList);
-        await updateTireItem(id, tireData);
+        await updateTireItem(id, sanitizedTireData);
       } else {
         // Generate permanent Firestore document ID upfront
         const newId = doc(collection(db, 'products')).id;
         const newTire: TireItem = {
-          ...tireData,
+          ...sanitizedTireData,
           id: newId,
           updatedAt: new Date().toISOString(),
         };
         nextList = [newTire, ...tires];
         persistTires(nextList);
 
-        await addNewTire(tireData, newId);
+        await addNewTire(sanitizedTireData, newId);
       }
 
       // Cache latest CSV data quietly in background without triggering browser download popup
@@ -903,9 +941,6 @@ export default function App() {
       {/* Top Header */}
       <Header
         onOpenScanner={() => setIsScannerOpen(true)}
-        onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
-        onOpenInvoiceScan={() => setIsInvoiceScanOpen(true)}
-        onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
         isOnline={isOnline && !isQuotaExceeded}
@@ -963,9 +998,6 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
-                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
-                incomingSearchQuery={activeVoiceQuery}
                 onSaveAudit={() => setIsAuditConfirmOpen(true)}
                 onEditTire={(tire) => {
                   setEditingTire(tire);
@@ -983,8 +1015,6 @@ export default function App() {
                   setIsAddEditOpen(true);
                 }}
                 onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
-                incomingSearchQuery={activeVoiceQuery}
                 onEditTire={(tire) => {
                   setEditingTire(tire);
                   setIsAddEditOpen(true);
@@ -1005,9 +1035,6 @@ export default function App() {
                 transactions={transactions}
                 onExecuteTransaction={handleExecuteTransaction}
                 onOpenScanner={() => setIsScannerOpen(true)}
-                onOpenInvoiceScan={() => setIsInvoiceScanOpen(true)}
-                onOpenVoiceSearch={() => setIsVoiceSearchOpen(true)}
-                incomingSearchQuery={activeVoiceQuery}
               />
             )}
 
@@ -1026,6 +1053,9 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* Quick Scroll to Top Shortcut Button */}
+      <ScrollToTopButton />
 
       {/* Fixed Bottom Navigation */}
       <BottomNav
@@ -1060,62 +1090,6 @@ export default function App() {
         onOpenAddModalWithBarcode={() => {
           setEditingTire(null);
           setIsAddEditOpen(true);
-        }}
-        onOpenGeminiFlashScan={() => setIsGeminiScanOpen(true)}
-      />
-
-      <GeminiFlashScanModal
-        isOpen={isGeminiScanOpen}
-        onClose={() => setIsGeminiScanOpen(false)}
-        catalog={tires}
-        onSelectProduct={(product) => {
-          if (currentTab !== 'buysell') {
-            setCurrentTab('audit');
-          }
-        }}
-        onOpenAddWithAiData={(aiData) => {
-          setEditingTire(aiData as any);
-          setIsAddEditOpen(true);
-        }}
-      />
-
-      <GeminiInvoiceIntakeModal
-        isOpen={isInvoiceScanOpen}
-        onClose={() => setIsInvoiceScanOpen(false)}
-        catalog={tires}
-        onConfirmBatchIntake={async (supplier, invoiceNo, items, note) => {
-          await handleExecuteTransaction(
-            'purchase',
-            items.map((i) => ({
-              tire: i.product,
-              quantity: i.quantity,
-              unitPrice: i.costPrice,
-            })),
-            supplier,
-            `${invoiceNo ? `เลขที่บิล: ${invoiceNo} • ` : ''}${note || ''}`,
-            'warehouse'
-          );
-        }}
-        onOpenAddNewProduct={(prefilled) => {
-          setEditingTire(prefilled as any);
-          setIsAddEditOpen(true);
-        }}
-      />
-
-      <GeminiVoiceSearchModal
-        isOpen={isVoiceSearchOpen}
-        onClose={() => setIsVoiceSearchOpen(false)}
-        catalog={tires}
-        onSelectProduct={(product) => {
-          if (currentTab === 'buysell') {
-            // Selected item will be visible
-          } else {
-            setCurrentTab('inventory');
-          }
-          setActiveVoiceQuery(product.name || product.size || '');
-        }}
-        onApplySearchText={(keyword) => {
-          setActiveVoiceQuery(keyword);
         }}
       />
 

@@ -13,7 +13,7 @@ export interface ProductItem {
   category?: string;         // หมวดหมู่ (เช่น อะไหล่เครื่องยนต์, ระบบส่งกำลัง, ระบบเบรก, น้ำมันเครื่อง ฯลฯ)
   brand?: string;            // ยี่ห้อ (เช่น Honda, Yamaha, Castrol, Bando, DID, NGK, YSS ฯลฯ)
   location?: string;         // ช่องจัดเก็บ/ชั้นวางในคลังหลังร้าน (เช่น RACK A-01, กล่อง 1, ชั้น 2)
-  frontLocation?: string;    // ช่องจัดเก็บ/ชั้นวางหน้าร้าน (เช่น ชั้นโชว์ A, เคาน์เตอร์, แผงแขวน 1)
+  frontLocation?: string;    // ช่องจัดเก็บ/ชั้นวางหน้าร้าน (เช่น หน้าร้าน A, เคาน์เตอร์, แผงแขวน 1)
   frontQty?: number;         // สต็อกหน้าร้าน (Storefront stock)
   warehouseQty?: number;     // สต็อกคลังหลังร้าน (Warehouse stock)
   systemQty: number;         // ยอดรวมตามระบบ (frontQty + warehouseQty)

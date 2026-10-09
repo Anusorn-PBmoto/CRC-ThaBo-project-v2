@@ -428,7 +428,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           {/* Engine indicator */}
           <div className="flex items-center gap-1 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full border border-slate-700/60 text-[9px] text-slate-300">
             <Zap className="w-2.5 h-2.5 text-amber-400" />
-            <span>{engineType === 'native' ? 'Hardware AI Engine (60 FPS)' : 'ZXing HD Engine'}</span>
+            <span>{engineType === 'native' ? 'Hardware Scanner Engine (60 FPS)' : 'ZXing HD Engine'}</span>
           </div>
 
           <div className="flex items-center gap-1.5">

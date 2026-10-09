@@ -10,14 +10,13 @@ import {
   ChevronRight,
   TrendingUp,
   X,
-  Sparkles,
   Maximize2,
   Image as ImageIcon,
   Store,
   Warehouse,
   ArrowRightLeft,
   AlertTriangle,
-  Mic,
+  ArrowUp,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -27,7 +26,6 @@ interface InventoryListTabProps {
   tires: ProductItem[];
   onOpenAddModal: () => void;
   onOpenScanner: () => void;
-  onOpenVoiceSearch?: () => void;
   onEditTire: (product: ProductItem) => void;
   onDeleteTire: (product: ProductItem) => void;
   onJumpToAudit: (product: ProductItem) => void;
@@ -46,7 +44,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   tires,
   onOpenAddModal,
   onOpenScanner,
-  onOpenVoiceSearch,
   onEditTire,
   onDeleteTire,
   onJumpToAudit,
@@ -438,16 +435,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         >
           <ScanBarcode className="w-4 h-4" />
         </button>
-
-        {onOpenVoiceSearch && (
-          <button
-            onClick={onOpenVoiceSearch}
-            title="ค้นหาด้วยเสียง (Flash AI)"
-            className="p-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-[#F6C90E]/20 hover:from-amber-500/30 hover:to-[#F6C90E]/30 border border-[#F6C90E]/50 text-[#F6C90E] transition-all active:scale-95 shadow-sm"
-          >
-            <Mic className="w-4 h-4" />
-          </button>
-        )}
       </div>
 
       {/* 3. Stock Status Filters */}
@@ -796,6 +783,20 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           })
         )}
       </div>
+
+      {/* End of list scroll to top shortcut */}
+      {filteredProducts.length > 5 && (
+        <div className="pt-2 pb-6 flex justify-center">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#20262D] hover:bg-[#2A333C] text-[#F6C90E] border border-[#475662] hover:border-[#F6C90E] text-xs font-bold transition-all active:scale-95 shadow-md cursor-pointer"
+          >
+            <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>กลับขึ้นไปด้านบนสุด ({filteredProducts.length} รายการ)</span>
+          </button>
+        </div>
+      )}
 
       {/* Product Photo Full-Screen / Lightbox Preview Modal */}
       {previewProduct && (

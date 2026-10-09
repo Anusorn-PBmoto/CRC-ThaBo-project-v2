@@ -1,6 +1,24 @@
 import { ProductItem, StockTransfer } from '../types';
 
 /**
+ * Strips unwanted words like 'เชลฟ์โชว์', 'ชั้นโชว์', 'เชลฟ์', 'โชว์' and cleans up location strings.
+ */
+export function cleanLocationName(loc?: string | null): string {
+  if (!loc || typeof loc !== 'string') return 'หน้าร้าน';
+  const cleaned = loc
+    .replace(/เชลฟ์โชว์/gi, '')
+    .replace(/เชลฟ์/gi, '')
+    .replace(/ชั้นโชว์/gi, '')
+    .replace(/shelf/gi, '')
+    .replace(/\s*\/\s*โชว์/gi, '')
+    .replace(/โชว์/gi, '')
+    .replace(/[\s/\\|]+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned === '-' || cleaned === '/') return 'หน้าร้าน';
+  return cleaned;
+}
+
+/**
  * Normalizes and extracts storefront and warehouse quantities safely.
  * If frontQty and warehouseQty are not explicitly saved yet:
  * - If totalQty > 2: allocates 2 to front, rest to warehouse
@@ -50,8 +68,8 @@ export function getProductStockBreakdown(product: ProductItem): {
     totalQty: front + warehouse,
     isFrontLow,
     canRestockFromWarehouse,
-    frontLocation: product.frontLocation || 'หน้าร้าน',
-    warehouseLocation: product.location || 'RACK A-01',
+    frontLocation: cleanLocationName(product.frontLocation),
+    warehouseLocation: cleanLocationName(product.location || 'RACK A-01'),
   };
 }
 
