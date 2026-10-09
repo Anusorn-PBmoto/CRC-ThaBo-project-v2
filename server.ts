@@ -27,8 +27,31 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Primary model alias as specified in Gemini API guidance
-const GEMINI_FLASH_MODEL = 'gemini-flash-latest';
+// Primary Flash model for ultra-low latency multimodal OCR and voice queries
+const GEMINI_FLASH_MODEL = 'gemini-3.5-flash';
+const GEMINI_FALLBACK_MODEL = 'gemini-3.8-flash';
+
+// Robust helper with automatic fallback
+async function generateWithGemini(params: {
+  contents: any;
+  config?: any;
+}) {
+  const primary = process.env.GEMINI_MODEL || GEMINI_FLASH_MODEL;
+  try {
+    return await ai.models.generateContent({
+      model: primary,
+      contents: params.contents,
+      config: params.config,
+    });
+  } catch (err: any) {
+    console.warn(`[Gemini Flash] Model ${primary} encountered error (${err?.message}), attempting fallback to ${GEMINI_FALLBACK_MODEL}...`);
+    return await ai.models.generateContent({
+      model: GEMINI_FALLBACK_MODEL,
+      contents: params.contents,
+      config: params.config,
+    });
+  }
+}
 
 // Health check endpoint
 app.get('/api/gemini/health', (_req: Request, res: Response) => {
@@ -36,6 +59,7 @@ app.get('/api/gemini/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     model: GEMINI_FLASH_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
     hasApiKey: hasKey,
     timestamp: new Date().toISOString(),
   });
@@ -110,8 +134,7 @@ ${catalogSummary}
 9. summary: สรุปผลการสแกนเป็นภาษาไทยสั้นๆ 1-2 ประโยค
 10. confidence: ความมั่นใจ ('HIGH' | 'MEDIUM' | 'LOW')`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
+    const response = await generateWithGemini({
       contents: [
         {
           inlineData: {
@@ -148,6 +171,14 @@ ${catalogSummary}
     let parsedData: any = {};
     try {
       parsedData = JSON.parse(rawText);
+      if (!parsedData.confidence || !['HIGH', 'MEDIUM', 'LOW'].includes(parsedData.confidence.toUpperCase())) {
+        parsedData.confidence = 'MEDIUM';
+      } else {
+        parsedData.confidence = parsedData.confidence.toUpperCase();
+      }
+      if (!parsedData.suggestedName && parsedData.brand) {
+        parsedData.suggestedName = `${parsedData.brand} ${parsedData.size || ''}`.trim();
+      }
     } catch {
       parsedData = {
         brand: '',
@@ -252,8 +283,7 @@ ${catalogMiniList}
    - matchedCatalogId: รหัส ID สินค้าในแคตตาล็อกที่ตรงกันที่สุด (ถ้าหาเจอตรงกัน ให้ใส่ ID, ถ้าไม่เจอให้ใส่ null)
 3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย เช่น "พบ 3 รายการ ยอดรวม 4,500 บาท จาก บจก.สยามสปอร์ตสต็อก"`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
+    const response = await generateWithGemini({
       contents: [
         {
           inlineData: {
@@ -411,8 +441,7 @@ ${JSON.stringify(catalogList.slice(0, 50), null, 1)}
 3. คัดเลือก matchingIds (array ของ id สินค้าที่ตรงกับคำพูดที่สุด เรียงตามความเกี่ยวข้อง)
 4. สร้างคำตอบภาษาไทยสั้นๆ ที่เป็นมิตร เหมือนเจ้าหน้าที่คลังตอบกลับ (spokenReply) เช่น "มียาง IRC 120/70-14 คงเหลือ 5 เส้น อยู่ที่ RACK A-02 ครับ"`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
+    const response = await generateWithGemini({
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -433,9 +462,19 @@ ${JSON.stringify(catalogList.slice(0, 50), null, 1)}
     });
 
     const parsed = JSON.parse(response.text || '{}');
-    const matchedProducts = (parsed.matchingIds || [])
+    let matchedProducts = (parsed.matchingIds || [])
       .map((id: string) => catalog.find((c: any) => c.id === id))
       .filter(Boolean);
+
+    // If no direct ID matched from sample mini-list, search catalog by extracted keyword
+    if (matchedProducts.length === 0 && parsed.extractedKeyword && Array.isArray(catalog)) {
+      const kw = parsed.extractedKeyword.toLowerCase().trim();
+      const tokens = kw.split(/[\s/,-]+/).filter((t: string) => t.length > 1);
+      matchedProducts = catalog.filter((c: any) => {
+        const fullText = `${c.brand || ''} ${c.size || ''} ${c.name || ''} ${c.barcode || ''}`.toLowerCase();
+        return tokens.some((token: string) => fullText.includes(token));
+      }).slice(0, 10);
+    }
 
     res.json({
       success: true,
@@ -530,8 +569,7 @@ ${instruction}
 
 ให้ตอบด้วยภาษาไทยที่สุภาพ เป็นมืออาชีพ อ่านง่าย มีหัวข้อ bullet points ชัดเจน และนำไปใช้งานจริงได้ทันที`;
 
-    const response = await ai.models.generateContent({
-      model: GEMINI_FLASH_MODEL,
+    const response = await generateWithGemini({
       contents: aiPrompt,
     });
 
