@@ -443,6 +443,8 @@ export function subscribeToTires(
             minStock: typeof data.minStock === 'number' ? data.minStock : 2,
             minFrontStock: typeof data.minFrontStock === 'number' ? data.minFrontStock : 2,
             description: data.description || '',
+            subUnit: data.subUnit || '',
+            conversionRate: typeof data.conversionRate === 'number' ? data.conversionRate : undefined,
             updatedAt: data.updatedAt || new Date().toISOString(),
             // Compatibility aliases
             size: nameVal,

@@ -28,13 +28,14 @@ interface CartItem {
   quantity: number;
   unitPrice: number;
   maxStorefrontStock: number;
+  isSubUnit?: boolean; // True if selling in subUnit (e.g. cans instead of cartons)
 }
 
 interface StaffPosViewProps {
   tires: ProductItem[];
   onExecuteTransaction: (
     type: 'sale' | 'purchase',
-    items: { tire: TireItem; quantity: number; unitPrice: number }[],
+    items: { tire: TireItem; quantity: number; unitPrice: number; isSubUnit?: boolean }[],
     customerOrSupplier: string,
     note?: string,
     locationTarget?: 'front' | 'warehouse'
@@ -70,6 +71,9 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'warn' } | null>(null);
   const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
+
+  // Modal for unit selection when product has subUnit conversion
+  const [unitSelectProduct, setUnitSelectProduct] = useState<ProductItem | null>(null);
 
   const showToast = (text: string, type: 'success' | 'warn' = 'success') => {
     setToastMessage({ text, type });
@@ -128,41 +132,53 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     });
   }, [tires, searchQuery, selectedBrand, stockScope]);
 
-  // Add product to cart with strict storefront stock limit
-  const addToCart = (product: ProductItem) => {
+  // Handle click on product card: sell in subUnit directly if available, otherwise main unit
+  const handleProductCardClick = (product: ProductItem) => {
     const breakdown = getProductStockBreakdown(product);
     const maxStock = breakdown.frontQty;
 
-    // Check if storefront has zero stock
     if (maxStock <= 0) {
       showToast(
-        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น ต้องเบิกมาก่อน)`,
+        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น)`,
         'warn'
       );
       return;
     }
 
+    // Sell in subUnit directly if defined, otherwise main unit
+    const sellAsSub = Boolean(product.subUnit && product.conversionRate && product.conversionRate > 1);
+    addToCart(product, sellAsSub);
+  };
+
+  // Add product to cart with strict storefront stock limit
+  const addToCart = (product: ProductItem, isSubUnit: boolean = false) => {
+    const breakdown = getProductStockBreakdown(product);
+    const maxStock = breakdown.frontQty; // Main units in stock
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.tire.id === product.id);
-      const price = product.sellingPrice || product.price || 0;
+      const existing = prev.find((item) => item.tire.id === product.id && item.isSubUnit === isSubUnit);
+      const basePrice = product.sellingPrice || product.price || 0;
+      const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
+      
+      // If selling by subUnit, price per subUnit can be estimated as basePrice / rate or kept
+      const unitPrice = isSubUnit ? Math.round((basePrice / rate) * 100) / 100 : basePrice;
 
       if (existing) {
-        // Enforce storefront limit: cannot exceed available frontQty
-        if (existing.quantity >= maxStock) {
-          showToast(`⚠️ สต็อกหน้าร้านมีเพียง ${maxStock} ${product.unit || 'ชิ้น'} (เพิ่มเกินไม่ได้)`, 'warn');
+        if (!isSubUnit && existing.quantity >= maxStock) {
+          showToast(`⚠️ สต็อกหน้าร้านมีเพียง ${maxStock} ${product.unit || 'ชิ้น'}`, 'warn');
           return prev;
         }
 
-        showToast(`+1 ${product.name || product.size} (ในบิล: ${existing.quantity + 1}/${maxStock})`, 'success');
+        showToast(`+1 (${isSubUnit ? product.subUnit : product.unit}) ${product.name || product.size}`, 'success');
         return prev.map((item) =>
-          item.tire.id === product.id
+          item.tire.id === product.id && item.isSubUnit === isSubUnit
             ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
 
-      showToast(`เพิ่ม "${product.name || product.size}" ลงในบิลแล้ว`, 'success');
-      return [...prev, { tire: product, quantity: 1, unitPrice: price, maxStorefrontStock: maxStock }];
+      showToast(`เพิ่ม "${product.name || product.size}" (${isSubUnit ? product.subUnit : product.unit}) ลงในบิลแล้ว`, 'success');
+      return [...prev, { tire: product, quantity: 1, unitPrice, maxStorefrontStock: maxStock, isSubUnit }];
     });
   };
 
@@ -175,13 +191,13 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   }, [scannedProduct]);
 
   // Update quantity in cart with strict max limit
-  const updateCartQty = (productId: string, delta: number) => {
+  const updateCartQty = (productId: string, isSubUnit: boolean, delta: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.tire.id === productId) {
+          if (item.tire.id === productId && item.isSubUnit === isSubUnit) {
             const newQty = item.quantity + delta;
-            if (newQty > item.maxStorefrontStock) {
+            if (!isSubUnit && newQty > item.maxStorefrontStock) {
               showToast(`⚠️ สต็อกหน้าร้านมีจำกัดเพียง ${item.maxStorefrontStock} ชิ้น`, 'warn');
               return item;
             }
@@ -193,8 +209,8 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     );
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.tire.id !== productId));
+  const removeFromCart = (productId: string, isSubUnit: boolean) => {
+    setCart((prev) => prev.filter((item) => !(item.tire.id === productId && item.isSubUnit === isSubUnit)));
   };
 
   const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -473,18 +489,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
               return (
                 <div
                   key={tire.id}
-                  onClick={() => {
-                    if (hasFrontStock && !isCartAtMax) {
-                      addToCart(tire);
-                    } else if (!hasFrontStock) {
-                      showToast(
-                        `❌ สินค้าหน้าร้านหมด (ในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น)`,
-                        'warn'
-                      );
-                    } else {
-                      showToast(`⚠️ สต็อกหน้าร้านมีจำกัด ${frontStock} ชิ้น`, 'warn');
-                    }
-                  }}
+                  onClick={() => handleProductCardClick(tire)}
                   className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
                     !hasFrontStock
                       ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
@@ -589,29 +594,31 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
             <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
               {cart.map((item) => (
                 <div
-                  key={item.tire.id}
+                  key={`${item.tire.id}-${item.isSubUnit ? 'sub' : 'main'}`}
                   className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 flex items-center justify-between text-xs shadow-sm"
                 >
                   <div className="min-w-0 flex-1 pr-2">
-                    <span className="font-bold text-slate-900 text-xs truncate block">
-                      {item.tire.name || item.tire.size}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="font-bold text-slate-900 text-xs truncate block">
+                        {item.tire.name || item.tire.size}
+                      </span>
+                      <span className={`text-[9px] font-bold px-1 rounded ${item.isSubUnit ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                        {item.isSubUnit ? item.tire.subUnit : item.tire.unit}
+                      </span>
+                    </div>
                     <span className="text-[10px] text-slate-600">
                       ฿{item.unitPrice.toLocaleString()} × {item.quantity} ={' '}
                       <strong className="text-amber-600 font-mono">
                         ฿{(item.unitPrice * item.quantity).toLocaleString()}
-                      </strong>{' '}
-                      <span className="text-emerald-700">
-                        (หน้าร้านมี {item.maxStorefrontStock})
-                      </span>
+                      </strong>
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       type="button"
-                      onClick={() => updateCartQty(item.tire.id, -1)}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center active:scale-95 border border-slate-300"
+                      onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), -1)}
+                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center active:scale-95 border border-slate-300 cursor-pointer"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
@@ -620,10 +627,10 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                     </span>
                     <button
                       type="button"
-                      disabled={item.quantity >= item.maxStorefrontStock}
-                      onClick={() => updateCartQty(item.tire.id, 1)}
-                      className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center active:scale-95 border ${
-                        item.quantity >= item.maxStorefrontStock
+                      disabled={!item.isSubUnit && item.quantity >= item.maxStorefrontStock}
+                      onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), 1)}
+                      className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center active:scale-95 border cursor-pointer ${
+                        !item.isSubUnit && item.quantity >= item.maxStorefrontStock
                           ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
                           : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
                       }`}
@@ -632,8 +639,8 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeFromCart(item.tire.id)}
-                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1"
+                      onClick={() => removeFromCart(item.tire.id, Boolean(item.isSubUnit))}
+                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -686,6 +693,56 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
         receipt={activeReceipt}
         isLightMode={true}
       />
+
+      {/* Unit Selection Modal (Main Unit vs Sub Unit) */}
+      {unitSelectProduct && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-xs w-full p-4 space-y-4 shadow-2xl">
+            <div className="text-center space-y-1">
+              <h3 className="text-sm font-bold text-slate-900">เลือกหน่วยที่ต้องการขาย</h3>
+              <p className="text-xs text-slate-500 truncate">{unitSelectProduct.name || unitSelectProduct.size}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(unitSelectProduct, false);
+                  setUnitSelectProduct(null);
+                }}
+                className="p-3 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-center transition-all cursor-pointer space-y-1"
+              >
+                <span className="text-xs font-bold text-amber-900 block">ขายหน่วยใหญ่</span>
+                <span className="text-lg font-black text-amber-700 block">{unitSelectProduct.unit || 'ลัง'}</span>
+                <span className="text-[10px] text-amber-800 font-mono">฿{(unitSelectProduct.sellingPrice || unitSelectProduct.price || 0).toLocaleString()}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(unitSelectProduct, true);
+                  setUnitSelectProduct(null);
+                }}
+                className="p-3 rounded-2xl bg-sky-50 hover:bg-sky-100 border border-sky-300 text-center transition-all cursor-pointer space-y-1"
+              >
+                <span className="text-xs font-bold text-sky-900 block">ขายหน่วยย่อย</span>
+                <span className="text-lg font-black text-sky-700 block">{unitSelectProduct.subUnit}</span>
+                <span className="text-[10px] text-sky-800 font-mono">
+                  ฿{Math.round(((unitSelectProduct.sellingPrice || unitSelectProduct.price || 0) / (unitSelectProduct.conversionRate || 1)) * 100) / 100}
+                </span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setUnitSelectProduct(null)}
+              className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold cursor-pointer"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
