@@ -27,8 +27,8 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Primary Flash model for ultra-low latency multimodal OCR and voice queries
-const GEMINI_FLASH_MODEL = 'gemini-3.5-flash';
+// Primary Flash model for ultra-low latency multimodal OCR and voice queries per skill guidelines
+const GEMINI_FLASH_MODEL = 'gemini-3.8-flash';
 const GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 
 // Robust helper with automatic fallback and timeout protection
