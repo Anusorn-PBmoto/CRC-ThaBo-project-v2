@@ -460,7 +460,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
             <span>แสดง {filteredProducts.length} รายการ</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {filteredProducts.map((tire) => {
               const breakdown = getProductStockBreakdown(tire);
               const price = tire.sellingPrice || tire.price || 0;
@@ -478,114 +478,76 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                       addToCart(tire);
                     } else if (!hasFrontStock) {
                       showToast(
-                        `❌ สินค้าหน้าร้านหมด (มีในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น ต้องเบิกมาก่อน)`,
+                        `❌ สินค้าหน้าร้านหมด (ในคลังหลังร้าน ${breakdown.warehouseQty} ชิ้น)`,
                         'warn'
                       );
                     } else {
-                      showToast(`⚠️ สต็อกหน้าร้านมีจำกัด ${frontStock} ชิ้น (ใส่ในบิลครบแล้ว)`, 'warn');
+                      showToast(`⚠️ สต็อกหน้าร้านมีจำกัด ${frontStock} ชิ้น`, 'warn');
                     }
                   }}
-                  className={`rounded-2xl p-3 transition-all flex items-center justify-between gap-2.5 shadow-sm border ${
+                  className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
                     !hasFrontStock
-                      ? 'opacity-60 border-slate-200 bg-slate-50/80 cursor-not-allowed'
+                      ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
                       : inCartItem
-                      ? 'border-amber-400 ring-2 ring-amber-400/30 bg-amber-50/50 hover:bg-amber-50/70 cursor-pointer'
-                      : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 cursor-pointer active:scale-[0.99]'
+                      ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
+                      : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    {/* Thumbnail */}
-                    {tireImg && tireImg.trim() !== '' && (
-                      <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center">
-                        <img
-                          src={tireImg}
-                          alt={tire.name || tire.size || 'สินค้า'}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
+                  {/* Full Background Image */}
+                  <div className="absolute inset-0 w-full h-full bg-slate-200">
+                    {tireImg && tireImg.trim() !== '' ? (
+                      <img
+                        src={tireImg}
+                        alt={tire.name || tire.size || 'สินค้า'}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+                        <Store className="w-8 h-8" />
                       </div>
                     )}
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-900 text-xs">
-                          {tire.name || tire.size}
-                        </span>
-                        {tire.brand && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                            {tire.brand}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Storefront Stock Info */}
-                      <div className="text-[11px] mt-1 flex items-center gap-2 flex-wrap">
-                        {hasFrontStock ? (
-                          <span className="text-emerald-700 font-bold inline-flex items-center gap-1">
-                            <Store className="w-3 h-3" />
-                            สต็อกหน้าร้าน: {frontStock} {tire.unit || 'ชิ้น'}
-                          </span>
-                        ) : (
-                          <span className="text-rose-600 font-bold inline-flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            หน้าร้านหมด (0)
-                          </span>
-                        )}
-
-                        {/* Inform about Warehouse without allowing sale */}
-                        {breakdown.warehouseQty > 0 && (
-                          <span className="text-slate-500 text-[10px]">
-                            (ในคลัง: {breakdown.warehouseQty} - ต้องเบิกมาก่อน)
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    {/* Dark Vignette Overlay for readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
                   </div>
 
-                  {/* Price & Add to Cart button */}
-                  <div className="flex items-center gap-2.5 text-right flex-shrink-0">
-                    <div>
-                      <span className="text-sm font-black font-mono text-amber-600 block">
+                  {/* Top Bar: Brand & Cart Badge */}
+                  <div className="relative z-10 flex items-center justify-between gap-1">
+                    {tire.brand ? (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase">
+                        {tire.brand}
+                      </span>
+                    ) : (
+                      <span />
+                    )}
+
+                    {inCartItem && (
+                      <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5">
+                        <span>×{inCartItem.quantity}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom Translucent Overlay with Title, Price & Stock */}
+                  <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
+                    <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
+                      {tire.name || tire.size}
+                    </span>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black font-mono text-amber-300">
                         ฿{price.toLocaleString()}
                       </span>
                       <span
-                        className={`text-[10px] font-semibold ${
+                        className={`text-[9px] font-bold px-1 rounded ${
                           !hasFrontStock
-                            ? 'text-rose-600'
-                            : isCartAtMax
-                            ? 'text-amber-700'
-                            : 'text-slate-500'
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         }`}
                       >
-                        {!hasFrontStock
-                          ? 'ขายไม่ได้'
-                          : isCartAtMax
-                          ? 'ใส่ครบแล้ว'
-                          : `เหลือ ${frontStock}`}
+                        {!hasFrontStock ? 'หมด' : `หน้าร้าน: ${frontStock}`}
                       </span>
                     </div>
-
-                    <button
-                      type="button"
-                      disabled={!hasFrontStock || isCartAtMax}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addToCart(tire);
-                      }}
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm transition-all active:scale-95 shadow-sm ${
-                        !hasFrontStock
-                          ? 'bg-slate-100 text-slate-300 border border-slate-200 cursor-not-allowed'
-                          : inCartItem
-                          ? 'bg-amber-400 hover:bg-amber-500 text-slate-950 cursor-pointer'
-                          : 'bg-slate-100 hover:bg-amber-400 hover:text-slate-950 text-slate-700 border border-slate-300 cursor-pointer'
-                      }`}
-                    >
-                      {inCartItem ? (
-                        <span className="text-xs font-black">+{inCartItem.quantity}</span>
-                      ) : (
-                        <Plus className="w-4 h-4" />
-                      )}
-                    </button>
                   </div>
                 </div>
               );
