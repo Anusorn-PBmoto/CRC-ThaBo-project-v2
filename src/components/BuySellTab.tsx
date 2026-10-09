@@ -18,11 +18,13 @@ import {
   Banknote,
   Store,
   Warehouse,
+  ArrowRight,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem, Transaction } from '../types';
 import { resolveProductImage } from '../utils/productImages';
 import { getProductStockBreakdown } from '../utils/stockUtils';
+import { ReceiptModal, ReceiptData } from './ReceiptModal';
 
 interface BuySellTabProps {
   tires: TireItem[];
@@ -35,6 +37,7 @@ interface BuySellTabProps {
     locationTarget?: 'front' | 'warehouse'
   ) => Promise<void>;
   onOpenScanner: () => void;
+  onOpenStaffPos?: () => void;
   incomingSearchQuery?: string;
 }
 
@@ -49,6 +52,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   transactions,
   onExecuteTransaction,
   onOpenScanner,
+  onOpenStaffPos,
   incomingSearchQuery,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
@@ -61,6 +65,31 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeReceipt, setActiveReceipt] = useState<ReceiptData | null>(null);
+
+  const openReceiptFromTransaction = (tx: Transaction) => {
+    const dateObj = new Date(tx.createdAt || Date.now());
+    const receiptPayload: ReceiptData = {
+      receiptNo: `REC-${tx.id.slice(-8).toUpperCase()}`,
+      dateStr: dateObj.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }),
+      timeStr: dateObj.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+      customer: tx.customerOrSupplier || 'ลูกค้าหน้าร้าน',
+      locationTarget: tx.locationTarget || 'front',
+      items: [
+        {
+          name: tx.tireName || tx.productName || 'สินค้า',
+          brand: tx.brand,
+          quantity: tx.quantity,
+          unitPrice: tx.unitPrice,
+          totalPrice: tx.totalPrice || tx.quantity * tx.unitPrice,
+        },
+      ],
+      totalAmount: tx.totalPrice || tx.quantity * tx.unitPrice,
+      totalQuantity: tx.quantity,
+      note: tx.note,
+    };
+    setActiveReceipt(receiptPayload);
+  };
 
   // Available brands
   const brands = useMemo(() => {
@@ -200,6 +229,34 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         origin: { y: 0.8 },
       });
 
+      if (transactionType === 'sale') {
+        const now = new Date();
+        const receiptNo = `REC-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
+          now.getDate()
+        ).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+
+        const receiptPayload: ReceiptData = {
+          receiptNo,
+          dateStr: now.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }),
+          timeStr: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+          customer: customer.trim() || 'ลูกค้าหน้าร้าน',
+          locationTarget,
+          items: cart.map((item) => ({
+            name: item.tire.name || item.tire.size || 'สินค้า',
+            brand: item.tire.brand,
+            size: item.tire.size,
+            unit: item.tire.unit,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.quantity * item.unitPrice,
+          })),
+          totalAmount,
+          totalQuantity,
+          note: note.trim() || undefined,
+        };
+        setActiveReceipt(receiptPayload);
+      }
+
       const message =
         transactionType === 'sale'
           ? `ตัดสต็อกขายออก ${totalQuantity} รายการ สำเร็จ!`
@@ -222,6 +279,33 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
 
   return (
     <div className="pb-32 pt-2 px-3 space-y-3.5 max-w-md mx-auto font-['Prompt',sans-serif]">
+      {/* Quick Staff POS Mode Banner */}
+      {onOpenStaffPos && (
+        <div className="bg-gradient-to-r from-emerald-950/40 via-[#252C33] to-[#252C33] border border-emerald-500/40 rounded-2xl p-2.5 flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold flex-shrink-0">
+              <ShoppingCart className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-[#EEEEEE] block">
+                โหมดหน้าขายสำหรับพนักงาน (Staff POS)
+              </span>
+              <span className="text-[10px] text-[#A0ABB5] block truncate">
+                โครงสร้างเรียบง่าย ปุ่มใหญ่ สแกนแล้วตัดสต็อกทันที
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenStaffPos}
+            className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all shadow-sm flex-shrink-0 cursor-pointer"
+          >
+            <span>ทดลองเปิด</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* 1. Transaction Type Selector Tabs */}
       <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#3A4750] border border-[#475662] rounded-2xl">
         <button
@@ -683,17 +767,30 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <div
-                      className={`font-mono font-bold ${
-                        isSale ? 'text-[#F6C90E]' : 'text-emerald-400'
-                      }`}
-                    >
-                      {isSale ? `-${tx.quantity}` : `+${tx.quantity}`} รายการ
+                  <div className="flex items-center gap-2 text-right">
+                    <div>
+                      <div
+                        className={`font-mono font-bold ${
+                          isSale ? 'text-[#F6C90E]' : 'text-emerald-400'
+                        }`}
+                      >
+                        {isSale ? `-${tx.quantity}` : `+${tx.quantity}`} รายการ
+                      </div>
+                      <div className="text-[10px] text-[#A0ABB5] font-mono">
+                        ฿{tx.totalPrice?.toLocaleString() || (tx.quantity * tx.unitPrice).toLocaleString()}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-[#A0ABB5] font-mono">
-                      ฿{tx.totalPrice?.toLocaleString() || (tx.quantity * tx.unitPrice).toLocaleString()}
-                    </div>
+
+                    {isSale && (
+                      <button
+                        type="button"
+                        onClick={() => openReceiptFromTransaction(tx)}
+                        title="ดูและพิมพ์ใบเสร็จ"
+                        className="p-2 rounded-xl bg-[#252C33] hover:bg-[#2E3740] text-[#F6C90E] border border-[#475662] hover:border-[#F6C90E] active:scale-95 transition-all shadow-sm cursor-pointer"
+                      >
+                        <Receipt className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -701,6 +798,13 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Printable Receipt Modal */}
+      <ReceiptModal
+        isOpen={Boolean(activeReceipt)}
+        onClose={() => setActiveReceipt(null)}
+        receipt={activeReceipt}
+      />
     </div>
   );
 };

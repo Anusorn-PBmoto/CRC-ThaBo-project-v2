@@ -23,6 +23,7 @@ interface BarcodeScanModalProps {
   onSelectTire: (tire: TireItem) => void;
   onBindBarcode?: (tireId: string, barcode: string) => void;
   onOpenAddModalWithBarcode?: (barcode: string) => void;
+  isLightMode?: boolean;
 }
 
 // Known Thai motorcycle tire EAN-13 barcodes dictionary
@@ -48,6 +49,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   onSelectTire,
   onBindBarcode,
   onOpenAddModalWithBarcode,
+  isLightMode = false,
 }) => {
   const [activeMode, setActiveMode] = useState<'camera' | 'manual'>('camera');
   const [manualCode, setManualCode] = useState('');
@@ -167,39 +169,81 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
   }).slice(0, 10);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 font-['Prompt',sans-serif]">
-      <div className="w-full max-w-sm bg-[#3A4750] border border-[#475662] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-md animate-in fade-in duration-150 font-['Prompt',sans-serif]">
+      <div
+        className={`w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border ${
+          isLightMode
+            ? 'bg-white border-slate-300 text-slate-800'
+            : 'bg-[#3A4750] border-[#475662] text-[#EEEEEE]'
+        }`}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#252C33] border-b border-[#475662]">
+        <div
+          className={`flex items-center justify-between px-4 py-3 border-b ${
+            isLightMode
+              ? 'bg-slate-50 border-slate-200'
+              : 'bg-[#252C33] border-[#475662]'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#3A4750] text-[#F6C90E] flex items-center justify-center border border-[#475662]">
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center border ${
+                isLightMode
+                  ? 'bg-amber-100 text-amber-700 border-amber-300'
+                  : 'bg-[#3A4750] text-[#F6C90E] border-[#475662]'
+              }`}
+            >
               <Scan className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-[#EEEEEE] flex items-center gap-1.5">
+              <h3
+                className={`text-sm font-bold flex items-center gap-1.5 ${
+                  isLightMode ? 'text-slate-900' : 'text-[#EEEEEE]'
+                }`}
+              >
                 <span>สแกนเนอร์บาร์โค้ดอะไหล่</span>
-                <span className="text-[9px] bg-[#F6C90E]/20 text-[#F6C90E] font-bold px-1.5 py-0.2 rounded">
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                    isLightMode
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'bg-[#F6C90E]/20 text-[#F6C90E]'
+                  }`}
+                >
                   HD PRO
                 </span>
               </h3>
-              <span className="text-[10px] text-[#A0ABB5]">กล้อง HD • โฟกัสอัตโนมัติ</span>
+              <span className={`text-[10px] ${isLightMode ? 'text-slate-500' : 'text-[#A0ABB5]'}`}>
+                กล้อง HD • โฟกัสอัตโนมัติ
+              </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-[#A0ABB5] hover:text-[#EEEEEE]"
+            className={`p-1 rounded-lg ${
+              isLightMode ? 'text-slate-400 hover:text-slate-700' : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+            }`}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Mode switcher tabs */}
-        <div className="grid grid-cols-2 gap-1 p-2 bg-[#252C33] border-b border-[#475662] text-xs font-semibold">
+        <div
+          className={`grid grid-cols-2 gap-1 p-2 border-b text-xs font-semibold ${
+            isLightMode
+              ? 'bg-slate-100 border-slate-200'
+              : 'bg-[#252C33] border-[#475662]'
+          }`}
+        >
           <button
             onClick={() => setActiveMode('camera')}
-            className={`py-1.5 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-1.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeMode === 'camera'
-                ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-md'
+                ? isLightMode
+                  ? 'bg-amber-400 text-slate-950 font-bold shadow-sm'
+                  : 'bg-[#F6C90E] text-[#252C33] font-bold shadow-md'
+                : isLightMode
+                ? 'text-slate-600 hover:text-slate-900'
                 : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
             }`}
           >
@@ -209,9 +253,13 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
 
           <button
             onClick={() => setActiveMode('manual')}
-            className={`py-1.5 rounded-xl flex items-center justify-center gap-1.5 transition-all ${
+            className={`py-1.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeMode === 'manual'
-                ? 'bg-[#3A4750] text-[#EEEEEE] border border-[#475662]'
+                ? isLightMode
+                  ? 'bg-white text-slate-900 border border-slate-300 shadow-sm'
+                  : 'bg-[#3A4750] text-[#EEEEEE] border border-[#475662]'
+                : isLightMode
+                ? 'text-slate-600 hover:text-slate-900'
                 : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
             }`}
           >
@@ -229,7 +277,11 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
           ) : (
             <div className="space-y-2.5">
               <div>
-                <label className="block text-[#A0ABB5] font-medium mb-1">
+                <label
+                  className={`block font-medium mb-1 ${
+                    isLightMode ? 'text-slate-600' : 'text-[#A0ABB5]'
+                  }`}
+                >
                   พิมพ์รหัสบาร์โค้ด หรือชื่ออะไหล่:
                 </label>
                 <div className="flex gap-2">
@@ -241,11 +293,15 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       handleSearchCode(e.target.value);
                     }}
                     placeholder="เช่น 8851234567890 หรือชื่อสินค้า"
-                    className="flex-1 bg-[#252C33] border border-[#475662] text-[#EEEEEE] rounded-xl px-3 py-2 text-xs focus:border-[#F6C90E] focus:outline-none font-mono"
+                    className={`flex-1 rounded-xl px-3 py-2 text-xs focus:outline-none font-mono ${
+                      isLightMode
+                        ? 'bg-slate-50 border border-slate-300 text-slate-900 focus:border-amber-500'
+                        : 'bg-[#252C33] border border-[#475662] text-[#EEEEEE] focus:border-[#F6C90E]'
+                    }`}
                   />
                   <button
                     onClick={() => handleSearchCode(manualCode)}
-                    className="px-3 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs active:scale-95"
+                    className="px-3 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs active:scale-95 cursor-pointer shadow-sm"
                   >
                     ค้นหา
                   </button>
@@ -256,9 +312,21 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
 
           {/* 1. MATCHED SCAN RESULT */}
           {scannedResult && (
-            <div className="p-3 rounded-2xl bg-[#252C33] border border-[#F6C90E] shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5 overflow-hidden">
+            <div
+              className={`p-3 rounded-2xl shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5 overflow-hidden border ${
+                isLightMode
+                  ? 'bg-slate-50 border-amber-400 ring-2 ring-amber-400/20'
+                  : 'bg-[#252C33] border-[#F6C90E]'
+              }`}
+            >
               {(scannedResult.imageUrl || resolveProductImage(scannedResult)) && (
-                <div className="w-full h-40 -mt-3 -mx-3 mb-1 w-[calc(100%+1.5rem)] overflow-hidden bg-[#20262D] border-b border-[#475662]">
+                <div
+                  className={`w-full h-40 -mt-3 -mx-3 mb-1 w-[calc(100%+1.5rem)] overflow-hidden border-b ${
+                    isLightMode
+                      ? 'bg-slate-100 border-slate-200'
+                      : 'bg-[#20262D] border-[#475662]'
+                  }`}
+                >
                   <img
                     src={scannedResult.imageUrl || resolveProductImage(scannedResult)}
                     alt={scannedResult.name || 'สินค้า'}
@@ -269,23 +337,42 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
               )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <CheckCircle className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
-                  <span className="font-bold text-[#EEEEEE] text-xs">
+                  <CheckCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <span
+                    className={`font-bold text-xs ${
+                      isLightMode ? 'text-slate-900' : 'text-[#EEEEEE]'
+                    }`}
+                  >
                     สแกนพบสินค้า: {scannedResult.name || scannedResult.size}
                   </span>
                 </div>
                 {scannedResult.unit && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#3A4750] text-[#F6C90E] font-bold border border-[#475662]">
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
+                      isLightMode
+                        ? 'bg-slate-200 text-slate-800 border-slate-300'
+                        : 'bg-[#3A4750] text-[#F6C90E] border-[#475662]'
+                    }`}
+                  >
                     {scannedResult.unit}
                   </span>
                 )}
               </div>
 
-              <div className="text-[11px] text-[#A0ABB5] flex items-center justify-between">
-                <span>ช่องจัดเก็บ: <strong className="text-[#EEEEEE]">{scannedResult.location || 'RACK A-01'}</strong></span>
+              <div
+                className={`text-[11px] flex items-center justify-between ${
+                  isLightMode ? 'text-slate-600' : 'text-[#A0ABB5]'
+                }`}
+              >
+                <span>
+                  ช่องจัดเก็บ:{' '}
+                  <strong className={isLightMode ? 'text-slate-800' : 'text-[#EEEEEE]'}>
+                    {scannedResult.location || 'RACK A-01'}
+                  </strong>
+                </span>
                 <span>
                   ยอดคงเหลือ:{' '}
-                  <strong className="text-[#F6C90E] font-mono text-sm">
+                  <strong className="text-amber-600 font-mono text-sm">
                     {scannedResult.actualQty}
                   </strong>{' '}
                   {scannedResult.unit || 'ชิ้น'}
@@ -293,14 +380,14 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
               </div>
 
               {scannedResult.sellingPrice > 0 && (
-                <div className="text-[11px] text-[#F6C90E] font-bold font-mono">
+                <div className="text-[11px] text-amber-600 font-bold font-mono">
                   ราคาขาย: ฿{scannedResult.sellingPrice.toLocaleString()}
                 </div>
               )}
 
               <button
                 onClick={() => confirmSelection(scannedResult)}
-                className="w-full py-2.5 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all"
+                className="w-full py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md active:scale-95 transition-all cursor-pointer"
               >
                 <span>เลือกรายการนี้เพื่อตรวจนับ / ตัดสต็อก</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -310,14 +397,24 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
 
           {/* 2. UNMATCHED BARCODE FOUND */}
           {unmatchedBarcode && !scannedResult && (
-            <div className="p-3.5 rounded-2xl bg-[#252C33] border border-[#F6C90E]/50 shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5">
+            <div
+              className={`p-3.5 rounded-2xl shadow-xl animate-in slide-in-from-bottom-2 space-y-2.5 border ${
+                isLightMode
+                  ? 'bg-amber-50 border-amber-300'
+                  : 'bg-[#252C33] border-[#F6C90E]/50'
+              }`}
+            >
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-1.5 text-[#F6C90E] font-bold text-xs">
-                    <AlertTriangle className="w-4 h-4 text-[#F6C90E] flex-shrink-0" />
+                  <div className="flex items-center gap-1.5 text-amber-700 font-bold text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
                     <span>สแกนพบรหัส: {unmatchedBarcode}</span>
                   </div>
-                  <p className="text-[11px] text-[#A0ABB5] mt-0.5">
+                  <p
+                    className={`text-[11px] mt-0.5 ${
+                      isLightMode ? 'text-slate-600' : 'text-[#A0ABB5]'
+                    }`}
+                  >
                     รหัสนี้ยังไม่ได้ผูกกับสินค้าในระบบ
                   </p>
                 </div>
@@ -327,9 +424,13 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <button
                     onClick={() => setIsBindingOpen(true)}
-                    className="py-2 px-2.5 rounded-xl bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-[#475662]"
+                    className={`py-2 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all border cursor-pointer ${
+                      isLightMode
+                        ? 'bg-white hover:bg-slate-100 text-slate-700 border-slate-300'
+                        : 'bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] border-[#475662]'
+                    }`}
                   >
-                    <Link className="w-3.5 h-3.5 text-[#F6C90E]" />
+                    <Link className="w-3.5 h-3.5 text-amber-600" />
                     <span>ผูกกับสินค้าที่มี</span>
                   </button>
 
@@ -338,7 +439,7 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       onClose();
                       onOpenAddModalWithBarcode?.(unmatchedBarcode);
                     }}
-                    className="py-2 px-2.5 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md"
+                    className="py-2 px-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>เพิ่มเป็นสินค้าใหม่</span>
@@ -346,24 +447,38 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                 </div>
               ) : (
                 /* Product Search & Bind Selector */
-                <div className="pt-2 border-t border-[#475662] space-y-2 animate-in fade-in">
-                  <div className="flex items-center justify-between text-xs text-[#EEEEEE] font-medium">
+                <div
+                  className={`pt-2 border-t space-y-2 animate-in fade-in ${
+                    isLightMode ? 'border-slate-300' : 'border-[#475662]'
+                  }`}
+                >
+                  <div
+                    className={`flex items-center justify-between text-xs font-medium ${
+                      isLightMode ? 'text-slate-700' : 'text-[#EEEEEE]'
+                    }`}
+                  >
                     <span>ค้นหาสินค้าเพื่อผูกรหัสบาร์โค้ดนี้:</span>
                     <button
                       onClick={() => setIsBindingOpen(false)}
-                      className="text-[10px] text-[#A0ABB5] hover:text-[#EEEEEE]"
+                      className={`text-[10px] cursor-pointer ${
+                        isLightMode ? 'text-slate-500 hover:text-slate-800' : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+                      }`}
                     >
                       ยกเลิก
                     </button>
                   </div>
                   <div className="relative">
-                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5]" />
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={bindSearchQuery}
                       onChange={(e) => setBindSearchQuery(e.target.value)}
                       placeholder="พิมพ์ชื่อสินค้า เช่น สายพาน, ผ้าเบรก"
-                      className="w-full bg-[#3A4750] border border-[#475662] text-[#EEEEEE] rounded-xl pl-8 pr-3 py-1.5 text-xs focus:border-[#F6C90E] focus:outline-none"
+                      className={`w-full rounded-xl pl-8 pr-3 py-1.5 text-xs focus:outline-none ${
+                        isLightMode
+                          ? 'bg-white border border-slate-300 text-slate-900 focus:border-amber-500'
+                          : 'bg-[#3A4750] border border-[#475662] text-[#EEEEEE] focus:border-[#F6C90E]'
+                      }`}
                       autoFocus
                     />
                   </div>
@@ -373,15 +488,27 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       <button
                         key={t.id}
                         onClick={() => handleConfirmBind(t)}
-                        className="w-full p-2 rounded-xl bg-[#3A4750] hover:bg-[#43525D] border border-[#475662] text-left flex items-center justify-between text-[#EEEEEE] transition-all text-xs"
+                        className={`w-full p-2 rounded-xl border text-left flex items-center justify-between transition-all text-xs cursor-pointer ${
+                          isLightMode
+                            ? 'bg-white hover:bg-slate-100 border-slate-200 text-slate-900'
+                            : 'bg-[#3A4750] hover:bg-[#43525D] border-[#475662] text-[#EEEEEE]'
+                        }`}
                       >
                         <div>
-                          <div className="font-bold text-[#EEEEEE]">
+                          <div className={`font-bold ${isLightMode ? 'text-slate-900' : 'text-[#EEEEEE]'}`}>
                             {t.name || t.size}
                           </div>
-                          <div className="text-[10px] text-[#A0ABB5]">{t.location || 'RACK A-01'} • คงเหลือ {t.actualQty} {t.unit || 'ชิ้น'}</div>
+                          <div className={`text-[10px] ${isLightMode ? 'text-slate-500' : 'text-[#A0ABB5]'}`}>
+                            {t.location || 'RACK A-01'} • คงเหลือ {t.actualQty} {t.unit || 'ชิ้น'}
+                          </div>
                         </div>
-                        <span className="text-[10px] bg-[#252C33] text-[#F6C90E] font-bold px-2 py-1 rounded-lg border border-[#F6C90E]/30">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border ${
+                            isLightMode
+                              ? 'bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-[#252C33] text-[#F6C90E] border-[#F6C90E]/30'
+                          }`}
+                        >
                           ผูกรหัสนี้
                         </span>
                       </button>

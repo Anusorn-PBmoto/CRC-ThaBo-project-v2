@@ -522,6 +522,26 @@ export async function fetchTransactions(): Promise<Transaction[]> {
   }
 }
 
+export async function fetchLiveTiresFromCloud(): Promise<ProductItem[]> {
+  try {
+    const snap = await getDocs(collection(db, 'products'));
+    const list: ProductItem[] = [];
+    snap.forEach((d) => {
+      const data = d.data();
+      list.push({
+        id: d.id,
+        ...(data as any),
+        frontLocation: cleanLocationName(data.frontLocation),
+        location: cleanLocationName(data.location || 'RACK A-01'),
+      });
+    });
+    return list;
+  } catch (err) {
+    console.warn('fetchLiveTiresFromCloud error:', err);
+    return [];
+  }
+}
+
 // Real-time Audit Sessions Listener (On-demand capable)
 export function subscribeToAuditSessions(
   onData: (sessions: AuditSession[]) => void,

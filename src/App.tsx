@@ -22,6 +22,7 @@ import {
   markQuotaExhausted,
   resetQuotaCircuitBreaker,
   retryCloudConnection,
+  fetchLiveTiresFromCloud,
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
@@ -46,6 +47,7 @@ import { ImageMatchBackupModal } from './components/ImageMatchBackupModal';
 import { StockTransferModal } from './components/StockTransferModal';
 import { BatchStockTransferModal } from './components/BatchStockTransferModal';
 import { ScrollToTopButton } from './components/ScrollToTopButton';
+import { StaffPosView } from './components/StaffPosView';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -201,6 +203,57 @@ export default function App() {
   const [batchTransferItems, setBatchTransferItems] = useState<ProductItem[]>([]);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => isFirestoreQuotaExhausted());
   const [isRetryingCloud, setIsRetryingCloud] = useState(false);
+  const [isStaffPosMode, setIsStaffPosMode] = useState(false);
+  const [staffScannedProduct, setStaffScannedProduct] = useState<ProductItem | null>(null);
+
+  // Auto-detect Dev Preview environment: ais-dev-... or localhost
+  const isDevPreviewEnv =
+    typeof window !== 'undefined' &&
+    (window.location.hostname.includes('ais-dev-') ||
+      window.location.hostname === 'localhost' ||
+      window.location.port === '3000');
+
+  // Sandbox Mode: Defaults to ON in Dev Preview so tests never alter live Cloud data!
+  const [isSandboxMode, setIsSandboxMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crc_thabo_sandbox_mode');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return isDevPreviewEnv;
+  });
+
+  const toggleSandboxMode = () => {
+    setIsSandboxMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('crc_thabo_sandbox_mode', String(next));
+      } catch {}
+      setAppSheetToast(
+        next
+          ? '🧪 เปิดโหมดทดสอบ (Sandbox): การซื้อ-ขาย-ตัดสต็อกจะไม่บันทึกลงคลาวด์จริง'
+          : '☁️ เปิดโหมดจริง (Live Cloud): ทุกรายการจะถูกบันทึกลงคลาวด์จริง'
+      );
+      setTimeout(() => setAppSheetToast(null), 3500);
+      return next;
+    });
+  };
+
+  // Reset local state back to pristine live Firestore state (discards any test changes)
+  const handleResetToLiveCloud = async () => {
+    try {
+      setAppSheetToast('🔄 กำลังดึงข้อมูลล่าสุดจากคลาวด์...');
+      const freshProducts = await fetchLiveTiresFromCloud();
+      if (freshProducts.length > 0) {
+        persistTires(freshProducts);
+        setAppSheetToast('✅ รีเซ็ตข้อมูลกลับสู่ค่าจริงบนคลาวด์เรียบร้อยแล้ว');
+      } else {
+        setAppSheetToast('⚠️ ไม่พบข้อมูลบนคลาวด์');
+      }
+      setTimeout(() => setAppSheetToast(null), 3500);
+    } catch (err) {
+      console.error('Reset error:', err);
+    }
+  };
 
   const handleRetryCloud = async () => {
     setIsRetryingCloud(true);
@@ -435,7 +488,12 @@ export default function App() {
     };
     persistLogs((prev) => [localLog, ...prev.slice(0, 49)]);
 
-    // 3. Persist single product document to Firestore (skipping per-item audit_logs write)
+    // 3. Persist single product document to Firestore (skipping if in Sandbox mode!)
+    if (isSandboxMode) {
+      console.log('🧪 [Sandbox Mode] Skipping updateTireActualQty cloud write');
+      return;
+    }
+
     try {
       await updateTireActualQty(
         tire.id,
@@ -597,39 +655,43 @@ export default function App() {
           }))
         );
 
-        // Batch update to Firestore
-        try {
-          const batch = writeBatch(db);
-          tires.forEach((tire) => {
-            if (tire.actualQty !== tire.systemQty) {
-              const prodRef = doc(db, 'products', tire.id);
-              batch.set(
-                prodRef,
-                {
-                  systemQty: tire.actualQty,
-                  status: 'checked',
-                  updatedAt: new Date().toISOString(),
-                },
-                { merge: true }
-              );
-            }
-          });
-          await batch.commit();
-        } catch (err) {
-          console.warn('Batch stock sync warning:', err);
+        // Batch update to Firestore (Skip if in Sandbox mode!)
+        if (!isSandboxMode) {
+          try {
+            const batch = writeBatch(db);
+            tires.forEach((tire) => {
+              if (tire.actualQty !== tire.systemQty) {
+                const prodRef = doc(db, 'products', tire.id);
+                batch.set(
+                  prodRef,
+                  {
+                    systemQty: tire.actualQty,
+                    status: 'checked',
+                    updatedAt: new Date().toISOString(),
+                  },
+                  { merge: true }
+                );
+              }
+            });
+            await batch.commit();
+          } catch (err) {
+            console.warn('Batch stock sync warning:', err);
+          }
         }
       }
 
-      // 4. Save session to Firestore
-      saveAuditSession(sessionId, {
-        code: sessionCode,
-        zone: 'คลังอะไหล่',
-        title: 'คลังอะไหล่มอเตอร์ไซค์ • บันทึกผลนับสต็อก',
-        totalItems: tires.length,
-        checkedItems: checkedCount,
-        discrepancyCount: syncToSystem ? 0 : discrepancyCount,
-        status: 'completed',
-      }).catch(console.warn);
+      // 4. Save session to Firestore (Skip if in Sandbox mode!)
+      if (!isSandboxMode) {
+        saveAuditSession(sessionId, {
+          code: sessionCode,
+          zone: 'คลังอะไหล่',
+          title: 'คลังอะไหล่มอเตอร์ไซค์ • บันทึกผลนับสต็อก',
+          totalItems: tires.length,
+          checkedItems: checkedCount,
+          discrepancyCount: syncToSystem ? 0 : discrepancyCount,
+          status: 'completed',
+        }).catch(console.warn);
+      }
 
       setIsAuditConfirmOpen(false);
 
@@ -713,11 +775,13 @@ export default function App() {
     };
     persistLogs((prev) => [logEntry, ...prev]);
 
-    // 3. Persist to Firestore Cloud
-    try {
-      await executeStockTransfer(transfer, updatedProduct);
-    } catch (err) {
-      console.warn('executeStockTransfer error:', err);
+    // 3. Persist to Firestore Cloud (Skip if in Sandbox mode!)
+    if (!isSandboxMode) {
+      try {
+        await executeStockTransfer(transfer, updatedProduct);
+      } catch (err) {
+        console.warn('executeStockTransfer error:', err);
+      }
     }
 
     setAppSheetToast(
@@ -764,11 +828,13 @@ export default function App() {
     }));
     persistLogs((prev) => [...newLogs, ...prev]);
 
-    // 3. Persist to Firebase Cloud
-    try {
-      await executeBatchStockTransfer(batchList);
-    } catch (err) {
-      console.warn('executeBatchStockTransfer error:', err);
+    // 3. Persist to Firebase Cloud (Skip if in Sandbox mode!)
+    if (!isSandboxMode) {
+      try {
+        await executeBatchStockTransfer(batchList);
+      } catch (err) {
+        console.warn('executeBatchStockTransfer error:', err);
+      }
     }
 
     const totalQty = batchList.reduce(
@@ -910,7 +976,14 @@ export default function App() {
     });
     persistLogs((prev) => [...newLogs, ...prev]);
 
-    // 4. Background persist to Firestore safely
+    // 4. Background persist to Firestore safely (Skip if in Sandbox mode!)
+    if (isSandboxMode) {
+      console.log('🧪 [Sandbox Mode] Skipping executeTransaction Firestore write');
+      setAppSheetToast('🧪 โหมดทดสอบ (Sandbox): ตัดสต็อกเฉพาะในหน้าจอนี้ ไม่ถูกบันทึกลงคลาวด์จริง');
+      setTimeout(() => setAppSheetToast(null), 3500);
+      return;
+    }
+
     try {
       await executeTransaction(type, items, customerOrSupplier, note, locationTarget);
     } catch (err) {
@@ -936,6 +1009,37 @@ export default function App() {
   const checkedCount = tires.filter((t) => t.status === 'checked').length;
   const matchedCount = tires.filter((t) => t.actualQty === t.systemQty && t.status === 'checked').length;
 
+  // Dedicated Staff POS Mode (Simplified Counter Sales for Staff - Light Theme)
+  if (isStaffPosMode) {
+    return (
+      <div className="min-h-screen bg-slate-100 text-slate-800 font-['Prompt',sans-serif]">
+        <StaffPosView
+          tires={tires}
+          onExecuteTransaction={handleExecuteTransaction}
+          onExitStaffMode={() => setIsStaffPosMode(false)}
+          onOpenScanner={() => setIsScannerOpen(true)}
+          scannedProduct={staffScannedProduct}
+          onClearScannedProduct={() => setStaffScannedProduct(null)}
+          isSandboxMode={isSandboxMode}
+          onResetToLiveCloud={handleResetToLiveCloud}
+          onToggleSandboxMode={toggleSandboxMode}
+        />
+
+        <BarcodeScanModal
+          isOpen={isScannerOpen}
+          onClose={() => setIsScannerOpen(false)}
+          tires={tires}
+          onSelectTire={(tire) => {
+            setStaffScannedProduct(tire);
+            setIsScannerOpen(false);
+          }}
+          onBindBarcode={handleBindBarcode}
+          isLightMode={true}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#252C33] text-[#EEEEEE] flex flex-col font-['Prompt',sans-serif]">
       {/* Top Header */}
@@ -943,6 +1047,7 @@ export default function App() {
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
+        onToggleStaffPos={() => setIsStaffPosMode(true)}
         isOnline={isOnline && !isQuotaExceeded}
         isQuotaMode={isQuotaExceeded}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
@@ -958,6 +1063,41 @@ export default function App() {
             : 'รายการสินค้า & แคตตาล็อกอะไหล่'
         }
       />
+
+      {/* Sandbox Test Mode Banner (Shows in Dev Preview or when user turns on Sandbox) */}
+      {isSandboxMode && (
+        <div className="bg-gradient-to-r from-amber-950/90 via-[#2E2516] to-[#252C33] border-b border-amber-500/40 px-3 py-1.5 text-xs font-['Prompt',sans-serif] z-20 shadow-md">
+          <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <span className="text-[11px] font-bold text-amber-300 truncate">
+                🧪 โหมดทดสอบ (Sandbox): ไม่บันทึกลงคลาวด์จริง
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={handleResetToLiveCloud}
+                title="ดึงข้อมูลล่าสุดจากคลาวด์ใหม่ ยกเลิกการทดสอบทั้งหมด"
+                className="px-2 py-0.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[10px] font-bold active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-2.5 h-2.5" />
+                <span>รีเซ็ตค่าจริง</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleSandboxMode}
+                title="สลับโหมด"
+                className="px-1.5 py-0.5 rounded-lg bg-[#252C33] hover:bg-[#323B44] text-[#A0ABB5] text-[10px] border border-[#475662] transition-colors cursor-pointer"
+              >
+                สลับโหมด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AppSheet Real-Time Notification Toast */}
       {appSheetToast && (
@@ -1035,6 +1175,7 @@ export default function App() {
                 transactions={transactions}
                 onExecuteTransaction={handleExecuteTransaction}
                 onOpenScanner={() => setIsScannerOpen(true)}
+                onOpenStaffPos={() => setIsStaffPosMode(true)}
               />
             )}
 

@@ -1,11 +1,12 @@
 import React from 'react';
-import { QrCode, User, FileSpreadsheet, Image as ImageIcon } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
   onOpenProfile: () => void;
   onOpenAppSheet?: () => void;
   onOpenImageMatch?: () => void;
+  onToggleStaffPos?: () => void;
   isOnline: boolean;
   isQuotaMode?: boolean;
   activeZone?: string;
@@ -17,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenProfile,
   onOpenAppSheet,
   onOpenImageMatch,
+  onToggleStaffPos,
   isOnline,
   isQuotaMode = false,
 }) => {
@@ -32,6 +34,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {/* Staff POS Mode Switch Button */}
+          {onToggleStaffPos && (
+            <button
+              onClick={onToggleStaffPos}
+              aria-label="สลับไปโหมดพนักงานขาย"
+              title="ทดลองเปิดโหมดหน้าขายสำหรับพนักงาน (Staff POS)"
+              className="h-9 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 transition-all active:scale-95 shadow-sm cursor-pointer"
+            >
+              <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[10px] font-bold tracking-tight">โหมดพนักงาน</span>
+            </button>
+          )}
+
           {/* AppSheet CSV Sync button */}
           {onOpenAppSheet && (
             <button
