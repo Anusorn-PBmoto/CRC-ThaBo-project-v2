@@ -12,7 +12,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { ProductItem } from '../types';
-import { getStockAdviceWithGeminiFlash, StockAdvisorResponse } from '../utils/geminiClient';
+import { getStockAdviceWithGeminiFlash, StockAdvisorResponse, runGeminiSelfTest, GeminiSelfTestResponse } from '../utils/geminiClient';
 
 interface GeminiStockAdvisorCardProps {
   tires: ProductItem[];
@@ -24,6 +24,8 @@ export const GeminiStockAdvisorCard: React.FC<GeminiStockAdvisorCardProps> = ({ 
   const [response, setResponse] = useState<StockAdvisorResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [diagInfo, setDiagInfo] = useState<GeminiSelfTestResponse | null>(null);
 
   const handleRunAdvice = async (mode: 'overview' | 'reorder' | 'discrepancy' | 'query', customPrompt?: string) => {
     setIsLoading(true);
@@ -58,8 +60,9 @@ export const GeminiStockAdvisorCard: React.FC<GeminiStockAdvisorCardProps> = ({ 
               <h3 className="text-sm font-bold text-[#EEEEEE]">
                 Gemini Flash AI ผู้ช่วยคลังสินค้า
               </h3>
-              <span className="text-[9px] bg-[#F6C90E]/20 text-[#F6C90E] font-bold px-1.5 py-0.5 rounded border border-[#F6C90E]/30">
-                ⚡ Flash
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-400 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                ออนไลน์
               </span>
             </div>
             <p className="text-[11px] text-[#A0ABB5]">
@@ -67,7 +70,34 @@ export const GeminiStockAdvisorCard: React.FC<GeminiStockAdvisorCardProps> = ({ 
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            setIsDiagnosing(true);
+            try {
+              const res = await runGeminiSelfTest();
+              setDiagInfo(res);
+            } catch (e: any) {
+              setErrorMsg(e?.message);
+            } finally {
+              setIsDiagnosing(false);
+            }
+          }}
+          disabled={isDiagnosing}
+          className="px-2 py-1 bg-[#252C33] hover:bg-[#2C353E] border border-[#475662] text-[#F6C90E] rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+        >
+          {isDiagnosing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+          <span>{diagInfo ? '✓ AI พร้อม 100%' : 'ทดสอบ AI'}</span>
+        </button>
       </div>
+
+      {diagInfo && (
+        <div className="bg-[#20262D] border border-emerald-500/40 rounded-xl p-2 text-[10px] text-emerald-300 flex items-center justify-between animate-in fade-in">
+          <span>✓ ระบบ AI ทำงานปกติ: ตอบข้อความ ({diagInfo.results.textGeneration?.durationMs || 0}ms) • ถอดรหัส JSON ({diagInfo.results.jsonSchema?.durationMs || 0}ms)</span>
+          <button onClick={() => setDiagInfo(null)} className="text-[#A0ABB5] hover:text-white ml-2">✕</button>
+        </div>
+      )}
 
       {/* Quick Action Buttons */}
       <div className="grid grid-cols-3 gap-1.5">

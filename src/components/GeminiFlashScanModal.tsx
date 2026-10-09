@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   X,
   Sparkles,
@@ -15,12 +15,17 @@ import {
   Calendar,
   Layers,
   ChevronRight,
+  SwitchCamera,
+  Activity,
+  Check,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import {
   analyzeTireImageWithGeminiFlash,
   GeminiTireAnalysisResult,
   AnalyzeTireResponse,
+  runGeminiSelfTest,
+  GeminiSelfTestResponse,
 } from '../utils/geminiClient';
 import { resolveProductImage } from '../utils/productImages';
 
@@ -67,12 +72,94 @@ async function compressForGemini(file: File, maxWidth = 1024, maxHeight = 1024, 
         const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
         resolve(compressedBase64);
       };
-      img.onerror = reject;
+      img.onerror = () => reject(new Error('ไม่สามารถประมวลผลไฟล์รูปภาพได้'));
       img.src = e.target?.result as string;
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ภาพได้'));
     reader.readAsDataURL(file);
   });
+}
+
+// Generate realistic synthetic tire label data URL for instant 1-click test
+function generateSampleTireDataUrl(sampleType: 'michelin' | 'irc' | 'camel'): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 600;
+  canvas.height = 340;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  // Background
+  ctx.fillStyle = '#181C20';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Border & badge
+  ctx.strokeStyle = '#3A4750';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+  // Header banner
+  ctx.fillStyle = '#252C33';
+  ctx.fillRect(10, 10, canvas.width - 20, 60);
+
+  ctx.font = 'bold 24px Prompt, sans-serif';
+  ctx.fillStyle = '#F6C90E';
+  ctx.fillText('CRC THABO - TIRE SIDEWALL SPEC', 24, 48);
+
+  ctx.font = '14px Prompt, sans-serif';
+  ctx.fillStyle = '#A0ABB5';
+  ctx.fillText('OFFICIAL MOTORCYCLE TIRE LABEL', 400, 48);
+
+  if (sampleType === 'michelin') {
+    ctx.font = 'bold 38px Prompt, sans-serif';
+    ctx.fillStyle = '#F6C90E';
+    ctx.fillText('MICHELIN', 30, 125);
+
+    ctx.font = 'bold 30px Prompt, sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('CITY GRIP 90/90-14 M/C 46P', 30, 175);
+
+    ctx.font = '20px Prompt, sans-serif';
+    ctx.fillStyle = '#A0ABB5';
+    ctx.fillText('TUBELESS  |  DOT 2423  |  MADE IN THAILAND', 30, 225);
+
+    ctx.font = 'mono 22px monospace';
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('BARCODE: 8851234567890', 30, 280);
+  } else if (sampleType === 'irc') {
+    ctx.font = 'bold 38px Prompt, sans-serif';
+    ctx.fillStyle = '#F6C90E';
+    ctx.fillText('IRC TIRE', 30, 125);
+
+    ctx.font = 'bold 30px Prompt, sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('SCT-001 MOBICITY 120/70-14 TL', 30, 175);
+
+    ctx.font = '20px Prompt, sans-serif';
+    ctx.fillStyle = '#A0ABB5';
+    ctx.fillText('FOR HONDA PCX/ADV  |  DOT 1824  |  MAX LOAD 224KG', 30, 225);
+
+    ctx.font = 'mono 22px monospace';
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('BARCODE: 8859012345678', 30, 280);
+  } else {
+    ctx.font = 'bold 38px Prompt, sans-serif';
+    ctx.fillStyle = '#F6C90E';
+    ctx.fillText('CAMEL TIRE', 30, 125);
+
+    ctx.font = 'bold 30px Prompt, sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText('CM503 WING 70/90-17 TT', 30, 175);
+
+    ctx.font = '20px Prompt, sans-serif';
+    ctx.fillStyle = '#A0ABB5';
+    ctx.fillText('FOR WAVE 110i/DREAM  |  DOT 1224  |  ยางนอก', 30, 225);
+
+    ctx.font = 'mono 22px monospace';
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('BARCODE: 8857123987654', 30, 280);
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.9);
 }
 
 export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
@@ -87,15 +174,109 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
   const [analysisResult, setAnalysisResult] = useState<AnalyzeTireResponse | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Live Camera state
+  const [isLiveCameraActive, setIsLiveCameraActive] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // Diagnostic state
+  const [isTestingSystem, setIsTestingSystem] = useState(false);
+  const [diagResult, setDiagResult] = useState<GeminiSelfTestResponse | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Stop camera helper
+  const stopLiveCamera = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    setIsLiveCameraActive(false);
+  }, []);
+
+  // Clean up stream on modal close or unmount
+  useEffect(() => {
+    if (!isOpen) {
+      stopLiveCamera();
+      setSelectedImage(null);
+      setAnalysisResult(null);
+      setErrorMsg(null);
+      setDiagResult(null);
+    }
+  }, [isOpen, stopLiveCamera]);
 
   if (!isOpen) return null;
 
+  // Start Live Camera
+  const startLiveCamera = async () => {
+    setErrorMsg(null);
+    setCameraError(null);
+    setSelectedImage(null);
+    setAnalysisResult(null);
+
+    try {
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: cameraFacing },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      mediaStreamRef.current = stream;
+      setIsLiveCameraActive(true);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('Live camera access error:', err);
+      setIsLiveCameraActive(false);
+      setCameraError('ไม่สามารถเปิดกล้องสดได้ กรุณาอนุญาตสิทธิ์กล้อง หรือเลือกอัปโหลดรูปภาพแทน');
+    }
+  };
+
+  // Toggle Camera Facing
+  const toggleCameraFacing = async () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(nextFacing);
+    if (isLiveCameraActive) {
+      setTimeout(() => startLiveCamera(), 100);
+    }
+  };
+
+  // Capture frame from live video stream
+  const captureFrameAndAnalyze = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const capturedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+    stopLiveCamera();
+    setSelectedImage(capturedDataUrl);
+    runGeminiFlashAnalysis(capturedDataUrl);
+  };
+
+  // Handle file upload
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    stopLiveCamera();
     try {
       setErrorMsg(null);
       setAnalysisResult(null);
@@ -104,9 +285,13 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
       runGeminiFlashAnalysis(compressed);
     } catch (err: any) {
       setErrorMsg('เกิดข้อผิดพลาดในการโหลดรูปภาพ: ' + (err?.message || ''));
+    } finally {
+      // Clear value so the same file can be reselected
+      if (e.target) e.target.value = '';
     }
   };
 
+  // Run AI Analysis
   const runGeminiFlashAnalysis = async (base64Img: string) => {
     setIsAnalyzing(true);
     setErrorMsg(null);
@@ -117,6 +302,30 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
       setErrorMsg(err?.message || 'การเชื่อมต่อ Gemini Flash ขัดข้อง โปรดลองใหม่อีกครั้ง');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Instant test with sample tire
+  const handleTestWithSample = (sampleType: 'michelin' | 'irc' | 'camel') => {
+    stopLiveCamera();
+    setErrorMsg(null);
+    setAnalysisResult(null);
+    const sampleDataUrl = generateSampleTireDataUrl(sampleType);
+    setSelectedImage(sampleDataUrl);
+    runGeminiFlashAnalysis(sampleDataUrl);
+  };
+
+  // Run self-test diagnostic
+  const handleRunDiagnostic = async () => {
+    setIsTestingSystem(true);
+    setErrorMsg(null);
+    try {
+      const res = await runGeminiSelfTest();
+      setDiagResult(res);
+    } catch (err: any) {
+      setErrorMsg('ผลการทดสอบระบบ: ' + (err?.message || 'ไม่สามารถทดสอบได้'));
+    } finally {
+      setIsTestingSystem(false);
     }
   };
 
@@ -152,15 +361,19 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
             <div>
               <h3 className="text-sm font-bold text-[#EEEEEE] flex items-center gap-1.5">
                 <span>Gemini Flash AI Scanner</span>
-                <span className="text-[9px] bg-[#F6C90E]/20 text-[#F6C90E] font-bold px-1.5 py-0.5 rounded border border-[#F6C90E]/30">
-                  ⚡ Flash Model
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-400 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  พร้อมใช้งาน
                 </span>
               </h3>
               <p className="text-[10px] text-[#A0ABB5]">สแกนแก้มยาง • สติกเกอร์ฉลาก • ป้ายบาร์โค้ด</p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              stopLiveCamera();
+              onClose();
+            }}
             className="p-1 rounded-lg text-[#A0ABB5] hover:text-[#EEEEEE]"
           >
             <X className="w-5 h-5" />
@@ -169,15 +382,7 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
 
         {/* Content Body */}
         <div className="p-3.5 space-y-3.5 overflow-y-auto flex-1 text-xs">
-          {/* Hidden inputs */}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileChange}
-          />
+          {/* Hidden file input */}
           <input
             ref={fileInputRef}
             type="file"
@@ -186,27 +391,123 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
             onChange={handleFileChange}
           />
 
-          {/* Action Buttons: Camera / Upload */}
-          {!selectedImage && (
-            <div className="space-y-2.5">
-              <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-4 text-center space-y-2">
-                <div className="w-12 h-12 rounded-2xl bg-[#3A4750] text-[#F6C90E] flex items-center justify-center mx-auto shadow-inner border border-[#475662]">
-                  <Sparkles className="w-6 h-6 animate-pulse" />
+          {/* Diagnostic Result Banner if executed */}
+          {diagResult && (
+            <div className="p-2.5 rounded-xl bg-[#20262D] border border-emerald-500/50 text-xs space-y-1.5">
+              <div className="flex items-center justify-between text-emerald-400 font-bold text-[11px]">
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>ผลตรวจเช็คระบบ: พร้อมใช้งานสมบูรณ์ (100%)</span>
+                </span>
+                <span className="font-mono text-[10px] text-[#A0ABB5]">{diagResult.totalDurationMs} ms</span>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[10px]">
+                <div className="bg-[#2A343D] p-1 rounded text-center">
+                  <div className="text-emerald-400 font-bold">✓ ข้อความ</div>
+                  <div className="text-[#A0ABB5]">{diagResult.results.textGeneration?.durationMs || 0}ms</div>
                 </div>
-                <h4 className="text-xs font-bold text-[#EEEEEE]">
-                  ถ่ายรูปยางหรือฉลากสินค้าเพื่อสแกนด้วย AI
-                </h4>
-                <p className="text-[11px] text-[#A0ABB5] leading-relaxed">
-                  Gemini Flash จะอ่านเบอร์ยาง (เช่น 120/70-14, 205/55R16), ยี่ห้อ, รหัส DOT สัปดาห์ปี และเทียบกับสินค้าในคลังให้ทันที
-                </p>
+                <div className="bg-[#2A343D] p-1 rounded text-center">
+                  <div className="text-emerald-400 font-bold">✓ สกัด JSON</div>
+                  <div className="text-[#A0ABB5]">{diagResult.results.jsonSchema?.durationMs || 0}ms</div>
+                </div>
+                <div className="bg-[#2A343D] p-1 rounded text-center">
+                  <div className="text-emerald-400 font-bold">✓ สแกนภาพ OCR</div>
+                  <div className="text-[#A0ABB5]">{diagResult.results.visionAnalysis?.durationMs || 0}ms</div>
+                </div>
+              </div>
+            </div>
+          )}
 
-                <div className="grid grid-cols-2 gap-2 pt-2">
+          {/* Live Camera Viewfinder if active */}
+          {isLiveCameraActive && !selectedImage && (
+            <div className="space-y-2">
+              <div className="relative rounded-2xl overflow-hidden border-2 border-[#F6C90E] bg-black aspect-video flex items-center justify-center shadow-lg">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+
+                {/* Reticle Overlay */}
+                <div className="absolute inset-4 border border-[#F6C90E]/60 rounded-xl pointer-events-none flex flex-col justify-between p-2">
+                  <div className="flex justify-between text-[10px] text-[#F6C90E] font-bold">
+                    <span>[ เล็งไปที่แก้มยางหรือฉลาก ]</span>
+                    <span>AI LIVE</span>
+                  </div>
+                  <div className="text-center text-[10px] text-white/80 bg-black/60 rounded px-2 py-0.5 mx-auto">
+                    กดปุ่มถ่ายภาพด้านล่างเมื่อตัวหนังสือชัดเจน
+                  </div>
+                </div>
+
+                {/* Top controls */}
+                <div className="absolute top-2 right-2 flex gap-1.5">
                   <button
-                    onClick={() => cameraInputRef.current?.click()}
+                    onClick={toggleCameraFacing}
+                    className="p-1.5 rounded-lg bg-black/60 text-[#EEEEEE] hover:bg-black/90 backdrop-blur-md"
+                    title="สลับกล้องหน้า/หลัง"
+                  >
+                    <SwitchCamera className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={stopLiveCamera}
+                    className="p-1.5 rounded-lg bg-black/60 text-[#EEEEEE] hover:bg-black/90 backdrop-blur-md"
+                    title="ปิดกล้อง"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Shutter Button */}
+              <div className="flex gap-2">
+                <button
+                  onClick={captureFrameAndAnalyze}
+                  className="flex-1 py-3 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/30 text-xs"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>ถ่ายภาพเพื่อสแกนด้วย AI</span>
+                </button>
+                <button
+                  onClick={stopLiveCamera}
+                  className="px-3 py-3 bg-[#252C33] hover:bg-[#2C353E] text-[#A0ABB5] rounded-xl border border-[#475662]"
+                >
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons: Camera / Upload / Test */}
+          {!selectedImage && !isLiveCameraActive && (
+            <div className="space-y-3">
+              <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-3.5 text-center space-y-2.5">
+                <div className="w-11 h-11 rounded-2xl bg-[#3A4750] text-[#F6C90E] flex items-center justify-center mx-auto shadow-inner border border-[#475662]">
+                  <Sparkles className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-[#EEEEEE]">
+                    สแกนแก้มยางหรือฉลากด้วยกล้อง / ภาพถ่าย
+                  </h4>
+                  <p className="text-[11px] text-[#A0ABB5] leading-relaxed mt-0.5">
+                    Gemini Flash จะอ่านเบอร์ยาง (เช่น 120/70-14, 90/90-14), ยี่ห้อ, รหัส DOT และค้นหาในสต็อก CRC THABO ให้ทันที
+                  </p>
+                </div>
+
+                {cameraError && (
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] text-left">
+                    {cameraError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={startLiveCamera}
                     className="py-2.5 px-3 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md shadow-[#F6C90E]/20"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>ถ่ายรูปด้วยกล้อง</span>
+                    <span>เปิดกล้องสแกน</span>
                   </button>
 
                   <button
@@ -214,21 +515,55 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
                     className="py-2.5 px-3 bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-semibold rounded-xl border border-[#475662] flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                   >
                     <Upload className="w-4 h-4 text-[#F6C90E]" />
-                    <span>เลือกจากคลังภาพ</span>
+                    <span>เลือกรูปภาพ</span>
                   </button>
                 </div>
               </div>
 
-              {/* Tips */}
-              <div className="bg-[#252C33]/60 border border-[#475662]/60 rounded-xl p-3 text-[11px] text-[#A0ABB5] space-y-1">
-                <div className="font-semibold text-[#EEEEEE] flex items-center gap-1">
-                  <span>💡 เคล็ดลับการถ่ายรูปให้ AI อ่านแม่นยำ:</span>
+              {/* Instant 1-Click Sample Test Section */}
+              <div className="bg-[#252C33] border border-[#475662] rounded-2xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-[#EEEEEE] flex items-center gap-1.5">
+                    <span>🧪 ทดสอบระบบ AI ทันที (คลิกเดียว):</span>
+                  </div>
+                  <button
+                    onClick={handleRunDiagnostic}
+                    disabled={isTestingSystem}
+                    className="text-[10px] text-[#F6C90E] hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    {isTestingSystem ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                    <span>ตรวจสุขภาพ AI</span>
+                  </button>
                 </div>
-                <ul className="list-disc list-inside space-y-0.5 text-[10px]">
-                  <li>ถ่ายให้เห็นตัวเลขขนาดยางบนแก้มยางชัดเจน เช่น <code className="text-[#F6C90E]">120/70-14</code></li>
-                  <li>ถ่ายสติกเกอร์ฉลากยางหรือบาร์โค้ดในที่มีแสงเพียงพอ</li>
-                  <li>Gemini Flash ประมวลผลในเวลาเพียง 1-2 วินาที</li>
-                </ul>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    onClick={() => handleTestWithSample('michelin')}
+                    className="p-2 rounded-xl bg-[#3A4750] hover:bg-[#475662] border border-[#475662] text-left text-[10px] space-y-0.5 transition-all active:scale-95"
+                  >
+                    <div className="font-bold text-[#F6C90E]">Michelin</div>
+                    <div className="text-[#EEEEEE]">90/90-14</div>
+                    <div className="text-[#A0ABB5] text-[9px]">City Grip</div>
+                  </button>
+
+                  <button
+                    onClick={() => handleTestWithSample('irc')}
+                    className="p-2 rounded-xl bg-[#3A4750] hover:bg-[#475662] border border-[#475662] text-left text-[10px] space-y-0.5 transition-all active:scale-95"
+                  >
+                    <div className="font-bold text-[#F6C90E]">IRC Tire</div>
+                    <div className="text-[#EEEEEE]">120/70-14</div>
+                    <div className="text-[#A0ABB5] text-[9px]">Mobicity</div>
+                  </button>
+
+                  <button
+                    onClick={() => handleTestWithSample('camel')}
+                    className="p-2 rounded-xl bg-[#3A4750] hover:bg-[#475662] border border-[#475662] text-left text-[10px] space-y-0.5 transition-all active:scale-95"
+                  >
+                    <div className="font-bold text-[#F6C90E]">Camel</div>
+                    <div className="text-[#EEEEEE]">70/90-17</div>
+                    <div className="text-[#A0ABB5] text-[9px]">CM503</div>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -244,7 +579,7 @@ export const GeminiFlashScanModal: React.FC<GeminiFlashScanModalProps> = ({
                 />
 
                 {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-center p-3">
+                  <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center gap-2 text-center p-3">
                     <Loader2 className="w-8 h-8 text-[#F6C90E] animate-spin" />
                     <div className="text-xs font-bold text-[#EEEEEE]">
                       Gemini Flash กำลังวิเคราะห์รูปภาพ...

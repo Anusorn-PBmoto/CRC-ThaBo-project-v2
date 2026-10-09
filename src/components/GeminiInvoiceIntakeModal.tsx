@@ -74,12 +74,62 @@ async function compressImageForGemini(file: File, maxWidth = 1200, maxHeight = 1
         ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL('image/jpeg', quality));
       };
-      img.onerror = reject;
+      img.onerror = () => reject(new Error('ไม่สามารถประมวลผลไฟล์รูปภาพได้'));
       img.src = e.target?.result as string;
     };
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
     reader.readAsDataURL(file);
   });
+}
+
+function generateSampleInvoiceDataUrl(): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 600;
+  canvas.height = 360;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 22px Prompt, sans-serif';
+  ctx.fillText('บจก. สยามสปอร์ตสต็อก (ใบส่งของ / รับเข้าสินค้า)', 24, 45);
+
+  ctx.fillStyle = '#4B5563';
+  ctx.font = '15px Prompt, sans-serif';
+  ctx.fillText('เลขที่บิล: IV-202610-098   |   วันที่: 08/10/2026', 24, 80);
+
+  // Table header
+  ctx.fillStyle = '#E5E7EB';
+  ctx.fillRect(20, 105, 560, 36);
+
+  ctx.fillStyle = '#1F2937';
+  ctx.font = 'bold 15px Prompt, sans-serif';
+  ctx.fillText('รายการสินค้า', 35, 128);
+  ctx.fillText('จำนวน', 360, 128);
+  ctx.fillText('ราคา/หน่วย', 440, 128);
+
+  // Rows
+  ctx.font = '15px Prompt, sans-serif';
+  ctx.fillText('1. ยาง IRC 120/70-14 SCT-001', 35, 175);
+  ctx.fillText('4 เส้น', 360, 175);
+  ctx.fillText('850.-', 440, 175);
+
+  ctx.fillText('2. ยาง Camel 70/90-17 CM503', 35, 215);
+  ctx.fillText('10 เส้น', 360, 215);
+  ctx.fillText('320.-', 440, 215);
+
+  ctx.fillText('3. ยาง Michelin City Grip 90/90-14', 35, 255);
+  ctx.fillText('6 เส้น', 360, 255);
+  ctx.fillText('920.-', 440, 255);
+
+  // Total
+  ctx.fillStyle = '#111827';
+  ctx.font = 'bold 18px Prompt, sans-serif';
+  ctx.fillText('ยอดรวมทั้งสิ้น:  12,120 บาท', 35, 315);
+
+  return canvas.toDataURL('image/jpeg', 0.9);
 }
 
 export const GeminiInvoiceIntakeModal: React.FC<GeminiInvoiceIntakeModalProps> = ({
@@ -128,6 +178,8 @@ export const GeminiInvoiceIntakeModal: React.FC<GeminiInvoiceIntakeModalProps> =
       runInvoiceOcr(compressed);
     } catch (err: any) {
       setErrorMsg('เกิดข้อผิดพลาดในการโหลดรูปบิล: ' + (err?.message || ''));
+    } finally {
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -320,6 +372,23 @@ export const GeminiInvoiceIntakeModal: React.FC<GeminiInvoiceIntakeModalProps> =
                     <span>เลือกรูปบิล</span>
                   </button>
                 </div>
+
+                {/* 1-Click Sample Invoice Test Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setInvoiceData(null);
+                    setSuccessMsg(null);
+                    const sampleUrl = generateSampleInvoiceDataUrl();
+                    setSelectedImage(sampleUrl);
+                    runInvoiceOcr(sampleUrl);
+                  }}
+                  className="w-full py-2 px-3 bg-[#3A4750]/80 hover:bg-[#43525D] text-[#F6C90E] border border-[#F6C90E]/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-[#F6C90E]" />
+                  <span>🧪 ทดสอบอ่านด้วยบิลตัวอย่าง (1-Click Test)</span>
+                </button>
               </div>
 
               {/* Tips */}

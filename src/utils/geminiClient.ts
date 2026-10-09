@@ -234,3 +234,31 @@ export async function searchVoiceWithGeminiFlash(
 
   return res.json();
 }
+
+export interface GeminiSelfTestResponse {
+  success: boolean;
+  totalDurationMs: number;
+  model: string;
+  fallbackModel: string;
+  hasApiKey: boolean;
+  results: {
+    textGeneration?: { status: string; durationMs?: number; reply?: string; error?: string };
+    jsonSchema?: { status: string; durationMs?: number; data?: any; error?: string };
+    visionAnalysis?: { status: string; durationMs?: number; reply?: string; error?: string };
+  };
+  timestamp: string;
+  error?: string;
+}
+
+/**
+ * Run full AI Diagnostic Suite
+ */
+export async function runGeminiSelfTest(): Promise<GeminiSelfTestResponse> {
+  const res = await fetch('/api/gemini/self-test');
+  if (!res.ok) {
+    const errorJson = await res.json().catch(() => ({}));
+    throw new Error(errorJson.error || `การทดสอบระบบ AI ล้มเหลว (${res.status})`);
+  }
+  return res.json();
+}
+

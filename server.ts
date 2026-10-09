@@ -29,22 +29,29 @@ const ai = new GoogleGenAI({
 
 // Primary Flash model for ultra-low latency multimodal OCR and voice queries
 const GEMINI_FLASH_MODEL = 'gemini-3.5-flash';
-const GEMINI_FALLBACK_MODEL = 'gemini-3.8-flash';
+const GEMINI_FALLBACK_MODEL = 'gemini-3.1-flash-lite';
 
-// Robust helper with automatic fallback
+// Robust helper with automatic fallback and timeout protection
 async function generateWithGemini(params: {
   contents: any;
   config?: any;
 }) {
   const primary = process.env.GEMINI_MODEL || GEMINI_FLASH_MODEL;
   try {
-    return await ai.models.generateContent({
+    const primaryPromise = ai.models.generateContent({
       model: primary,
       contents: params.contents,
       config: params.config,
     });
+    // Set 12s timeout for primary model
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout with primary model ${primary}`)), 12000)
+    );
+    return (await Promise.race([primaryPromise, timeoutPromise])) as any;
   } catch (err: any) {
-    console.warn(`[Gemini Flash] Model ${primary} encountered error (${err?.message}), attempting fallback to ${GEMINI_FALLBACK_MODEL}...`);
+    console.warn(
+      `[Gemini Flash] Model ${primary} encountered error (${err?.message}), attempting fallback to ${GEMINI_FALLBACK_MODEL}...`
+    );
     return await ai.models.generateContent({
       model: GEMINI_FALLBACK_MODEL,
       contents: params.contents,
@@ -61,6 +68,105 @@ app.get('/api/gemini/health', (_req: Request, res: Response) => {
     model: GEMINI_FLASH_MODEL,
     fallbackModel: GEMINI_FALLBACK_MODEL,
     hasApiKey: hasKey,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Self-test diagnostic endpoint to test all Gemini Flash capabilities
+app.get('/api/gemini/self-test', async (_req: Request, res: Response): Promise<void> => {
+  const t0 = Date.now();
+  const testResults: Record<string, any> = {};
+
+  if (!process.env.GEMINI_API_KEY) {
+    res.status(500).json({
+      success: false,
+      error: 'ยังไม่ได้ตั้งค่า GEMINI_API_KEY ในระบบ',
+      hasApiKey: false,
+    });
+    return;
+  }
+
+  // 1. Text Generation test
+  try {
+    const tStart = Date.now();
+    const r1 = await generateWithGemini({
+      contents: 'ตอบสั้นๆ ว่า "ระบบพร้อมทำงาน"',
+    });
+    testResults.textGeneration = {
+      status: 'ok',
+      durationMs: Date.now() - tStart,
+      reply: r1.text?.trim() || '',
+    };
+  } catch (err: any) {
+    testResults.textGeneration = {
+      status: 'error',
+      error: err?.message,
+    };
+  }
+
+  // 2. Structured JSON Schema test
+  try {
+    const tStart = Date.now();
+    const r2 = await generateWithGemini({
+      contents: 'สกัดยี่ห้อและขนาด: IRC SCT-001 120/70-14',
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            brand: { type: Type.STRING },
+            size: { type: Type.STRING },
+          },
+          required: ['brand', 'size'],
+        },
+      },
+    });
+    testResults.jsonSchema = {
+      status: 'ok',
+      durationMs: Date.now() - tStart,
+      data: JSON.parse(r2.text || '{}'),
+    };
+  } catch (err: any) {
+    testResults.jsonSchema = {
+      status: 'error',
+      error: err?.message,
+    };
+  }
+
+  // 3. Vision / Multimodal OCR test
+  try {
+    const tStart = Date.now();
+    const samplePng = 'iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FAAhKDv1/64nRAAAAAElFTkSuQmCC';
+    const r3 = await generateWithGemini({
+      contents: [
+        { inlineData: { mimeType: 'image/png', data: samplePng } },
+        { text: 'รูปนี้คืออะไร ตอบสั้นๆ' },
+      ],
+    });
+    testResults.visionAnalysis = {
+      status: 'ok',
+      durationMs: Date.now() - tStart,
+      reply: r3.text?.trim() || '',
+    };
+  } catch (err: any) {
+    testResults.visionAnalysis = {
+      status: 'error',
+      error: err?.message,
+    };
+  }
+
+  const allPassed =
+    testResults.textGeneration?.status === 'ok' &&
+    testResults.jsonSchema?.status === 'ok' &&
+    testResults.visionAnalysis?.status === 'ok';
+
+  res.json({
+    success: allPassed,
+    totalDurationMs: Date.now() - t0,
+    model: GEMINI_FLASH_MODEL,
+    fallbackModel: GEMINI_FALLBACK_MODEL,
+    hasApiKey: true,
+    results: testResults,
     timestamp: new Date().toISOString(),
   });
 });
@@ -608,7 +714,7 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === 'true' ? false : undefined,
+        hmr: false,
       },
       appType: 'spa',
     });
