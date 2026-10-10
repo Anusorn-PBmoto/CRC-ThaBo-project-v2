@@ -92,14 +92,18 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   }, [tires]);
 
   // Overall catalog storefront stats
+  // Overall catalog storefront stats
   const storefrontStats = useMemo(() => {
     let inStockItems = 0;
     let totalPieces = 0;
     tires.forEach((t) => {
       const b = getProductStockBreakdown(t);
-      if (b.frontQty > 0) {
+      const rate = t.conversionRate && t.conversionRate > 1 ? t.conversionRate : 1;
+      const hasSub = Boolean(t.subUnit && rate > 1);
+      const stock = hasSub ? Math.round(b.frontQty * rate) : b.frontQty;
+      if (stock > 0) {
         inStockItems += 1;
-        totalPieces += b.frontQty;
+        totalPieces += stock;
       }
     });
     return { inStockItems, totalPieces };
@@ -111,9 +115,12 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     return tires
       .filter((p) => {
         const breakdown = getProductStockBreakdown(p);
+        const rate = p.conversionRate && p.conversionRate > 1 ? p.conversionRate : 1;
+        const hasSub = Boolean(p.subUnit && rate > 1);
+        const displayStock = hasSub ? Math.round(breakdown.totalQty * rate) : breakdown.totalQty;
 
-        // Only show items available in storefront if in 'available_only' mode
-        if (stockScope === 'available_only' && breakdown.frontQty <= 0) {
+        // When in 'available_only' mode, only hide when total stock is completely zero / sold out
+        if (stockScope === 'available_only' && displayStock <= 0) {
           return false;
         }
 
@@ -141,11 +148,11 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     const breakdown = getProductStockBreakdown(product);
     const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
     const sellAsSub = Boolean(product.subUnit && rate > 1);
-    const maxStock = sellAsSub ? breakdown.frontQty * rate : breakdown.frontQty;
+    const maxStock = sellAsSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
 
     if (maxStock <= 0) {
       showToast(
-        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${sellAsSub ? breakdown.warehouseQty * rate : breakdown.warehouseQty} ${sellAsSub ? product.subUnit : (product.unit || 'ชิ้น')})`,
+        `❌ สินค้า "${product.name || product.size}" หน้าร้านไม่มีสต็อก (มีในคลังหลังร้าน ${sellAsSub ? Math.round(breakdown.warehouseQty * rate) : breakdown.warehouseQty} ${sellAsSub ? product.subUnit : (product.unit || 'ชิ้น')})`,
         'warn'
       );
       return;
@@ -158,14 +165,14 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   const addToCart = (product: ProductItem, isSubUnit: boolean = false) => {
     const breakdown = getProductStockBreakdown(product);
     const rate = product.conversionRate && product.conversionRate > 1 ? product.conversionRate : 1;
-    const maxStock = isSubUnit ? breakdown.frontQty * rate : breakdown.frontQty; // Max units/subUnits in stock
+    const maxStock = isSubUnit ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty; // Max units/subUnits in stock
 
     setCart((prev) => {
       const existing = prev.find((item) => item.tire.id === product.id && item.isSubUnit === isSubUnit);
       const basePrice = product.sellingPrice || product.price || 0;
       
-      // If selling by subUnit, price per subUnit is basePrice / rate
-      const unitPrice = isSubUnit ? Math.round((basePrice / rate) * 100) / 100 : basePrice;
+      // If selling by subUnit, price per subUnit is basePrice / rate (rounded up to nearest full baht)
+      const unitPrice = isSubUnit ? Math.ceil(basePrice / rate) : basePrice;
 
       if (existing) {
         if (existing.quantity >= maxStock) {
@@ -241,7 +248,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
           name: i.tire.name || i.tire.size || 'สินค้า',
           brand: i.tire.brand,
           size: i.tire.size,
-          unit: i.tire.unit,
+          unit: i.isSubUnit && i.tire.subUnit ? i.tire.subUnit : (i.tire.unit || 'ชิ้น'),
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           totalPrice: i.quantity * i.unitPrice,
@@ -256,6 +263,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
           tire: item.tire,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          isSubUnit: item.isSubUnit,
         })),
         customer || 'ลูกค้าหน้าร้าน',
         `ขายหน้าร้าน (โหมดพนักงาน) • ตัดสต็อกหน้าร้านโดยตรง • บิล ${receiptNo}`,

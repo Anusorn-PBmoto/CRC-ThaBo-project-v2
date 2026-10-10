@@ -881,10 +881,10 @@ export default function App() {
 
         updated = updated.map((t) => {
           if (t.id === item.tire.id) {
-            const nextSystemQty = Math.max(0, t.systemQty + delta);
-            const nextActualQty = Math.max(0, t.actualQty + delta);
-            const diff = nextActualQty - nextSystemQty;
-            const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
+            const nextSystemQty = Math.max(0, Math.round((t.systemQty + delta) * 10000) / 10000);
+            const nextActualQty = Math.max(0, Math.round((t.actualQty + delta) * 10000) / 10000);
+            const diff = Math.round((nextActualQty - nextSystemQty) * 10000) / 10000;
+            const nextStatus: StockStatus = Math.abs(diff) < 0.0001 ? 'checked' : 'discrepancy';
 
             // Calculate front and warehouse allocation
             let currFront = t.frontQty ?? Math.min(t.actualQty, 2);
@@ -895,26 +895,26 @@ export default function App() {
             if (type === 'sale') {
               if (locationTarget === 'front') {
                 if (nextFront >= effectiveQty) {
-                  nextFront -= effectiveQty;
+                  nextFront = Math.round((nextFront - effectiveQty) * 10000) / 10000;
                 } else {
                   const rem = effectiveQty - nextFront;
                   nextFront = 0;
-                  nextWarehouse = Math.max(0, nextWarehouse - rem);
+                  nextWarehouse = Math.max(0, Math.round((nextWarehouse - rem) * 10000) / 10000);
                 }
               } else {
                 if (nextWarehouse >= effectiveQty) {
-                  nextWarehouse -= effectiveQty;
+                  nextWarehouse = Math.round((nextWarehouse - effectiveQty) * 10000) / 10000;
                 } else {
                   const rem = effectiveQty - nextWarehouse;
                   nextWarehouse = 0;
-                  nextFront = Math.max(0, nextFront - rem);
+                  nextFront = Math.max(0, Math.round((nextFront - rem) * 10000) / 10000);
                 }
               }
             } else {
               if (locationTarget === 'front') {
-                nextFront += effectiveQty;
+                nextFront = Math.round((nextFront + effectiveQty) * 10000) / 10000;
               } else {
-                nextWarehouse += effectiveQty;
+                nextWarehouse = Math.round((nextWarehouse + effectiveQty) * 10000) / 10000;
               }
             }
 
@@ -937,6 +937,7 @@ export default function App() {
     // 2. Optimistic update of transactions list + localStorage
     const newTransactions: Transaction[] = items.map((item, idx) => {
       const prodName = item.tire.name || item.tire.size || 'สินค้า';
+      const unitLabel = item.isSubUnit && item.tire.subUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น');
       return {
         id: `tx-${Date.now()}-${idx}`,
         type,
@@ -947,6 +948,7 @@ export default function App() {
         brand: item.tire.brand,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
+        unit: unitLabel,
         totalPrice: item.quantity * item.unitPrice,
         locationTarget,
         customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
@@ -958,9 +960,13 @@ export default function App() {
 
     // 3. Optimistic update of audit logs + localStorage
     const newLogs: AuditLog[] = items.map((item, idx) => {
-      const delta = type === 'sale' ? -item.quantity : item.quantity;
+      const rate = item.tire.conversionRate && item.tire.conversionRate > 1 ? item.tire.conversionRate : 1;
+      const effectiveQty = (type === 'sale' && item.isSubUnit && rate > 1)
+        ? item.quantity / rate
+        : item.quantity;
+      const delta = type === 'sale' ? -effectiveQty : effectiveQty;
       const prodName = item.tire.name || item.tire.size || 'สินค้า';
-      const unitLabel = item.tire.unit || 'ชิ้น';
+      const unitLabel = item.isSubUnit && item.tire.subUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น');
       return {
         id: `log-tx-${Date.now()}-${idx}`,
         productId: item.tire.id,
@@ -970,7 +976,7 @@ export default function App() {
         brand: item.tire.brand,
         diff: delta,
         previousQty: item.tire.actualQty,
-        newQty: Math.max(0, item.tire.actualQty + delta),
+        newQty: Math.max(0, Math.round((item.tire.actualQty + delta) * 10000) / 10000),
         action:
           type === 'sale'
             ? `ตัดสต็อกขาย (${locationTarget === 'front' ? 'หน้าร้าน' : 'คลัง'}) -${item.quantity} ${unitLabel}`

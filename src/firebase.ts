@@ -854,6 +854,7 @@ export async function executeTransaction(
     tire: TireItem;
     quantity: number;
     unitPrice: number;
+    isSubUnit?: boolean;
   }[],
   customerOrSupplier: string,
   note?: string,
@@ -866,11 +867,16 @@ export async function executeTransaction(
     const batch = writeBatch(db);
 
     for (const item of items) {
-      const delta = type === 'sale' ? -item.quantity : item.quantity;
-      const nextSystemQty = Math.max(0, item.tire.systemQty + delta);
-      const nextActualQty = Math.max(0, item.tire.actualQty + delta);
-      const diff = nextActualQty - nextSystemQty;
-      const nextStatus: StockStatus = diff === 0 ? 'checked' : 'discrepancy';
+      const rate = item.tire.conversionRate && item.tire.conversionRate > 1 ? item.tire.conversionRate : 1;
+      const effectiveQty = (type === 'sale' && item.isSubUnit && rate > 1)
+        ? item.quantity / rate
+        : item.quantity;
+      const delta = type === 'sale' ? -effectiveQty : effectiveQty;
+
+      const nextSystemQty = Math.max(0, Math.round((item.tire.systemQty + delta) * 10000) / 10000);
+      const nextActualQty = Math.max(0, Math.round((item.tire.actualQty + delta) * 10000) / 10000);
+      const diff = Math.round((nextActualQty - nextSystemQty) * 10000) / 10000;
+      const nextStatus: StockStatus = Math.abs(diff) < 0.0001 ? 'checked' : 'discrepancy';
 
       // Distribute to frontQty vs warehouseQty
       let currFront = item.tire.frontQty ?? Math.min(item.tire.actualQty, 2);
@@ -881,28 +887,28 @@ export async function executeTransaction(
 
       if (type === 'sale') {
         if (locationTarget === 'front') {
-          if (nextFront >= item.quantity) {
-            nextFront -= item.quantity;
+          if (nextFront >= effectiveQty) {
+            nextFront = Math.round((nextFront - effectiveQty) * 10000) / 10000;
           } else {
-            const remainder = item.quantity - nextFront;
+            const remainder = effectiveQty - nextFront;
             nextFront = 0;
-            nextWarehouse = Math.max(0, nextWarehouse - remainder);
+            nextWarehouse = Math.max(0, Math.round((nextWarehouse - remainder) * 10000) / 10000);
           }
         } else {
-          if (nextWarehouse >= item.quantity) {
-            nextWarehouse -= item.quantity;
+          if (nextWarehouse >= effectiveQty) {
+            nextWarehouse = Math.round((nextWarehouse - effectiveQty) * 10000) / 10000;
           } else {
-            const remainder = item.quantity - nextWarehouse;
+            const remainder = effectiveQty - nextWarehouse;
             nextWarehouse = 0;
-            nextFront = Math.max(0, nextFront - remainder);
+            nextFront = Math.max(0, Math.round((nextFront - remainder) * 10000) / 10000);
           }
         }
       } else {
         // Purchase (Restock)
         if (locationTarget === 'front') {
-          nextFront += item.quantity;
+          nextFront = Math.round((nextFront + effectiveQty) * 10000) / 10000;
         } else {
-          nextWarehouse += item.quantity;
+          nextWarehouse = Math.round((nextWarehouse + effectiveQty) * 10000) / 10000;
         }
       }
 
@@ -933,6 +939,7 @@ export async function executeTransaction(
         tireName: item.tire.name || item.tire.size || `${item.tire.brand} ${item.tire.size}`,
         brand: item.tire.brand || '',
         quantity: item.quantity,
+        unit: (item.isSubUnit && item.tire.subUnit) ? item.tire.subUnit : (item.tire.unit || 'ชิ้น'),
         unitPrice: item.unitPrice,
         totalPrice,
         locationTarget,
