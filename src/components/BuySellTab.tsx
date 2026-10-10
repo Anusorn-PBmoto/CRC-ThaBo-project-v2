@@ -33,6 +33,7 @@ import {
   getGradeBadge,
   getTierInfo,
   DEFAULT_CUSTOMER_TIERS,
+  getCustomerDisplayCode,
 } from '../utils/pricingUtils';
 
 interface BuySellTabProps {
@@ -304,17 +305,23 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           now.getDate()
         ).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
 
+        const customerDisplayName = selectedCustomer
+          ? `[${selectedCustomer.customerCode || getCustomerDisplayCode(selectedCustomer)}] ${selectedCustomer.name}`
+          : (customer.trim() || 'ลูกค้าหน้าร้าน');
+
         const receiptPayload: ReceiptData = {
           receiptNo,
           dateStr: now.toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }),
           timeStr: now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-          customer: customer.trim() || 'ลูกค้าหน้าร้าน',
+          customer: customerDisplayName,
+          customerGrade: selectedCustomer ? getGradeBadge(selectedCustomer.grade).shortLabel : undefined,
+          discountPercent: selectedCustomer ? getTierInfo(selectedCustomer.grade, customerTiers).discountPercent : undefined,
           locationTarget,
           items: cart.map((item) => ({
             name: item.tire.name || item.tire.size || 'สินค้า',
             brand: item.tire.brand,
             size: item.tire.size,
-            unit: item.tire.unit,
+            unit: item.isSubUnit && item.tire.subUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น'),
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.quantity * item.unitPrice,
@@ -612,6 +619,9 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
                   </button>
                   {selectedCustomer ? (
                     <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                        {selectedCustomer.customerCode || getCustomerDisplayCode(selectedCustomer)}
+                      </span>
                       <span className="font-bold text-white text-xs truncate">
                         {selectedCustomer.name}
                       </span>
