@@ -76,6 +76,38 @@
         "createdAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["type", "productId", "productName", "quantity", "createdAt"]
+    },
+    "customer": {
+      "title": "Customer",
+      "description": "Customer and member profile with tier and accumulated spend",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "grade": { "type": "string", "enum": ["A", "B", "C", "D", "general"] },
+        "vehiclePlate": { "type": "string", "maxLength": 100 },
+        "vehicleModel": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "totalSpend": { "type": "number" },
+        "purchaseCount": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "phone", "grade"]
+    },
+    "customerTier": {
+      "title": "CustomerTier",
+      "description": "Customer tier settings and default discount percentage",
+      "type": "object",
+      "properties": {
+        "grade": { "type": "string", "enum": ["A", "B", "C", "D", "general"] },
+        "name": { "type": "string", "maxLength": 100 },
+        "discountPercent": { "type": "number" },
+        "description": { "type": "string", "maxLength": 200 },
+        "badgeColor": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["grade", "name", "discountPercent"]
     }
   },
   "firestore": {
@@ -94,6 +126,14 @@
     "/transactions/{transactionId}": {
       "schema": { "$ref": "#/entities/transaction" },
       "description": "Buy and sell transaction history"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/customer" },
+      "description": "Customer directory with grading and loyalty stats"
+    },
+    "/settings/customer_tiers": {
+      "schema": { "$ref": "#/entities/customerTier" },
+      "description": "Customer discount tiers configuration"
     }
   }
 }

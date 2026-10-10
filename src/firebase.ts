@@ -22,10 +22,11 @@ import {
   disableNetwork,
   enableNetwork,
   setLogLevel,
+  increment,
   Firestore,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction, StockTransfer } from './types';
+import { ProductItem, TireItem, AuditSession, AuditLog, StockStatus, Transaction, StockTransfer, CustomerItem, CustomerTier, CustomerGrade } from './types';
 import { INITIAL_TIRES } from './initialData';
 import { cleanLocationName } from './utils/stockUtils';
 
@@ -445,6 +446,7 @@ export function subscribeToTires(
             description: data.description || '',
             subUnit: data.subUnit || '',
             conversionRate: typeof data.conversionRate === 'number' ? data.conversionRate : undefined,
+            gradePrices: data.gradePrices || undefined,
             updatedAt: data.updatedAt || new Date().toISOString(),
             // Compatibility aliases
             size: nameVal,
@@ -858,13 +860,17 @@ export async function executeTransaction(
   }[],
   customerOrSupplier: string,
   note?: string,
-  locationTarget: 'front' | 'warehouse' = 'front'
+  locationTarget: 'front' | 'warehouse' = 'front',
+  customerId?: string,
+  customerGrade?: CustomerGrade,
+  discountPercent?: number
 ): Promise<void> {
   const pathTx = 'transactions';
   const pathProducts = 'products';
 
   try {
     const batch = writeBatch(db);
+    let transactionTotalAmount = 0;
 
     for (const item of items) {
       const rate = item.tire.conversionRate && item.tire.conversionRate > 1 ? item.tire.conversionRate : 1;
@@ -912,11 +918,11 @@ export async function executeTransaction(
         }
       }
 
-      // 1. Update Product Stock in Batch
+      // 1. Update Product Stock in Batch (Sanitized to avoid any undefined value errors)
       const prodRef = doc(db, pathProducts, item.tire.id);
       batch.set(
         prodRef,
-        {
+        sanitizeForFirestore({
           ...item.tire,
           id: item.tire.id,
           frontQty: nextFront,
@@ -925,18 +931,22 @@ export async function executeTransaction(
           actualQty: nextActualQty,
           status: nextStatus,
           updatedAt: new Date().toISOString(),
-        },
+        }),
         { merge: true }
       );
 
       // 2. Add Transaction record in Batch
       const txDocRef = doc(collection(db, pathTx));
       const totalPrice = item.quantity * item.unitPrice;
-      batch.set(txDocRef, {
+      transactionTotalAmount += totalPrice;
+
+      const txPayload: Record<string, any> = {
         id: txDocRef.id,
         type,
+        productId: item.tire.id,
         tireId: item.tire.id,
         tireName: item.tire.name || item.tire.size || `${item.tire.brand} ${item.tire.size}`,
+        productName: item.tire.name || item.tire.size || `${item.tire.brand} ${item.tire.size}`,
         brand: item.tire.brand || '',
         quantity: item.quantity,
         unit: (item.isSubUnit && item.tire.subUnit) ? item.tire.subUnit : (item.tire.unit || 'ชิ้น'),
@@ -946,7 +956,27 @@ export async function executeTransaction(
         customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าทั่วไป' : 'ผู้แทนจำหน่าย'),
         note: note?.trim() || '',
         createdAt: new Date().toISOString(),
-      });
+      };
+
+      if (customerId) txPayload.customerId = customerId;
+      if (customerGrade) txPayload.customerGrade = customerGrade;
+      if (typeof discountPercent === 'number') txPayload.discountPercent = discountPercent;
+
+      batch.set(txDocRef, sanitizeForFirestore(txPayload));
+    }
+
+    // 3. If customer selected in sale, increment customer spend and purchase count
+    if (type === 'sale' && customerId) {
+      const custDocRef = doc(db, 'customers', customerId);
+      batch.set(
+        custDocRef,
+        {
+          totalSpend: increment(transactionTotalAmount),
+          purchaseCount: increment(1),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     }
 
     // Commit all products and transactions in a single efficient atomic batch
@@ -1034,6 +1064,130 @@ export async function executeBatchStockTransfer(
       markQuotaExhausted();
     }
     console.warn('executeBatchStockTransfer error:', error);
+  }
+}
+
+// ==========================================
+// CUSTOMER & TIER PRICING FIRESTORE SERVICES
+// ==========================================
+
+export function subscribeToCustomers(
+  onData: (customers: CustomerItem[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  try {
+    const q = query(collection(db, 'customers'), orderBy('updatedAt', 'desc'));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const items: CustomerItem[] = snapshot.docs.map((docSnap) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            name: data.name || '',
+            phone: data.phone || '',
+            grade: (data.grade as CustomerGrade) || 'general',
+            vehiclePlate: data.vehiclePlate || '',
+            vehicleModel: data.vehicleModel || '',
+            notes: data.notes || '',
+            totalSpend: typeof data.totalSpend === 'number' ? data.totalSpend : 0,
+            purchaseCount: typeof data.purchaseCount === 'number' ? data.purchaseCount : 0,
+            createdAt: data.createdAt || new Date().toISOString(),
+            updatedAt: data.updatedAt || new Date().toISOString(),
+          };
+        });
+        onData(items);
+      },
+      (error) => {
+        if (isQuotaError(error)) markQuotaExhausted();
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+export async function saveCustomerItem(customer: CustomerItem): Promise<void> {
+  try {
+    const custRef = doc(db, 'customers', customer.id);
+    const payload = sanitizeForFirestore({
+      ...customer,
+      updatedAt: new Date().toISOString(),
+    });
+    await setDoc(custRef, payload, { merge: true });
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    console.warn('saveCustomerItem error (handled safely):', err);
+  }
+}
+
+export async function deleteCustomerItem(customerId: string): Promise<void> {
+  try {
+    const custRef = doc(db, 'customers', customerId);
+    await deleteDoc(custRef);
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    console.warn('deleteCustomerItem error:', err);
+  }
+}
+
+export async function updateCustomerSpend(customerId: string, addAmount: number): Promise<void> {
+  try {
+    const custRef = doc(db, 'customers', customerId);
+    await setDoc(
+      custRef,
+      {
+        totalSpend: increment(addAmount),
+        purchaseCount: increment(1),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    console.warn('updateCustomerSpend error:', err);
+  }
+}
+
+export function subscribeToCustomerTiers(
+  onData: (tiers: CustomerTier[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  try {
+    const tiersDocRef = doc(db, 'settings', 'customer_tiers');
+    return onSnapshot(
+      tiersDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (Array.isArray(data.tiers)) {
+            onData(data.tiers as CustomerTier[]);
+            return;
+          }
+        }
+      },
+      (error) => {
+        if (isQuotaError(error)) markQuotaExhausted();
+        if (onError) onError(error);
+      }
+    );
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    if (onError) onError(err);
+    return () => {};
+  }
+}
+
+export async function saveCustomerTiers(tiers: CustomerTier[]): Promise<void> {
+  try {
+    const tiersDocRef = doc(db, 'settings', 'customer_tiers');
+    await setDoc(tiersDocRef, { tiers, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (err) {
+    if (isQuotaError(err)) markQuotaExhausted();
+    console.warn('saveCustomerTiers error:', err);
   }
 }
 

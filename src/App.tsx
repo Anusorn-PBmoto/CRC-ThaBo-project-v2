@@ -23,12 +23,30 @@ import {
   resetQuotaCircuitBreaker,
   retryCloudConnection,
   fetchLiveTiresFromCloud,
+  subscribeToCustomers,
+  saveCustomerItem,
+  deleteCustomerItem,
+  updateCustomerSpend,
+  subscribeToCustomerTiers,
+  saveCustomerTiers,
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { AlertTriangle, CloudOff, RefreshCw, Download } from 'lucide-react';
-import { ProductItem, TireItem, AuditSession, AuditLog, Transaction, StockStatus, StockTransfer } from './types';
+import {
+  ProductItem,
+  TireItem,
+  AuditSession,
+  AuditLog,
+  Transaction,
+  StockStatus,
+  StockTransfer,
+  CustomerItem,
+  CustomerTier,
+  CustomerGrade,
+} from './types';
 import { INITIAL_PRODUCTS, INITIAL_TIRES } from './initialData';
+import { DEFAULT_CUSTOMER_TIERS, SAMPLE_CUSTOMERS } from './utils/pricingUtils';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
 import { QuickAuditTab } from './components/QuickAuditTab';
@@ -48,6 +66,7 @@ import { StockTransferModal } from './components/StockTransferModal';
 import { BatchStockTransferModal } from './components/BatchStockTransferModal';
 import { ScrollToTopButton } from './components/ScrollToTopButton';
 import { StaffPosView } from './components/StaffPosView';
+import { CustomerManagementModal } from './components/CustomerManagementModal';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -60,6 +79,8 @@ const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v5';
 const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v5';
 const LOCAL_STORAGE_KEY_SESSIONS = 'crc_thabo_sessions_itemdetails_v5';
 const LOCAL_STORAGE_KEY_LOGS = 'crc_thabo_logs_itemdetails_v5';
+const LOCAL_STORAGE_KEY_CUSTOMERS = 'crc_thabo_customers_v1';
+const LOCAL_STORAGE_KEY_TIERS = 'crc_thabo_customer_tiers_v1';
 
 const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS.map((p) => ({
   ...p,
@@ -140,6 +161,28 @@ export default function App() {
     return [];
   });
 
+  const [customers, setCustomers] = useState<CustomerItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_CUSTOMERS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return SAMPLE_CUSTOMERS;
+  });
+
+  const [customerTiers, setCustomerTiers] = useState<CustomerTier[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIERS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_CUSTOMER_TIERS;
+  });
+
   const [currentTab, setCurrentTab] = useState<TabType>('audit');
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -185,7 +228,28 @@ export default function App() {
     });
   };
 
+  const persistCustomers = (updater: CustomerItem[] | ((prev: CustomerItem[]) => CustomerItem[])) => {
+    setCustomers((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_CUSTOMERS, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  const persistCustomerTiers = (updater: CustomerTier[] | ((prev: CustomerTier[]) => CustomerTier[])) => {
+    setCustomerTiers((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_TIERS, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
   // Modals
+  const [isCustomerManagementOpen, setIsCustomerManagementOpen] = useState(false);
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingTire, setEditingTire] = useState<TireItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -328,6 +392,8 @@ export default function App() {
   // Initialize and subscribe (Streamlined: Single product listener, zero eager fetches)
   useEffect(() => {
     let unsubscribeTires: (() => void) | undefined;
+    let unsubscribeCustomers: (() => void) | undefined;
+    let unsubscribeTiers: (() => void) | undefined;
 
     const initFirebase = async () => {
       // If quota was already exhausted, stay in local offline mode immediately
@@ -407,6 +473,20 @@ export default function App() {
             setIsOnline(false);
           }
         );
+
+        // 2. Attach real-time listener for customers directory
+        unsubscribeCustomers = subscribeToCustomers((remoteCusts) => {
+          if (remoteCusts && remoteCusts.length > 0) {
+            persistCustomers(remoteCusts);
+          }
+        });
+
+        // 3. Attach real-time listener for customer tiers
+        unsubscribeTiers = subscribeToCustomerTiers((remoteTiers) => {
+          if (remoteTiers && remoteTiers.length > 0) {
+            persistCustomerTiers(remoteTiers);
+          }
+        });
       } catch (error) {
         if (isQuotaError(error)) {
           markQuotaExhausted();
@@ -420,6 +500,8 @@ export default function App() {
 
     return () => {
       if (unsubscribeTires) unsubscribeTires();
+      if (unsubscribeCustomers) unsubscribeCustomers();
+      if (unsubscribeTiers) unsubscribeTiers();
     };
   }, []);
 
@@ -861,13 +943,79 @@ export default function App() {
     setIsPOOpen(true);
   };
 
+  // Customer Directory and Tier Pricing Handlers
+  const handleSaveCustomer = async (cust: CustomerItem) => {
+    persistCustomers((prev) => {
+      const idx = prev.findIndex((c) => c.id === cust.id);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = cust;
+        return updated;
+      }
+      return [cust, ...prev];
+    });
+
+    if (!isSandboxMode && !isFirestoreQuotaExhausted()) {
+      try {
+        await saveCustomerItem(cust);
+      } catch (err) {
+        console.warn('saveCustomerItem error:', err);
+      }
+    }
+  };
+
+  const handleDeleteCustomer = async (customerId: string) => {
+    persistCustomers((prev) => prev.filter((c) => c.id !== customerId));
+
+    if (!isSandboxMode && !isFirestoreQuotaExhausted()) {
+      try {
+        await deleteCustomerItem(customerId);
+      } catch (err) {
+        console.warn('deleteCustomerItem error:', err);
+      }
+    }
+  };
+
+  const handleSaveTiers = async (tiers: CustomerTier[]) => {
+    persistCustomerTiers(tiers);
+
+    if (!isSandboxMode && !isFirestoreQuotaExhausted()) {
+      try {
+        await saveCustomerTiers(tiers);
+      } catch (err) {
+        console.warn('saveCustomerTiers error:', err);
+      }
+    }
+  };
+
+  const handleUpdateCustomerSpend = (customerId: string, addAmount: number) => {
+    persistCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? {
+              ...c,
+              totalSpend: Math.round(((c.totalSpend || 0) + addAmount) * 100) / 100,
+              purchaseCount: (c.purchaseCount || 0) + 1,
+              updatedAt: new Date().toISOString(),
+            }
+          : c
+      )
+    );
+
+    if (!isSandboxMode && !isFirestoreQuotaExhausted()) {
+      updateCustomerSpend(customerId, addAmount).catch(() => {});
+    }
+  };
+
   // Execute Buy / Sell transaction with auto stock deduction
   const handleExecuteTransaction = async (
     type: 'sale' | 'purchase',
     items: { tire: TireItem; quantity: number; unitPrice: number; isSubUnit?: boolean }[],
     customerOrSupplier: string,
     note?: string,
-    locationTarget: 'front' | 'warehouse' = 'front'
+    locationTarget: 'front' | 'warehouse' = 'front',
+    customerId?: string,
+    customerGrade?: CustomerGrade
   ) => {
     // 1. Instant optimistic update of tire stocks in UI + localStorage
     persistTires((prevTires) => {
@@ -934,10 +1082,15 @@ export default function App() {
       return updated;
     });
 
+    let transactionTotalAmount = 0;
+
     // 2. Optimistic update of transactions list + localStorage
     const newTransactions: Transaction[] = items.map((item, idx) => {
       const prodName = item.tire.name || item.tire.size || 'สินค้า';
       const unitLabel = item.isSubUnit && item.tire.subUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น');
+      const itemTotal = item.quantity * item.unitPrice;
+      transactionTotalAmount += itemTotal;
+
       return {
         id: `tx-${Date.now()}-${idx}`,
         type,
@@ -949,14 +1102,21 @@ export default function App() {
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         unit: unitLabel,
-        totalPrice: item.quantity * item.unitPrice,
+        totalPrice: itemTotal,
         locationTarget,
         customerOrSupplier: customerOrSupplier.trim() || (type === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ตัวแทนจำหน่าย'),
+        customerId: customerId || undefined,
+        customerGrade: customerGrade || undefined,
         note: note?.trim() || '',
         createdAt: new Date().toISOString(),
       };
     });
     persistTransactions((prev) => [...newTransactions, ...prev]);
+
+    // Update customer accumulated spend in local state
+    if (type === 'sale' && customerId) {
+      handleUpdateCustomerSpend(customerId, transactionTotalAmount);
+    }
 
     // 3. Optimistic update of audit logs + localStorage
     const newLogs: AuditLog[] = items.map((item, idx) => {
@@ -996,7 +1156,15 @@ export default function App() {
     }
 
     try {
-      await executeTransaction(type, items, customerOrSupplier, note, locationTarget);
+      await executeTransaction(
+        type,
+        items,
+        customerOrSupplier,
+        note,
+        locationTarget,
+        customerId,
+        customerGrade
+      );
     } catch (err) {
       console.warn('executeTransaction Firestore sync warning:', err);
     }
@@ -1026,6 +1194,8 @@ export default function App() {
       <div className="min-h-screen bg-slate-100 text-slate-800 font-['Prompt',sans-serif]">
         <StaffPosView
           tires={tires}
+          customers={customers}
+          customerTiers={customerTiers}
           onExecuteTransaction={handleExecuteTransaction}
           onExitStaffMode={() => setIsStaffPosMode(false)}
           onOpenScanner={() => setIsScannerOpen(true)}
@@ -1034,6 +1204,10 @@ export default function App() {
           isSandboxMode={isSandboxMode}
           onResetToLiveCloud={handleResetToLiveCloud}
           onToggleSandboxMode={toggleSandboxMode}
+          onSaveCustomer={handleSaveCustomer}
+          onDeleteCustomer={handleDeleteCustomer}
+          onSaveTiers={handleSaveTiers}
+          onUpdateCustomerSpend={handleUpdateCustomerSpend}
         />
 
         <BarcodeScanModal
@@ -1059,6 +1233,7 @@ export default function App() {
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
         onToggleStaffPos={() => setIsStaffPosMode(true)}
+        onOpenCustomers={() => setIsCustomerManagementOpen(true)}
         isOnline={isOnline && !isQuotaExceeded}
         isQuotaMode={isQuotaExceeded}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
@@ -1184,9 +1359,15 @@ export default function App() {
               <BuySellTab
                 tires={tires}
                 transactions={transactions}
+                customers={customers}
+                customerTiers={customerTiers}
                 onExecuteTransaction={handleExecuteTransaction}
                 onOpenScanner={() => setIsScannerOpen(true)}
                 onOpenStaffPos={() => setIsStaffPosMode(true)}
+                onSaveCustomer={handleSaveCustomer}
+                onDeleteCustomer={handleDeleteCustomer}
+                onSaveTiers={handleSaveTiers}
+                onUpdateCustomerSpend={handleUpdateCustomerSpend}
               />
             )}
 
@@ -1314,6 +1495,17 @@ export default function App() {
         }}
         items={batchTransferItems}
         onConfirmBatchTransfer={handleConfirmBatchStockTransfer}
+      />
+
+      {/* Customer Directory & Tier Settings Management Modal */}
+      <CustomerManagementModal
+        isOpen={isCustomerManagementOpen}
+        onClose={() => setIsCustomerManagementOpen(false)}
+        customers={customers}
+        customerTiers={customerTiers}
+        onSaveCustomer={handleSaveCustomer}
+        onDeleteCustomer={handleDeleteCustomer}
+        onSaveTiers={handleSaveTiers}
       />
     </div>
   );

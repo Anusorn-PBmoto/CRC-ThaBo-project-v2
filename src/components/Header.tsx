@@ -1,5 +1,5 @@
 import React from 'react';
-import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart, Users } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
@@ -7,6 +7,7 @@ interface HeaderProps {
   onOpenAppSheet?: () => void;
   onOpenImageMatch?: () => void;
   onToggleStaffPos?: () => void;
+  onOpenCustomers?: () => void;
   isOnline: boolean;
   isQuotaMode?: boolean;
   activeZone?: string;
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAppSheet,
   onOpenImageMatch,
   onToggleStaffPos,
+  onOpenCustomers,
   isOnline,
   isQuotaMode = false,
 }) => {
@@ -34,6 +36,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1.5">
+          {/* Customer Management button */}
+          {onOpenCustomers && (
+            <button
+              onClick={onOpenCustomers}
+              aria-label="รายชื่อลูกค้าและรหัสสมาชิก"
+              title="จัดการรายชื่อลูกค้า สมาชิก และรหัสกลุ่มส่วนลด A B C D"
+              className="h-9 px-2 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 flex items-center gap-1 transition-all active:scale-95 shadow-sm cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[10px] font-bold tracking-tight">สมาชิกลูกค้า</span>
+            </button>
+          )}
+
           {/* Staff POS Mode Switch Button */}
           {onToggleStaffPos && (
             <button

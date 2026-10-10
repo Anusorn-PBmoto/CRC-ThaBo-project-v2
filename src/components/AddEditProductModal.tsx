@@ -17,8 +17,10 @@ import {
   Store,
   Warehouse,
   ArrowRightLeft,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { ProductItem } from '../types';
+import { ProductItem, CustomerGrade } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
 import { uploadProductImageToStorage } from '../firebase';
@@ -117,6 +119,15 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [subUnit, setSubUnit] = useState('');
   const [conversionRate, setConversionRate] = useState<number | ''>('');
 
+  // Custom grade pricing per product (Grade A, B, C, D)
+  const [gradePrices, setGradePrices] = useState<Partial<Record<CustomerGrade, number | ''>>>({
+    A: '',
+    B: '',
+    C: '',
+    D: '',
+  });
+  const [showGradePricing, setShowGradePricing] = useState(false);
+
   // Scanner & UI states
   const [isScanning, setIsScanning] = useState(false);
   const [scanSuccessMsg, setScanSuccessMsg] = useState<string | null>(null);
@@ -153,6 +164,16 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setDescription(currentItem.description || '');
       setSubUnit(currentItem.subUnit || '');
       setConversionRate(currentItem.conversionRate !== undefined ? currentItem.conversionRate : '');
+
+      const gp = currentItem.gradePrices || {};
+      const hasAnyGradePrice = Boolean(gp.A || gp.B || gp.C || gp.D);
+      setGradePrices({
+        A: gp.A !== undefined ? gp.A : '',
+        B: gp.B !== undefined ? gp.B : '',
+        C: gp.C !== undefined ? gp.C : '',
+        D: gp.D !== undefined ? gp.D : '',
+      });
+      setShowGradePricing(hasAnyGradePrice);
     } else {
       setBarcode('');
       setName('');
@@ -170,6 +191,8 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setDescription('');
       setSubUnit('');
       setConversionRate('');
+      setGradePrices({ A: '', B: '', C: '', D: '' });
+      setShowGradePricing(false);
     }
     setIsScanning(false);
     setScanSuccessMsg(null);
@@ -265,6 +288,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         description: description.trim() || '',
         subUnit: subUnit.trim() || '',
         conversionRate: conversionRate !== '' ? Number(conversionRate) : undefined,
+        gradePrices: (() => {
+          const clean: Partial<Record<CustomerGrade, number>> = {};
+          if (typeof gradePrices.A === 'number' && gradePrices.A > 0) clean.A = gradePrices.A;
+          if (typeof gradePrices.B === 'number' && gradePrices.B > 0) clean.B = gradePrices.B;
+          if (typeof gradePrices.C === 'number' && gradePrices.C > 0) clean.C = gradePrices.C;
+          if (typeof gradePrices.D === 'number' && gradePrices.D > 0) clean.D = gradePrices.D;
+          return Object.keys(clean).length > 0 ? clean : undefined;
+        })(),
         updatedAt: new Date().toISOString(),
         // Backwards compatibility fields
         size: name.trim(),
@@ -514,6 +545,173 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          {/* ============================================================ */}
+          {/* 5.1 กำหนดราคาเฉพาะตามเกรดลูกค้า (ทางเลือก - Overrides tier %) */}
+          {/* ============================================================ */}
+          <div className="p-3 bg-[#20262D] border border-[#475662] rounded-2xl space-y-2.5">
+            <button
+              type="button"
+              onClick={() => setShowGradePricing(!showGradePricing)}
+              className="w-full flex items-center justify-between text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="text-xs font-bold text-[#EEEEEE]">
+                  กำหนดราคาเฉพาะตามเกรดลูกค้า (A, B, C, D)
+                </span>
+                <span className="text-[10px] text-amber-300 font-semibold bg-amber-400/20 px-1.5 py-0.5 rounded border border-amber-400/30">
+                  ทางเลือก
+                </span>
+              </div>
+              <div className="text-slate-400 flex items-center gap-1 text-[11px]">
+                <span>{showGradePricing ? 'ซ่อน' : 'ตั้งราคาแยก'}</span>
+                {showGradePricing ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </div>
+            </button>
+
+            {showGradePricing && (
+              <div className="pt-2 border-t border-[#3A4750] space-y-2 animate-in fade-in duration-150">
+                <p className="text-[11px] text-[#A0ABB5]">
+                  หากระบุ ระบบจะใช้ราคานี้กับลูกค้าเกรดนั้นทันที (แทนที่การคำนวณ % ส่วนลดมาตรฐาน)
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {/* Grade A */}
+                  <div className="p-2 rounded-xl bg-[#252C33] border border-amber-400/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-300 text-[11px]">เกรด A (ช่าง VIP)</span>
+                      {Number(sellingPrice) > 0 && typeof gradePrices.A === 'number' && gradePrices.A > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          -
+                          {Math.round(
+                            ((Number(sellingPrice) - gradePrices.A) / Number(sellingPrice)) * 100
+                          )}
+                          %
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-xs">฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={gradePrices.A}
+                        onChange={(e) =>
+                          setGradePrices((prev) => ({
+                            ...prev,
+                            A: e.target.value === '' ? '' : parseFloat(e.target.value),
+                          }))
+                        }
+                        placeholder={sellingPrice ? String(Math.ceil(Number(sellingPrice) * 0.85)) : 'ราคาเกรด A'}
+                        className="w-full bg-[#1A1F26] border border-amber-400/30 text-amber-300 font-mono font-bold rounded-lg pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Grade B */}
+                  <div className="p-2 rounded-xl bg-[#252C33] border border-sky-400/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sky-300 text-[11px]">เกรด B (ขายส่ง)</span>
+                      {Number(sellingPrice) > 0 && typeof gradePrices.B === 'number' && gradePrices.B > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          -
+                          {Math.round(
+                            ((Number(sellingPrice) - gradePrices.B) / Number(sellingPrice)) * 100
+                          )}
+                          %
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sky-400 font-bold text-xs">฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={gradePrices.B}
+                        onChange={(e) =>
+                          setGradePrices((prev) => ({
+                            ...prev,
+                            B: e.target.value === '' ? '' : parseFloat(e.target.value),
+                          }))
+                        }
+                        placeholder={sellingPrice ? String(Math.ceil(Number(sellingPrice) * 0.9)) : 'ราคาเกรด B'}
+                        className="w-full bg-[#1A1F26] border border-sky-400/30 text-sky-300 font-mono font-bold rounded-lg pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Grade C */}
+                  <div className="p-2 rounded-xl bg-[#252C33] border border-emerald-400/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-emerald-300 text-[11px]">เกรด C (สมาชิก)</span>
+                      {Number(sellingPrice) > 0 && typeof gradePrices.C === 'number' && gradePrices.C > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          -
+                          {Math.round(
+                            ((Number(sellingPrice) - gradePrices.C) / Number(sellingPrice)) * 100
+                          )}
+                          %
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400 font-bold text-xs">฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={gradePrices.C}
+                        onChange={(e) =>
+                          setGradePrices((prev) => ({
+                            ...prev,
+                            C: e.target.value === '' ? '' : parseFloat(e.target.value),
+                          }))
+                        }
+                        placeholder={sellingPrice ? String(Math.ceil(Number(sellingPrice) * 0.95)) : 'ราคาเกรด C'}
+                        className="w-full bg-[#1A1F26] border border-emerald-400/30 text-emerald-300 font-mono font-bold rounded-lg pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Grade D */}
+                  <div className="p-2 rounded-xl bg-[#252C33] border border-indigo-400/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-indigo-300 text-[11px]">เกรด D (พิเศษ)</span>
+                      {Number(sellingPrice) > 0 && typeof gradePrices.D === 'number' && gradePrices.D > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          -
+                          {Math.round(
+                            ((Number(sellingPrice) - gradePrices.D) / Number(sellingPrice)) * 100
+                          )}
+                          %
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-indigo-400 font-bold text-xs">฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={gradePrices.D}
+                        onChange={(e) =>
+                          setGradePrices((prev) => ({
+                            ...prev,
+                            D: e.target.value === '' ? '' : parseFloat(e.target.value),
+                          }))
+                        }
+                        placeholder={sellingPrice ? String(Math.ceil(Number(sellingPrice) * 0.98)) : 'ราคาเกรด D'}
+                        className="w-full bg-[#1A1F26] border border-indigo-400/30 text-indigo-300 font-mono font-bold rounded-lg pl-6 pr-2 py-1 text-xs focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Multi-location Stock Quantity & Storage Location Section */}

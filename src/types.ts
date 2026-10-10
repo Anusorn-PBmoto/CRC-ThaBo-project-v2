@@ -2,6 +2,31 @@ export type StockStatus = 'pending' | 'checked' | 'discrepancy';
 
 export type StockLocation = 'front' | 'warehouse';
 
+export type CustomerGrade = 'A' | 'B' | 'C' | 'D' | 'general';
+
+export interface CustomerTier {
+  grade: CustomerGrade;
+  name: string;           // เช่น "กลุ่ม A (ช่างประจำ/อู่คู่ค้า)"
+  discountPercent: number;// เช่น 15 (%)
+  description?: string;
+  badgeColor: string;
+}
+
+export interface CustomerItem {
+  id: string;
+  customerCode?: string;  // รหัสลูกค้าบ่งชี้กลุ่ม เช่น A000001, B000001
+  name: string;
+  phone: string;
+  grade: CustomerGrade;
+  vehiclePlate?: string;  // ทะเบียนรถ เช่น "กข 1234 หนองคาย"
+  vehicleModel?: string;  // รุ่นรถ เช่น "Wave 110i", "PCX 160"
+  notes?: string;         // บันทึก เช่น "อู่ช่างเล็ก ท่าบ่อ"
+  totalSpend: number;     // ยอดซื้อสะสมรวม (บาท)
+  purchaseCount: number;  // จำนวนครั้งที่ซื้อ
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProductItem {
   id: string;
   barcode: string;           // 1. ระบบแสกนบาร์โค้ด และรหัสสินค้า
@@ -26,6 +51,9 @@ export interface ProductItem {
   // Unit conversion for retail / wholesale (e.g. 1 carton = 24 cans)
   subUnit?: string;          // หน่วยย่อย (เช่น ป๋อง, ชิ้น)
   conversionRate?: number;   // อัตราส่วนแปลง (เช่น 24)
+
+  // Custom grade pricing per product (Optional - overrides tier discount % if set)
+  gradePrices?: Partial<Record<CustomerGrade, number>>;
 
   updatedAt: string;
 
@@ -95,6 +123,10 @@ export interface Transaction {
   unitPrice: number;
   totalPrice: number;
   customerOrSupplier: string;
+  customerId?: string;
+  customerGrade?: CustomerGrade;
+  discountPercent?: number;
+  unit?: string;
   locationTarget?: 'front' | 'warehouse'; // แหล่งตัดสต็อก (ขาย) หรือ แหล่งเก็บเข้า (ซื้อ)
   note?: string;
   createdAt: string;

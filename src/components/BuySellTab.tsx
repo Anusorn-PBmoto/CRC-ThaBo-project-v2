@@ -19,46 +19,73 @@ import {
   Store,
   Warehouse,
   ArrowRight,
+  Users,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { ProductItem, TireItem, Transaction } from '../types';
+import { ProductItem, TireItem, Transaction, CustomerItem, CustomerTier, CustomerGrade } from '../types';
 import { resolveProductImage } from '../utils/productImages';
 import { getProductStockBreakdown } from '../utils/stockUtils';
 import { ReceiptModal, ReceiptData } from './ReceiptModal';
+import { CustomerPickerModal } from './CustomerPickerModal';
+import { CustomerManagementModal } from './CustomerManagementModal';
+import {
+  calculateItemPriceForCustomer,
+  getGradeBadge,
+  getTierInfo,
+  DEFAULT_CUSTOMER_TIERS,
+} from '../utils/pricingUtils';
 
 interface BuySellTabProps {
   tires: TireItem[];
   transactions: Transaction[];
+  customers?: CustomerItem[];
+  customerTiers?: CustomerTier[];
   onExecuteTransaction: (
     type: 'sale' | 'purchase',
-    items: { tire: TireItem; quantity: number; unitPrice: number }[],
+    items: { tire: TireItem; quantity: number; unitPrice: number; isSubUnit?: boolean }[],
     customerOrSupplier: string,
     note?: string,
-    locationTarget?: 'front' | 'warehouse'
+    locationTarget?: 'front' | 'warehouse',
+    customerId?: string,
+    customerGrade?: CustomerGrade
   ) => Promise<void>;
   onOpenScanner: () => void;
   onOpenStaffPos?: () => void;
   incomingSearchQuery?: string;
+  onSaveCustomer?: (cust: CustomerItem) => Promise<void> | void;
+  onDeleteCustomer?: (customerId: string) => Promise<void> | void;
+  onSaveTiers?: (tiers: CustomerTier[]) => Promise<void> | void;
+  onUpdateCustomerSpend?: (customerId: string, addAmount: number) => void;
 }
 
 interface CartItem {
   tire: TireItem;
   quantity: number;
   unitPrice: number;
+  isSubUnit?: boolean;
 }
 
 export const BuySellTab: React.FC<BuySellTabProps> = ({
   tires,
   transactions,
+  customers = [],
+  customerTiers = DEFAULT_CUSTOMER_TIERS,
   onExecuteTransaction,
   onOpenScanner,
   onOpenStaffPos,
   incomingSearchQuery,
+  onSaveCustomer,
+  onDeleteCustomer,
+  onSaveTiers,
+  onUpdateCustomerSpend,
 }) => {
   const [transactionType, setTransactionType] = useState<'sale' | 'purchase'>('sale');
   const [locationTarget, setLocationTarget] = useState<'front' | 'warehouse'>('front');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customer, setCustomer] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerItem | null>(null);
+  const [isCustomerPickerOpen, setIsCustomerPickerOpen] = useState(false);
+  const [isCustomerManagementOpen, setIsCustomerManagementOpen] = useState(false);
   const [note, setNote] = useState('');
   const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
   const [selectedBrand, setSelectedBrand] = useState('ทั้งหมด');
@@ -100,12 +127,45 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
     return ['ทั้งหมด', ...Array.from(set)];
   }, [tires]);
 
-  // Suggested price based on transaction type
+  // Suggested price based on transaction type and selected customer grade
   const getSuggestedPrice = (tire: TireItem): number => {
     if (transactionType === 'sale') {
-      return tire.sellingPrice || tire.price || (tire.costPrice ? Math.round(tire.costPrice * 1.3) : 850);
+      const calc = calculateItemPriceForCustomer(
+        tire,
+        selectedCustomer,
+        customerTiers
+      );
+      return calc.effectivePrice;
     } else {
       return tire.costPrice || Math.round((tire.sellingPrice || tire.price || 850) * 0.7);
+    }
+  };
+
+  // Handle selecting customer from picker
+  const handleSelectCustomer = (cust: CustomerItem | null) => {
+    setSelectedCustomer(cust);
+    if (cust) {
+      setCustomer(cust.name);
+    } else {
+      setCustomer('ลูกค้าหน้าร้าน');
+    }
+
+    // Recalculate prices in cart based on newly selected customer's grade
+    if (transactionType === 'sale') {
+      setCart((prev) =>
+        prev.map((item) => {
+          const calc = calculateItemPriceForCustomer(
+            item.tire,
+            cust,
+            customerTiers,
+            Boolean(item.isSubUnit)
+          );
+          return {
+            ...item,
+            unitPrice: calc.effectivePrice,
+          };
+        })
+      );
     }
   };
 
@@ -218,11 +278,18 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
           tire: item.tire,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
+          isSubUnit: item.isSubUnit,
         })),
         customer.trim() || (transactionType === 'sale' ? 'ลูกค้าหน้าร้าน' : 'ซัพพลายเออร์ทั่วไป'),
         note.trim() || undefined,
-        locationTarget
+        locationTarget,
+        selectedCustomer?.id,
+        selectedCustomer?.grade
       );
+
+      if (transactionType === 'sale' && selectedCustomer && onUpdateCustomerSpend) {
+        onUpdateCustomerSpend(selectedCustomer.id, totalAmount);
+      }
 
       // Trigger celebratory confetti
       confetti({
@@ -268,6 +335,7 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
       setErrorMessage(null);
       setCart([]);
       setCustomer('');
+      setSelectedCustomer(null);
       setNote('');
       setTimeout(() => setSuccessMessage(null), 3500);
     } catch (error) {
@@ -529,16 +597,65 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
             })}
           </div>
 
-          {/* Customer / Vehicle info */}
+          {/* Customer / Vehicle info with Tier Pricing Support */}
           <div className="pt-2 border-t border-[#475662] space-y-2 text-xs">
+            {transactionType === 'sale' && (
+              <div className="flex items-center justify-between gap-2 bg-[#252C33] border border-[#475662] rounded-xl p-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerPickerOpen(true)}
+                    className="py-1 px-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow-sm"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>เลือกลูกค้า / สมาชิก</span>
+                  </button>
+                  {selectedCustomer ? (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-bold text-white text-xs truncate">
+                        {selectedCustomer.name}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          getGradeBadge(selectedCustomer.grade).badgeClass
+                        }`}
+                      >
+                        {getGradeBadge(selectedCustomer.grade).shortLabel}
+                        {getTierInfo(selectedCustomer.grade, customerTiers).discountPercent > 0
+                          ? ` (-${getTierInfo(selectedCustomer.grade, customerTiers).discountPercent}%)`
+                          : ''}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-slate-400">ลูกค้าทั่วไป (ราคามาตรฐาน)</span>
+                  )}
+                </div>
+
+                {selectedCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCustomer(null)}
+                    className="text-[10px] text-rose-400 hover:text-rose-300 px-1 py-0.5"
+                  >
+                    ยกเลิก
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2">
               <input
                 type="text"
                 value={customer}
-                onChange={(e) => setCustomer(e.target.value)}
+                onChange={(e) => {
+                  setCustomer(e.target.value);
+                  if (selectedCustomer && e.target.value !== selectedCustomer.name) {
+                    setSelectedCustomer(null);
+                  }
+                }}
                 placeholder={
                   transactionType === 'sale'
-                    ? 'ชื่อลูกค้า / ทะเบียนรถ (เช่น ช่างอาร์ต, กข 5678)'
+                    ? 'พิมพ์ชื่อลูกค้า / ทะเบียนรถ หรือกดปุ่มเลือกลูกค้าด้านบน'
                     : 'ชื่อผู้แทนจำหน่าย / บริษัทจัดส่ง'
                 }
                 className="flex-1 bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2 focus:border-[#F6C90E] focus:outline-none text-xs"
@@ -806,6 +923,31 @@ export const BuySellTab: React.FC<BuySellTabProps> = ({
         isOpen={Boolean(activeReceipt)}
         onClose={() => setActiveReceipt(null)}
         receipt={activeReceipt}
+      />
+
+      {/* Customer Picker Modal */}
+      <CustomerPickerModal
+        isOpen={isCustomerPickerOpen}
+        onClose={() => setIsCustomerPickerOpen(false)}
+        customers={customers}
+        customerTiers={customerTiers}
+        selectedCustomer={selectedCustomer}
+        onSelectCustomer={handleSelectCustomer}
+        onOpenAddNewCustomer={() => {
+          setIsCustomerPickerOpen(false);
+          setIsCustomerManagementOpen(true);
+        }}
+      />
+
+      {/* Customer Management Modal */}
+      <CustomerManagementModal
+        isOpen={isCustomerManagementOpen}
+        onClose={() => setIsCustomerManagementOpen(false)}
+        customers={customers}
+        customerTiers={customerTiers}
+        onSaveCustomer={onSaveCustomer || (() => {})}
+        onDeleteCustomer={onDeleteCustomer || (() => {})}
+        onSaveTiers={onSaveTiers || (() => {})}
       />
     </div>
   );

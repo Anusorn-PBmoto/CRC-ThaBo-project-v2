@@ -26,6 +26,9 @@ export interface ReceiptData {
   dateStr: string;
   timeStr: string;
   customer: string;
+  customerGrade?: string;
+  discountPercent?: number;
+  discountAmount?: number;
   locationTarget: 'front' | 'warehouse';
   items: ReceiptItemData[];
   totalAmount: number;
@@ -263,11 +266,21 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 {receipt.dateStr} {receipt.timeStr} น.
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span>ลูกค้า / รถ:</span>
-              <span className="font-bold text-slate-800">
-                {receipt.customer || 'ลูกค้าหน้าร้าน'}
-              </span>
+              <div className="text-right">
+                <span className="font-bold text-slate-800">
+                  {receipt.customer || 'ลูกค้าหน้าร้าน'}
+                </span>
+                {receipt.customerGrade && (
+                  <span className="ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                    {receipt.customerGrade}
+                    {typeof receipt.discountPercent === 'number' && receipt.discountPercent > 0
+                      ? ` (-${receipt.discountPercent}%)`
+                      : ''}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex justify-between items-center">
               <span>จุดจำหน่าย:</span>

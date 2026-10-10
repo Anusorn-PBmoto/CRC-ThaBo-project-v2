@@ -647,6 +647,11 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                           <div className="bg-[#252C33]/90 border border-[#475662]/70 rounded-xl px-2.5 py-1.5 mt-2 flex items-center justify-between text-[11px] font-mono">
                             <span className="text-[#F6C90E]">
                               หน้าร้าน: <strong>{breakdown.frontQty}</strong>
+                              {product.subUnit && product.conversionRate && product.conversionRate > 1 && breakdown.frontQty % 1 !== 0 && (
+                                <span className="text-[10px] text-amber-300 ml-1">
+                                  ({Math.round(breakdown.frontQty * product.conversionRate)} {product.subUnit})
+                                </span>
+                              )}
                             </span>
                             <span className="text-[#A0ABB5]">|</span>
                             <span className="text-sky-300">
