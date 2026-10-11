@@ -77,8 +77,8 @@ const CATEGORIES = [
 
 const UNITS = ['เส้น', 'ชิ้น', 'คู่', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ชุด', 'อัน', 'แผ่น'];
 
-// Helper to compress image before uploading to Gemini API (<800KB)
-async function compressImageFile(file: File | Blob, maxWidth = 1200, maxHeight = 1600, quality = 0.85): Promise<string> {
+// Helper to compress image before uploading to Gemini API (~200KB - 400KB)
+async function compressImageFile(file: File | Blob, maxWidth = 1000, maxHeight = 1350, quality = 0.80): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -316,6 +316,10 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
     } catch (err: any) {
       console.error('File compression error:', err);
       setAnalysisError('เกิดข้อผิดพลาดในการโหลดรูปภาพ');
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -333,14 +337,13 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
     setAnalysisError(null);
 
     try {
-      const payloadCatalog = existingCatalog.map((c) => ({
+      // Send only a lightweight sample (first 25 items) to keep payload small and fast
+      const payloadCatalog = existingCatalog.slice(0, 25).map((c) => ({
         id: c.id,
         name: c.name,
         brand: c.brand,
         size: c.size,
         barcode: c.barcode,
-        costPrice: c.costPrice,
-        price: c.sellingPrice,
       }));
 
       const res = await fetch('/api/gemini/analyze-invoice', {
@@ -353,7 +356,23 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
         }),
       });
 
-      const result = await res.json();
+      const responseText = await res.text();
+      let result: any = null;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseErr) {
+        if (res.status === 413) {
+          throw new Error('รูปภาพมีขนาดไฟล์ใหญ่เกินไป กรุณาถ่ายภาพใหม่หรือลดขนาดภาพ');
+        } else if (res.status === 504 || res.status === 502) {
+          throw new Error('การประมวลผลบิลใช้เวลานานเกินไป กรุณากดลองสแกนใหม่อีกครั้ง');
+        }
+        throw new Error(
+          `เกิดข้อผิดพลาดในการรับข้อมูลจากเซิร์ฟเวอร์ (${res.status}): ${
+            responseText.slice(0, 100) || 'ไม่มีข้อความตอบกลับ'
+          }`
+        );
+      }
+
       if (!res.ok || !result.success) {
         throw new Error(result.error || 'ไม่สามารถวิเคราะห์บิลได้ กรุณาลองใหม่อีกครั้ง');
       }
@@ -744,7 +763,6 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -753,16 +771,16 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                   </div>
                   <div>
                     <p className="text-sm font-bold text-[#EEEEEE]">
-                      คลิกเพื่อเลือกรูปถ่ายบิล หรือลากไฟล์มาวางที่นี่
+                      คลิกเพื่อเลือกรูปถ่ายบิลจากอัลบั้ม / แกลเลอรี หรือลากไฟล์มาวาง
                     </p>
                     <p className="text-xs text-[#A0ABB5] mt-1">
-                      รองรับไฟล์ภาพ JPEG, PNG, WebP จากกล้องมือถือหรือคอมพิวเตอร์
+                      รองรับไฟล์ภาพ JPEG, PNG, WebP จากคลังรูปภาพในมือถือหรือคอมพิวเตอร์
                     </p>
                   </div>
                   <div className="pt-2">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#3A4750] text-[#EEEEEE] text-xs font-semibold group-hover:bg-[#F6C90E] group-hover:text-slate-950 transition-colors">
-                      <Camera className="w-3.5 h-3.5" />
-                      เลือกภาพถ่ายบิล
+                      <Upload className="w-3.5 h-3.5" />
+                      เลือกภาพจากคลังรูปภาพ / อัลบั้ม
                     </span>
                   </div>
                 </div>
