@@ -27,10 +27,13 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Multi-tier model candidate list for bulletproof OCR and AI tasks
-const GEMINI_FLASH_MODEL = 'gemini-3.8-flash';
-const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
-const GEMINI_LITE_FALLBACK = 'gemini-3.1-flash-lite';
+// Multi-tier model candidate list for ultra-fast OCR without rate limits or timeout spikes
+// gemini-3.1-flash-lite has a high 1,500 RPD quota and sub-2s latency, ideal for document OCR
+const GEMINI_PRIMARY_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_SECONDARY_MODEL = 'gemini-3.8-flash';
+const GEMINI_TERTIARY_MODEL = 'gemini-flash-latest';
+const GEMINI_FLASH_MODEL = GEMINI_PRIMARY_MODEL;
+const GEMINI_FALLBACK_MODEL = GEMINI_SECONDARY_MODEL;
 
 // Resilient helper with multi-tier fallback and timeout racing
 async function generateWithGemini(params: {
@@ -38,16 +41,16 @@ async function generateWithGemini(params: {
   config?: any;
 }) {
   const candidateModels = [
-    process.env.GEMINI_MODEL || GEMINI_FLASH_MODEL,
-    GEMINI_FALLBACK_MODEL,
-    GEMINI_LITE_FALLBACK,
+    process.env.GEMINI_MODEL || GEMINI_PRIMARY_MODEL,
+    GEMINI_SECONDARY_MODEL,
+    GEMINI_TERTIARY_MODEL,
   ];
 
   let lastError: any = null;
 
   for (let i = 0; i < candidateModels.length; i++) {
     const currentModel = candidateModels[i];
-    const isLite = currentModel === GEMINI_LITE_FALLBACK;
+    const isLite = currentModel === GEMINI_PRIMARY_MODEL;
 
     const callConfig = {
       ...params.config,
@@ -61,10 +64,10 @@ async function generateWithGemini(params: {
         config: callConfig,
       });
 
-      // 20s timeout on primary/secondary, 25s on final candidate
-      const timeoutMs = i === candidateModels.length - 1 ? 25000 : 18000;
+      // 25s timeout for vision OCR
+      const timeoutMs = 25000;
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout with model ${currentModel}`)), timeoutMs)
+        setTimeout(() => reject(new Error(`Operation timeout with ${currentModel}`)), timeoutMs)
       );
 
       const result = (await Promise.race([callPromise, timeoutPromise])) as any;
@@ -73,8 +76,8 @@ async function generateWithGemini(params: {
         return result;
       }
     } catch (err: any) {
-      console.warn(
-        `[Gemini AI] Model ${currentModel} failed (${err?.message?.slice(0, 100)}), trying fallback candidate...`
+      console.log(
+        `[Gemini AI] Model ${currentModel} unavailable (${err?.message?.slice(0, 80)}), switching to next model candidate...`
       );
       lastError = err;
     }
