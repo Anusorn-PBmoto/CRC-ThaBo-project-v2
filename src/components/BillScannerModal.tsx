@@ -77,11 +77,17 @@ const CATEGORIES = [
 
 const UNITS = ['เส้น', 'ชิ้น', 'คู่', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ชุด', 'อัน', 'แผ่น'];
 
-// Helper to compress image before uploading to Gemini API (~200KB - 400KB)
-async function compressImageFile(file: File | Blob, maxWidth = 1000, maxHeight = 1350, quality = 0.80): Promise<string> {
+// Helper to compress image before uploading to Gemini API while keeping high clarity for OCR (~400KB - 800KB)
+async function compressImageFile(file: File | Blob, maxWidth = 2048, maxHeight = 2800, quality = 0.90): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (!dataUrl) {
+        reject(new Error('ไม่สามารถอ่านไฟล์รูปภาพได้'));
+        return;
+      }
+
       const img = new Image();
       img.onload = () => {
         let width = img.width;
@@ -102,7 +108,7 @@ async function compressImageFile(file: File | Blob, maxWidth = 1000, maxHeight =
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          resolve(e.target?.result as string);
+          resolve(dataUrl);
           return;
         }
 
@@ -110,8 +116,13 @@ async function compressImageFile(file: File | Blob, maxWidth = 1000, maxHeight =
         const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
         resolve(compressedBase64);
       };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
+
+      img.onerror = () => {
+        // Fallback: If image decode fails in browser canvas (e.g. HEIC / special formats), resolve dataUrl directly
+        resolve(dataUrl);
+      };
+
+      img.src = dataUrl;
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
@@ -235,7 +246,8 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
   // References
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
 
   // Cleanup camera stream
   const stopCameraStream = () => {
@@ -310,15 +322,18 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
+      setAnalysisError(null);
       const compressed = await compressImageFile(file);
       setImagePreview(compressed);
-      setAnalysisError(null);
     } catch (err: any) {
       console.error('File compression error:', err);
-      setAnalysisError('เกิดข้อผิดพลาดในการโหลดรูปภาพ');
+      setAnalysisError('เกิดข้อผิดพลาดในการโหลดรูปภาพ: ' + (err?.message || ''));
     } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (galleryInputRef.current) {
+        galleryInputRef.current.value = '';
+      }
+      if (cameraInputRef.current) {
+        cameraInputRef.current.value = '';
       }
     }
   };
@@ -361,7 +376,11 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       try {
         result = JSON.parse(responseText);
       } catch (parseErr) {
-        if (res.status === 413) {
+        if (res.status === 405) {
+          throw new Error(
+            'เกิดข้อผิดพลาด 405 บน Vercel: เนื่องจาก Vercel ยังไม่ได้อัปเดตไฟล์ API ล่าสุด กรุณารอ Deploy อัปเดตใหม่ หรือเปิดใช้งานผ่าน AI Studio'
+          );
+        } else if (res.status === 413) {
           throw new Error('รูปภาพมีขนาดไฟล์ใหญ่เกินไป กรุณาถ่ายภาพใหม่หรือลดขนาดภาพ');
         } else if (res.status === 504 || res.status === 502) {
           throw new Error('การประมวลผลบิลใช้เวลานานเกินไป กรุณากดลองสแกนใหม่อีกครั้ง');
@@ -651,50 +670,112 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
           {/* STEP 1: CAPTURE & UPLOAD SCREEN */}
           {step === 'capture' && (
             <div className="space-y-4">
-              {/* Method Tabs */}
-              <div className="grid grid-cols-3 gap-2 p-1 bg-[#252C33] rounded-xl border border-[#3A4750]">
+              {/* Method Selector */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* 1. Gallery / Scanned file picker */}
                 <button
                   type="button"
                   onClick={() => {
                     setInputMode('upload');
-                    setImagePreview(null);
+                    stopCameraStream();
+                    galleryInputRef.current?.click();
                   }}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all group ${
                     inputMode === 'upload' && !imagePreview
-                      ? 'bg-[#F6C90E] text-slate-950 shadow-sm'
-                      : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+                      ? 'bg-[#2A343D] border-[#F6C90E] shadow-sm'
+                      : 'bg-[#252C33] border-[#3A4750] hover:border-[#F6C90E]/60 text-[#EEEEEE]'
                   }`}
                 >
-                  <Upload className="w-4 h-4" />
-                  <span>อัปโหลดรูปภาพ</span>
+                  <div className="w-8 h-8 rounded-lg bg-[#3A4750] group-hover:bg-[#F6C90E] group-hover:text-slate-950 text-[#F6C90E] flex items-center justify-center transition-colors">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#EEEEEE] group-hover:text-[#F6C90E] transition-colors">
+                    เลือกรูปจากอัลบั้ม
+                  </span>
+                  <span className="text-[10px] text-[#A0ABB5] line-clamp-1">
+                    คลังภาพ / ไฟล์บิลสแกน
+                  </span>
                 </button>
 
+                {/* 2. Direct mobile camera */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInputMode('upload');
+                    stopCameraStream();
+                    cameraInputRef.current?.click();
+                  }}
+                  className="p-3 rounded-xl bg-[#252C33] border border-[#3A4750] hover:border-[#F6C90E]/60 text-left flex flex-col gap-1 transition-all group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#3A4750] group-hover:bg-[#F6C90E] group-hover:text-slate-950 text-[#F6C90E] flex items-center justify-center transition-colors">
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#EEEEEE] group-hover:text-[#F6C90E] transition-colors">
+                    ถ่ายรูปด้วยกล้อง
+                  </span>
+                  <span className="text-[10px] text-[#A0ABB5] line-clamp-1">
+                    เปิดแอปกล้องมือถือถ่ายทันที
+                  </span>
+                </button>
+
+                {/* 3. Live webcam video */}
                 <button
                   type="button"
                   onClick={() => {
                     setInputMode('camera');
                     setImagePreview(null);
                   }}
-                  className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all group ${
                     inputMode === 'camera' && !imagePreview
-                      ? 'bg-[#F6C90E] text-slate-950 shadow-sm'
-                      : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
+                      ? 'bg-[#2A343D] border-[#F6C90E] shadow-sm'
+                      : 'bg-[#252C33] border-[#3A4750] hover:border-[#F6C90E]/60 text-[#EEEEEE]'
                   }`}
                 >
-                  <Camera className="w-4 h-4" />
-                  <span>ถ่ายด้วยกล้อง</span>
+                  <div className="w-8 h-8 rounded-lg bg-[#3A4750] group-hover:bg-[#F6C90E] group-hover:text-slate-950 text-[#F6C90E] flex items-center justify-center transition-colors">
+                    <FlipHorizontal className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-[#EEEEEE] group-hover:text-[#F6C90E] transition-colors">
+                    กล้องเว็บแคมสด
+                  </span>
+                  <span className="text-[10px] text-[#A0ABB5] line-clamp-1">
+                    ส่องภาพสดในเบราว์เซอร์
+                  </span>
                 </button>
 
+                {/* 4. Demo bill */}
                 <button
                   type="button"
                   onClick={handleLoadDemoBill}
-                  className="py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-[#3A4750] text-amber-300 hover:bg-[#43525D] transition-all border border-amber-500/30"
-                  title="ทดสอบด้วยบิลตัวอย่างจำลอง"
+                  className="p-3 rounded-xl bg-[#252C33] border border-amber-500/40 hover:border-amber-400 text-left flex flex-col gap-1 transition-all group"
                 >
-                  <FileText className="w-4 h-4" />
-                  <span>ทดลองบิลตัวอย่าง</span>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center transition-colors">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-amber-300">
+                    ทดลองบิลตัวอย่าง
+                  </span>
+                  <span className="text-[10px] text-[#A0ABB5] line-clamp-1">
+                    คลิกเดียวทดสอบ AI ทันที
+                  </span>
                 </button>
               </div>
+
+              {/* Hidden File Inputs */}
+              <input
+                ref={galleryInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,.jpg,.jpeg,.png,.webp,.heic,.pdf"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
 
               {/* Camera Preview Mode */}
               {inputMode === 'camera' && !imagePreview && (
@@ -756,32 +837,45 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
               {/* Upload Dropzone Mode */}
               {inputMode === 'upload' && !imagePreview && (
                 <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="bg-[#252C33] border-2 border-dashed border-[#3A4750] hover:border-[#F6C90E] rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all space-y-3 group"
+                  onClick={() => galleryInputRef.current?.click()}
+                  className="bg-[#252C33] border-2 border-dashed border-[#3A4750] hover:border-[#F6C90E] rounded-2xl p-6 sm:p-10 text-center cursor-pointer transition-all space-y-4 group"
                 >
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
                   <div className="w-16 h-16 rounded-2xl bg-[#3A4750] group-hover:bg-[#F6C90E]/20 text-[#A0ABB5] group-hover:text-[#F6C90E] flex items-center justify-center mx-auto transition-colors">
                     <Upload className="w-8 h-8" />
                   </div>
                   <div>
                     <p className="text-sm font-bold text-[#EEEEEE]">
-                      คลิกเพื่อเลือกรูปถ่ายบิลจากอัลบั้ม / แกลเลอรี หรือลากไฟล์มาวาง
+                      คลิกเพื่อเลือกภาพถ่ายบิล หรือเอกสารบิลสแกนจากเครื่อง
                     </p>
                     <p className="text-xs text-[#A0ABB5] mt-1">
-                      รองรับไฟล์ภาพ JPEG, PNG, WebP จากคลังรูปภาพในมือถือหรือคอมพิวเตอร์
+                      รองรับไฟล์ภาพ JPEG, PNG, WebP หรือรูปจากอัลบั้มมือถือ/คอมพิวเตอร์
                     </p>
                   </div>
-                  <div className="pt-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#3A4750] text-[#EEEEEE] text-xs font-semibold group-hover:bg-[#F6C90E] group-hover:text-slate-950 transition-colors">
+
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        galleryInputRef.current?.click();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F6C90E] text-slate-950 text-xs font-bold hover:bg-[#E5B800] shadow-sm transition-colors"
+                    >
                       <Upload className="w-3.5 h-3.5" />
-                      เลือกภาพจากคลังรูปภาพ / อัลบั้ม
-                    </span>
+                      เปิดคลังรูปภาพ / อัลบั้ม
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        cameraInputRef.current?.click();
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#3A4750] text-[#EEEEEE] text-xs font-semibold hover:bg-[#43525D] transition-colors"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-[#F6C90E]" />
+                      ถ่ายด้วยกล้องมือถือ
+                    </button>
                   </div>
                 </div>
               )}
@@ -856,14 +950,22 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
               )}
 
               {/* Tips Banner */}
-              <div className="bg-[#252C33]/60 rounded-xl p-3 border border-[#3A4750]/60 flex items-start gap-2.5 text-xs text-[#A0ABB5]">
+              <div className="bg-[#252C33]/80 rounded-xl p-3.5 border border-[#3A4750] flex items-start gap-3 text-xs text-[#A0ABB5]">
                 <Info className="w-4 h-4 text-[#F6C90E] flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <p className="font-semibold text-[#EEEEEE]">คำแนะนำเพื่อให้ AI สแกนได้แม่นยำสูงสุด:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px]">
-                    <li>ถ่ายภาพในที่สว่าง ไม่ย้อนแสง และให้เห็นตารางรายการสินค้าชัดเจน</li>
-                    <li>รองรับบิลส่งของ ใบเสร็จ ใบสั่งของจากร้านค้าหรือบริษัทอะไหล่ชั้นนำ (IRC, Michelin, Honda, Yamaha ฯลฯ)</li>
-                    <li>หากมีรายการสินค้าเดิมในระบบ AI จะช่วยแนะนำให้เพิ่มสต็อกแทนการสร้างรายการซ้ำ</li>
+                  <p className="font-bold text-[#EEEEEE]">
+                    💡 คำแนะนำเพื่อความแม่นยำสูงสุดในการสแกนบิล:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 text-[11px] text-[#A0ABB5]">
+                    <li>
+                      <strong className="text-amber-300">ใช้ภาพสแกนเอกสาร:</strong> หากใช้แอปสแกนเนอร์ เช่น CamScanner หรือ Google Drive Scan ถ่ายภาพบิลให้ขอบตรง แสงสว่างสม่ำเสมอ AI จะอ่านชื่อ รหัสอะไหล่ และราคาได้แม่นยำสูงสุด 100%
+                    </li>
+                    <li>
+                      <strong>กรณีถ่ายด้วยกล้อง:</strong> ควรวางกระดาษบิลบนพื้นราบ แสงสว่างเพียงพอ ไม่ให้มีเงาบังหรือแสงไฟสะท้อนบนกระดาษ
+                    </li>
+                    <li>
+                      <strong>รองรับทุกรูปแบบ:</strong> บิลส่งของ ใบเสร็จ ใบสั่งของจากร้านค้าหรือผู้แทนจำหน่าย (เช่น IRC, Michelin, บางจาก, YUASA ฯลฯ)
+                    </li>
                   </ul>
                 </div>
               </div>

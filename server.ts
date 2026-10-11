@@ -27,42 +27,60 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Primary Flash model for ultra-low latency multimodal OCR and voice queries per skill guidelines
+// Multi-tier model candidate list for bulletproof OCR and AI tasks
 const GEMINI_FLASH_MODEL = 'gemini-3.8-flash';
 const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
+const GEMINI_LITE_FALLBACK = 'gemini-3.1-flash-lite';
 
-// Robust helper with ThinkingLevel.LOW for ultra-fast vision response without thinking delays
+// Resilient helper with multi-tier fallback and timeout racing
 async function generateWithGemini(params: {
   contents: any;
   config?: any;
 }) {
-  const primary = process.env.GEMINI_MODEL || GEMINI_FLASH_MODEL;
-  const configWithOptimizations = {
-    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-    ...params.config,
-  };
+  const candidateModels = [
+    process.env.GEMINI_MODEL || GEMINI_FLASH_MODEL,
+    GEMINI_FALLBACK_MODEL,
+    GEMINI_LITE_FALLBACK,
+  ];
 
-  try {
-    const primaryPromise = ai.models.generateContent({
-      model: primary,
-      contents: params.contents,
-      config: configWithOptimizations,
-    });
-    // Set 45s safety timeout for large document OCR tables
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout with primary model ${primary}`)), 45000)
-    );
-    return (await Promise.race([primaryPromise, timeoutPromise])) as any;
-  } catch (err: any) {
-    console.warn(
-      `[Gemini Flash] Model ${primary} encountered error (${err?.message}), attempting fallback to ${GEMINI_FALLBACK_MODEL}...`
-    );
-    return await ai.models.generateContent({
-      model: GEMINI_FALLBACK_MODEL,
-      contents: params.contents,
-      config: configWithOptimizations,
-    });
+  let lastError: any = null;
+
+  for (let i = 0; i < candidateModels.length; i++) {
+    const currentModel = candidateModels[i];
+    const isLite = currentModel === GEMINI_LITE_FALLBACK;
+
+    const callConfig = {
+      ...params.config,
+      ...(isLite ? {} : { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }),
+    };
+
+    try {
+      const callPromise = ai.models.generateContent({
+        model: currentModel,
+        contents: params.contents,
+        config: callConfig,
+      });
+
+      // 20s timeout on primary/secondary, 25s on final candidate
+      const timeoutMs = i === candidateModels.length - 1 ? 25000 : 18000;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout with model ${currentModel}`)), timeoutMs)
+      );
+
+      const result = (await Promise.race([callPromise, timeoutPromise])) as any;
+      if (result) {
+        result._usedModel = currentModel;
+        return result;
+      }
+    } catch (err: any) {
+      console.warn(
+        `[Gemini AI] Model ${currentModel} failed (${err?.message?.slice(0, 100)}), trying fallback candidate...`
+      );
+      lastError = err;
+    }
   }
+
+  throw lastError || new Error('ทุกโมเดลของ Gemini ไม่สามารถประมวลผลได้ในขณะนี้');
 }
 
 // Health check endpoint
@@ -437,11 +455,11 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
                   barcode: { type: Type.STRING },
                   matchedCatalogId: { type: Type.STRING, nullable: true },
                 },
-                required: ['rawName', 'name', 'quantity', 'costPrice'],
+                required: ['rawName', 'name'],
               },
             },
           },
-          required: ['supplier', 'items', 'summary'],
+          required: ['items'],
         },
       },
     });
@@ -548,7 +566,7 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
 
     res.json({
       success: true,
-      model: GEMINI_FLASH_MODEL,
+      model: (response as any)?._usedModel || GEMINI_FLASH_MODEL,
       durationMs,
       data: parsedData,
     });
