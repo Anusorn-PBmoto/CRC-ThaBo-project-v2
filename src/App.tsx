@@ -49,7 +49,6 @@ import { INITIAL_PRODUCTS, INITIAL_TIRES } from './initialData';
 import { DEFAULT_CUSTOMER_TIERS, SAMPLE_CUSTOMERS } from './utils/pricingUtils';
 import { Header } from './components/Header';
 import { BottomNav, TabType } from './components/BottomNav';
-import { QuickAuditTab } from './components/QuickAuditTab';
 import { InventoryListTab } from './components/InventoryListTab';
 import { BuySellTab } from './components/BuySellTab';
 import { SummaryAlertsTab } from './components/SummaryAlertsTab';
@@ -214,7 +213,7 @@ export default function App() {
     return DEFAULT_CUSTOMER_TIERS;
   });
 
-  const [currentTab, setCurrentTab] = useState<TabType>('audit');
+  const [currentTab, setCurrentTab] = useState<TabType>('inventory');
   const [isOnline, setIsOnline] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -1281,9 +1280,7 @@ export default function App() {
         isQuotaMode={isQuotaExceeded}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
         subtitle={
-          currentTab === 'audit'
-            ? 'นับสต็อกด่วน • อะไหล่มอเตอร์ไซค์ทุกชนิด'
-            : currentTab === 'buysell'
+          currentTab === 'buysell'
             ? 'ซื้อ-ขายอะไหล่ • ตัดสต็อกอัตโนมัติ'
             : currentTab === 'alerts'
             ? 'สรุปยอดสินค้า & แจ้งเตือนสินค้าใกล้หมด'
@@ -1357,24 +1354,7 @@ export default function App() {
           </div>
         ) : (
           <>
-            {currentTab === 'audit' && (
-              <QuickAuditTab
-                tires={tires}
-                activeSession={activeSession}
-                onUpdateQty={handleUpdateQty}
-                onOpenAddModal={() => {
-                  setEditingTire(null);
-                  setIsAddEditOpen(true);
-                }}
-                onOpenScanner={() => setIsScannerOpen(true)}
-                onSaveAudit={() => setIsAuditConfirmOpen(true)}
-                onEditTire={(tire) => {
-                  setEditingTire(tire);
-                  setIsAddEditOpen(true);
-                }}
-                onDeleteTire={handleDeleteTire}
-              />
-            )}
+
 
             {currentTab === 'inventory' && (
               <InventoryListTab
@@ -1459,7 +1439,7 @@ export default function App() {
         tires={tires}
         onSelectTire={(tire) => {
           if (currentTab !== 'buysell') {
-            setCurrentTab('audit');
+            setCurrentTab('inventory');
           }
         }}
         onBindBarcode={handleBindBarcode}

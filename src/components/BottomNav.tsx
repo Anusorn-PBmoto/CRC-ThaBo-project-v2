@@ -1,7 +1,7 @@
 import React from 'react';
 import { ListChecks, LayoutGrid, ShoppingCart, AlertTriangle, History } from 'lucide-react';
 
-export type TabType = 'audit' | 'inventory' | 'buysell' | 'alerts' | 'history';
+export type TabType = 'inventory' | 'buysell' | 'alerts' | 'history';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -17,13 +17,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   lowStockCount = 0,
 }) => {
   const tabs = [
-    {
-      id: 'audit' as TabType,
-      label: 'นับสต็อก',
-      icon: ListChecks,
-      badge: discrepancyCount > 0 ? discrepancyCount : undefined,
-      badgeColor: 'bg-[#F6C90E] text-[#252C33]',
-    },
     {
       id: 'inventory' as TabType,
       label: 'รายการสินค้า',
@@ -51,7 +44,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-t border-[#3A4750] px-2 py-2">
-      <div className="max-w-md mx-auto grid grid-cols-5 gap-0.5">
+      <div className="max-w-md mx-auto grid grid-cols-4 gap-0.5">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;

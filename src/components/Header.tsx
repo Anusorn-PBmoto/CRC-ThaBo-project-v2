@@ -1,5 +1,5 @@
-import React from 'react';
-import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart, Users, Laptop } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { QrCode, User, FileSpreadsheet, ShoppingCart, Users, Laptop, Menu } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
@@ -20,7 +20,6 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenScanner,
   onOpenProfile,
   onOpenAppSheet,
-  onOpenImageMatch,
   onToggleStaffPos,
   onOpenCustomers,
   isDesktopMode = false,
@@ -28,14 +27,83 @@ export const Header: React.FC<HeaderProps> = ({
   isOnline,
   isQuotaMode = false,
 }) => {
+  const [isLogoMenuOpen, setIsLogoMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setIsLogoMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   return (
     <header className="sticky top-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-b border-[#3A4750] px-4 py-2.5">
       <div className={`${isDesktopMode ? 'max-w-[1600px]' : 'max-w-md'} mx-auto flex items-center justify-between transition-all duration-300`}>
-        {/* Brand Title */}
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-black tracking-wider text-[#F6C90E] leading-none">
-            CRC THABO
-          </h1>
+        {/* Brand Title / Logo Dropdown Menu with 3-line Hamburger Icon */}
+        <div className="relative flex items-center gap-2" ref={menuRef}>
+          <button
+            onClick={() => setIsLogoMenuOpen(!isLogoMenuOpen)}
+            className="flex items-center gap-2 group cursor-pointer text-left bg-[#252C33] hover:bg-[#2A343D] border border-[#3A4750] px-2.5 py-1.5 rounded-lg transition-all shadow-sm"
+            title="คลิกเพื่อเปิดเมนูด่วน CRC THABO (สมาชิกลูกค้า, โหมดพนักงาน, AppSheet)"
+          >
+            <Menu className="w-4 h-4 text-amber-400 group-hover:text-amber-300 transition-colors" />
+            <h1 className="text-sm font-black tracking-wider text-[#F6C90E] leading-none group-hover:text-amber-300 transition-colors">
+              CRC THABO
+            </h1>
+          </button>
+
+          {/* Logo Dropdown Menu */}
+          {isLogoMenuOpen && (
+            <div className="absolute top-full left-0 mt-2 w-56 bg-[#252C33] border border-[#3A4750] rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-3 py-1.5 border-b border-[#3A4750]/60 mb-1">
+                <p className="text-[10px] font-bold text-[#A0ABB5] uppercase tracking-wider">เมนูด่วน CRC THABO</p>
+              </div>
+
+              {onOpenCustomers && (
+                <button
+                  onClick={() => {
+                    setIsLogoMenuOpen(false);
+                    onOpenCustomers();
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs text-[#EEEEEE] hover:bg-amber-400/20 hover:text-amber-300 transition-colors cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-amber-400" />
+                  <span className="font-semibold">สมาชิกลูกค้า & ระดับเกรด</span>
+                </button>
+              )}
+
+              {onToggleStaffPos && (
+                <button
+                  onClick={() => {
+                    setIsLogoMenuOpen(false);
+                    onToggleStaffPos();
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs text-[#EEEEEE] hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors cursor-pointer"
+                >
+                  <ShoppingCart className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold">โหมดพนักงานขาย (Staff POS)</span>
+                </button>
+              )}
+
+              {onOpenAppSheet && (
+                <button
+                  onClick={() => {
+                    setIsLogoMenuOpen(false);
+                    onOpenAppSheet();
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs text-[#EEEEEE] hover:bg-slate-700/50 hover:text-[#F6C90E] transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-[#F6C90E]" />
+                  <span className="font-semibold">AppSheet & Google Sheets</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {onToggleDesktopMode && (
             <button
               onClick={onToggleDesktopMode}
@@ -55,45 +123,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Action Buttons */}
         <div className="flex items-center gap-1.5">
-          {/* Customer Management button */}
-          {onOpenCustomers && (
-            <button
-              onClick={onOpenCustomers}
-              aria-label="รายชื่อลูกค้าและรหัสสมาชิก"
-              title="จัดการรายชื่อลูกค้า สมาชิก และรหัสกลุ่มส่วนลด A B C D"
-              className="h-9 px-2 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 flex items-center gap-1 transition-all active:scale-95 shadow-sm cursor-pointer"
-            >
-              <Users className="w-3.5 h-3.5 text-amber-400" />
-              <span className="text-[10px] font-bold tracking-tight">สมาชิกลูกค้า</span>
-            </button>
-          )}
-
-          {/* Staff POS Mode Switch Button */}
-          {onToggleStaffPos && (
-            <button
-              onClick={onToggleStaffPos}
-              aria-label="สลับไปโหมดพนักงานขาย"
-              title="ทดลองเปิดโหมดหน้าขายสำหรับพนักงาน (Staff POS)"
-              className="h-9 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 transition-all active:scale-95 shadow-sm cursor-pointer"
-            >
-              <ShoppingCart className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[10px] font-bold tracking-tight">โหมดพนักงาน</span>
-            </button>
-          )}
-
-          {/* AppSheet CSV Sync button */}
-          {onOpenAppSheet && (
-            <button
-              onClick={onOpenAppSheet}
-              aria-label="บันทึก AppSheet CSV"
-              title="ฐานข้อมูล AppSheet (crc-thano-project-v2.csv)"
-              className="h-9 px-2.5 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] border border-[#475662] flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-[#F6C90E]" />
-              <span className="text-[10px] font-bold tracking-tight">AppSheet</span>
-            </button>
-          )}
-
           {/* Barcode/QR Scanner button */}
           <button
             onClick={onOpenScanner}

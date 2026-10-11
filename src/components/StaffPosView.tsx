@@ -272,22 +272,22 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     }
   }, [scannedProduct]);
 
-  // Update quantity in cart with strict max limit
-  const updateCartQty = (productId: string, isSubUnit: boolean, delta: number) => {
+  // Set direct quantity typed by user
+  const setCartDirectQty = (productId: string, isSubUnit: boolean, val: number | string) => {
+    const parsed = typeof val === 'string' ? (val === '' ? 1 : parseInt(val, 10)) : val;
+    const safeQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+
     setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.tire.id === productId && item.isSubUnit === isSubUnit) {
-            const newQty = item.quantity + delta;
-            if (newQty > item.maxStorefrontStock) {
-              showToast(`⚠️ สต็อกหน้าร้านมีจำกัดเพียง ${item.maxStorefrontStock} ${isSubUnit ? item.tire.subUnit : (item.tire.unit || 'ชิ้น')}`, 'warn');
-              return item;
-            }
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
+      prev.map((item) => {
+        if (item.tire.id === productId && item.isSubUnit === isSubUnit) {
+          if (!item.isSubUnit && safeQty > item.maxStorefrontStock) {
+            showToast(`⚠️ สต็อกหน้าร้านมีจำกัดเพียง ${item.maxStorefrontStock} ${item.tire.unit || 'ชิ้น'}`, 'warn');
+            return { ...item, quantity: item.maxStorefrontStock };
           }
-          return item;
-        })
-        .filter(Boolean) as CartItem[]
+          return { ...item, quantity: safeQty };
+        }
+        return item;
+      })
     );
   };
 
@@ -857,35 +857,24 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), -1)}
-                          className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center active:scale-95 border border-slate-300 cursor-pointer"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-7 text-center font-bold font-mono text-slate-900 text-xs">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          disabled={!item.isSubUnit && item.quantity >= item.maxStorefrontStock}
-                          onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), 1)}
-                          className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center active:scale-95 border cursor-pointer ${
-                            !item.isSubUnit && item.quantity >= item.maxStorefrontStock
-                              ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
-                              : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
-                          }`}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            setCartDirectQty(item.tire.id, Boolean(item.isSubUnit), e.target.value);
+                          }}
+                          className="w-14 h-8 text-center font-bold text-amber-700 font-mono text-sm bg-white border border-slate-300 rounded-lg focus:border-amber-500 focus:outline-none px-1"
+                          title="พิมพ์กรอกจำนวนได้"
+                        />
                         <button
                           type="button"
                           onClick={() => removeFromCart(item.tire.id, Boolean(item.isSubUnit))}
-                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
+                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
+                          title="ลบรายการ"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -982,35 +971,24 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), -1)}
-                      className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center active:scale-95 border border-slate-300 cursor-pointer"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="w-7 text-center font-bold font-mono text-slate-900 text-xs">
-                      {item.quantity}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={!item.isSubUnit && item.quantity >= item.maxStorefrontStock}
-                      onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), 1)}
-                      className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center active:scale-95 border cursor-pointer ${
-                        !item.isSubUnit && item.quantity >= item.maxStorefrontStock
-                          ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
-                          : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
-                      }`}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => {
+                        setCartDirectQty(item.tire.id, Boolean(item.isSubUnit), e.target.value);
+                      }}
+                      className="w-14 h-8 text-center font-bold text-amber-700 font-mono text-sm bg-white border border-slate-300 rounded-lg focus:border-amber-500 focus:outline-none px-1"
+                      title="พิมพ์กรอกจำนวนได้"
+                    />
                     <button
                       type="button"
                       onClick={() => removeFromCart(item.tire.id, Boolean(item.isSubUnit))}
-                      className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
+                      className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
+                      title="ลบรายการ"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>

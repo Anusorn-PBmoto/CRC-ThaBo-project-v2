@@ -105,10 +105,6 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
       setFormError('กรุณาระบุชื่อลูกค้า');
       return;
     }
-    if (!formPhone.trim()) {
-      setFormError('กรุณาระบุเบอร์โทรศัพท์');
-      return;
-    }
 
     const customerCodeVal = formCode.trim().toUpperCase() || generateCustomerCode(formGrade, customers);
     const now = new Date().toISOString();
@@ -592,11 +588,10 @@ export const CustomerManagementModal: React.FC<CustomerManagementModalProps> = (
               {/* Phone */}
               <div className="space-y-1">
                 <label className="text-[11px] text-[#A0ABB5] font-semibold">
-                  เบอร์โทรศัพท์ <span className="text-rose-400">*</span>
+                  เบอร์โทรศัพท์ (ถ้ามี)
                 </label>
                 <input
                   type="tel"
-                  required
                   value={formPhone}
                   onChange={(e) => setFormPhone(e.target.value)}
                   placeholder="เช่น 081-234-5678"
