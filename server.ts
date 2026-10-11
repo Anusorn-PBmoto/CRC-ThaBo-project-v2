@@ -28,7 +28,7 @@ const ai = new GoogleGenAI({
 });
 
 // Primary Flash model for ultra-low latency multimodal OCR and voice queries per skill guidelines
-const GEMINI_FLASH_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_FLASH_MODEL = 'gemini-3.8-flash';
 const GEMINI_FALLBACK_MODEL = 'gemini-flash-latest';
 
 // Robust helper with automatic fallback and timeout protection
@@ -43,9 +43,9 @@ async function generateWithGemini(params: {
       contents: params.contents,
       config: params.config,
     });
-    // Set 12s timeout for primary model
+    // Set 25s timeout for primary model (accommodates high-res image OCR)
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout with primary model ${primary}`)), 12000)
+      setTimeout(() => reject(new Error(`Timeout with primary model ${primary}`)), 25000)
     );
     return (await Promise.race([primaryPromise, timeoutPromise])) as any;
   } catch (err: any) {
@@ -369,25 +369,33 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
           .join('\n')
       : 'ยังไม่มีแคตตาล็อกสินค้า';
 
-    const systemPrompt = `คุณคือผู้ช่วยตรวจรับเข้าสินค้า (Goods Receiving AI) สำหรับร้านยางและอะไหล่ CRC THABO
-หน้าที่ของคุณคืออ่าน "ภาพถ่ายบิลส่งของ / ใบเสร็จ / ใบกำกับภาษี / ใบสั่งซื้อ (Invoice / Delivery Order)"
-และสกัดรายการสินค้าที่ส่งมาเพื่อนำไปรับเข้าสต็อก (Purchase Intake) โดยอัตโนมัติ
+    const systemPrompt = `คุณคือผู้ช่วยจัดการสต็อกสินค้าอัจฉริยะ (AI Inventory & Goods Receiving Assistant) สำหรับร้านขายยางรถจักรยานยนต์ ยางรถยนต์ และอะไหล่ยานยนต์ CRC THABO
+หน้าที่ของคุณคืออ่าน "ภาพถ่ายบิลส่งของ / ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบสั่งซื้อ (Invoice / Delivery Order / Bill / Receipt)"
+และสกัดรายการสินค้าทุกรายการอย่างละเอียด ถูกต้อง เพื่อนำไปบันทึกเพิ่มเป็นสินค้าใหม่เข้าสู่ระบบคลังสินค้า และอัปเดตสต็อกโดยอัตโนมัติ
 
-แคตตาล็อกสินค้าของร้าน CRC THABO:
+แคตตาล็อกสินค้าตัวอย่างในระบบปัจจุบันของ CRC THABO:
 ${catalogMiniList}
 
-คำสั่ง:
-1. อ่านข้อมูลหัวบิล: supplier (ชื่อผู้จำหน่าย/บริษัท), invoiceNo (เลขที่บิล), date (วันที่ออกบิล เช่น 2026-10-08 หรือตามในบิล), grandTotal (ยอดรวมเงินทั้งบิล)
-2. สกัดรายการสินค้า (items) ทุกรายการในตารางบิล โดยแต่ละรายการประกอบด้วย:
-   - rawName: ชื่อสินค้าที่เขียนในบิล
-   - brand: ยี่ห้อที่ระบุ (IRC, Michelin, Dunlop, ND, Castrol, Motul, ฯลฯ ถ้ามี)
-   - size: ขนาดยางหรือสเปก (เช่น 120/70-14, 90/90-14, 0.8L, เบอร์อะไหล่)
-   - quantity: จำนวนที่รับเข้า (ตัวเลขจำนวนเต็ม)
-   - unit: หน่วยนับ ('เส้น', 'ขวด', 'ลัง', 'ชิ้น', 'คู่', 'กล่อง')
-   - costPrice: ราคาต่อหน่วย (ต้นทุน)
-   - lineTotal: ราคารวมของรายการนี้
-   - matchedCatalogId: รหัส ID สินค้าในแคตตาล็อกที่ตรงกันที่สุด (ถ้าหาเจอตรงกัน ให้ใส่ ID, ถ้าไม่เจอให้ใส่ null)
-3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย เช่น "พบ 3 รายการ ยอดรวม 4,500 บาท จาก บจก.สยามสปอร์ตสต็อก"`;
+คำสั่งในการวิเคราะห์และสกัดข้อมูล:
+1. ข้อมูลหัวบิล:
+   - supplier: ชื่อผู้จำหน่าย/บริษัท/ร้านค้าต้นทาง (เช่น บจก. สยามกลการ, IRC Thailand, ร้านเอกชัยยนต์ ถ้าไม่ระบุให้ใส่ 'ร้านค้าคู่ค้า')
+   - invoiceNo: เลขที่บิล/เลขที่เอกสาร (ถ้ามี)
+   - date: วันที่ในบิล (ถ้ามี ระบุเป็น YYYY-MM-DD หรือตามในบิล)
+   - grandTotal: ยอดรวมเงินสุทธิทั้งบิล (ตัวเลข)
+2. สกัดรายการสินค้า (items) ทุกรายการในตารางบิล:
+   - rawName: ข้อความชื่อสินค้าตามที่พิมพ์หรือเขียนในบิล
+   - name: ชื่อสินค้าภาษาไทยที่สะอาด ชัดเจน สละสลวย เป็นมาตรฐาน เหมาะแก่การค้นหา เช่น "ยางนอก IRC SCT-001 120/70-14", "น้ำมันเครื่อง Castrol Power1 10W-40 0.8L", "หัวเทียน NGK CR7HSA"
+   - brand: ยี่ห้อสินค้า (เช่น IRC, Michelin, Dunlop, Vee Rubber, Deestone, Castrol, Motul, NGK, Bando, DID, Honda, Yamaha ฯลฯ)
+   - size: ขนาด เบอร์ หรือสเปกของสินค้า (เช่น 120/70-14, 90/90-14, 2.25-17, 0.8L, เบอร์ 7 ฯลฯ)
+   - category: หมวดหมู่สินค้า เลือกจาก: 'ยางนอก', 'ยางใน', 'น้ำมันและเคมีภัณฑ์', 'ระบบส่งกำลัง', 'ระบบเบรก', 'อะไหล่ทั่วไป'
+   - quantity: จำนวนที่ซื้อ/ส่งมา (ตัวเลขจำนวนเต็มบวก)
+   - unit: หน่วยนับสินค้า เช่น 'เส้น', 'ชิ้น', 'คู่', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ชุด', 'อัน'
+   - costPrice: ราคาต้นทุนต่อหน่วย (บาท)
+   - sellingPrice: ราคาขายปลีกแนะนำ โดยคำนวณกำไรมาตรฐาน 20-30% จากราคาต้นทุน เช่น ต้นทุน 100บ. -> ขาย 130บ., ต้นทุน 500บ. -> ขาย 650-700บ.
+   - lineTotal: ราคารวมของแถวนี้ (quantity * costPrice)
+   - barcode: รหัสบาร์โค้ดหรือรหัสสินค้า (ถ้ามีพิมพ์ในบิล)
+   - matchedCatalogId: รหัส ID สินค้าในแคตตาล็อกเดิมที่ตรงกัน (ถ้าไม่เจอให้ใส่ null)
+3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย 1 ประโยค เช่น "พบ 4 รายการ ยอดรวม 5,200 บาท จาก บจก.สยามกลการ"`;
 
     const response = await generateWithGemini({
       contents: [
@@ -417,15 +425,19 @@ ${catalogMiniList}
                 type: Type.OBJECT,
                 properties: {
                   rawName: { type: Type.STRING },
+                  name: { type: Type.STRING },
                   brand: { type: Type.STRING },
                   size: { type: Type.STRING },
+                  category: { type: Type.STRING },
                   quantity: { type: Type.NUMBER },
                   unit: { type: Type.STRING },
                   costPrice: { type: Type.NUMBER },
+                  sellingPrice: { type: Type.NUMBER },
                   lineTotal: { type: Type.NUMBER },
+                  barcode: { type: Type.STRING },
                   matchedCatalogId: { type: Type.STRING, nullable: true },
                 },
-                required: ['rawName', 'quantity'],
+                required: ['rawName', 'name', 'quantity', 'costPrice'],
               },
             },
           },
@@ -451,27 +463,48 @@ ${catalogMiniList}
 
     // Auto-match items against catalog if not matched
     if (Array.isArray(parsedData.items) && Array.isArray(catalog)) {
-      parsedData.items = parsedData.items.map((item: any) => {
-        let matched = null;
+      parsedData.items = parsedData.items.map((item: any, idx: number) => {
+        let matched: any = null;
         if (item.matchedCatalogId) {
           matched = catalog.find((c: any) => c.id === item.matchedCatalogId);
         }
 
         if (!matched) {
-          // Fuzzy match by name or brand+size
-          const itemSearch = `${item.brand || ''} ${item.size || ''} ${item.rawName || ''}`.toLowerCase();
+          // Fuzzy match by name or brand+size or barcode
+          const itemSearch = `${item.brand || ''} ${item.size || ''} ${item.name || item.rawName || ''}`.toLowerCase();
+          const cleanBarcode = (item.barcode || '').replace(/[^0-9]/g, '');
+
           matched = catalog.find((c: any) => {
+            if (cleanBarcode && c.barcode && c.barcode.replace(/[^0-9]/g, '') === cleanBarcode) {
+              return true;
+            }
             const cName = `${c.brand || ''} ${c.size || ''} ${c.name || ''}`.toLowerCase();
             return (
               (item.size && cName.includes(item.size.toLowerCase())) ||
-              (item.rawName && cName.includes(item.rawName.toLowerCase())) ||
+              (item.name && cName.includes(item.name.toLowerCase())) ||
               cName.includes(itemSearch.trim())
             );
           });
         }
 
+        const cost = Number(item.costPrice) || 0;
+        let sellPrice = Number(item.sellingPrice) || 0;
+        if (sellPrice <= cost && cost > 0) {
+          // Recommend 25-30% margin rounded nicely
+          const rawSell = cost * 1.25;
+          sellPrice = rawSell >= 100 ? Math.round(rawSell / 10) * 10 : Math.round(rawSell);
+        }
+
         return {
+          id: `extracted-${Date.now()}-${idx}`,
           ...item,
+          name: item.name || item.rawName || `สินค้าใหม่ #${idx + 1}`,
+          category: item.category || 'อะไหล่ทั่วไป',
+          unit: item.unit || 'ชิ้น',
+          quantity: Math.max(1, Number(item.quantity) || 1),
+          costPrice: cost,
+          sellingPrice: sellPrice,
+          isNew: !matched,
           matchedProduct: matched || null,
         };
       });

@@ -17,6 +17,7 @@ import {
   ArrowRightLeft,
   AlertTriangle,
   ArrowUp,
+  Sparkles,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -34,6 +35,7 @@ interface InventoryListTabProps {
   onOpenImageMatch?: () => void;
   onOpenTransferModal?: (product: ProductItem) => void;
   onOpenBatchTransfer?: (selectedProducts: ProductItem[]) => void;
+  onOpenBillScanner?: () => void;
   incomingSearchQuery?: string;
 }
 
@@ -52,6 +54,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   onOpenImageMatch,
   onOpenTransferModal,
   onOpenBatchTransfer,
+  onOpenBillScanner,
   incomingSearchQuery,
 }) => {
   const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
@@ -221,6 +224,18 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             >
               {isMultiSelectMode ? 'ยกเลิก' : 'เลือกหลายรายการ'}
             </button>
+
+            {onOpenBillScanner && (
+              <button
+                type="button"
+                onClick={onOpenBillScanner}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-black rounded-xl text-xs shadow-md shadow-[#F6C90E]/20 active:scale-95 transition-all cursor-pointer"
+                title="ใช้ AI สแกนภาพถ่ายบิล/ใบเสร็จ เพื่อสกัดและเพิ่มสินค้าหลายรายการพร้อมกัน"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+                <span>ถ่ายบิลเพิ่มสินค้า (AI)</span>
+              </button>
+            )}
 
             <button
               onClick={onOpenAddModal}
@@ -521,13 +536,25 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                 เริ่มต้นบันทึกอะไหล่มอเตอร์ไซค์ของคุณ สแกนบาร์โค้ด หรือพิมพ์รายละเอียดสินค้า
               </p>
             </div>
-            <button
-              onClick={onOpenAddModal}
-              className="py-2.5 px-4 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-lg active:scale-95 transition-all inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4 text-[#252C33]" />
-              <span>เพิ่มสินค้าใหม่</span>
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button
+                onClick={onOpenAddModal}
+                className="py-2.5 px-4 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-lg active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 text-[#252C33]" />
+                <span>เพิ่มสินค้าใหม่</span>
+              </button>
+              {onOpenBillScanner && (
+                <button
+                  type="button"
+                  onClick={onOpenBillScanner}
+                  className="py-2.5 px-4 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-black rounded-xl text-xs shadow-lg active:scale-95 transition-all inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 fill-slate-950 text-slate-950" />
+                  <span>ถ่ายบิลเพิ่มสินค้า (AI)</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="bg-[#3A4750] border border-[#475662] rounded-2xl p-8 text-center space-y-2">

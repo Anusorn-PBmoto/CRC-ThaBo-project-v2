@@ -54,6 +54,7 @@ import { BuySellTab } from './components/BuySellTab';
 import { SummaryAlertsTab } from './components/SummaryAlertsTab';
 import { AuditHistoryTab } from './components/AuditHistoryTab';
 import { AddEditProductModal } from './components/AddEditProductModal';
+import { BillScannerModal } from './components/BillScannerModal';
 import { BarcodeScanModal } from './components/BarcodeScanModal';
 import { PurchaseOrderModal } from './components/PurchaseOrderModal';
 import { AuditSaveConfirmModal } from './components/AuditSaveConfirmModal';
@@ -283,6 +284,7 @@ export default function App() {
   const [isAddEditOpen, setIsAddEditOpen] = useState(false);
   const [editingTire, setEditingTire] = useState<TireItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isBillScannerOpen, setIsBillScannerOpen] = useState(false);
   const [isPOOpen, setIsPOOpen] = useState(false);
   const [poItems, setPoItems] = useState<TireItem[]>([]);
   const [isAuditConfirmOpen, setIsAuditConfirmOpen] = useState(false);
@@ -697,8 +699,65 @@ export default function App() {
         markQuotaExhausted();
         setIsQuotaExceeded(true);
       }
-      console.warn('Failed batch updating products to Firestore (saved locally):', err);
     }
+  };
+
+  // AI Bill Scanner: Batch save new products and update existing matched products
+  const handleBatchSaveFromBill = async (
+    itemsToCreate: Array<Omit<ProductItem, 'id'>>,
+    itemsToUpdate: Array<{ id: string; updates: Partial<ProductItem> }>
+  ) => {
+    let nextList = [...tires];
+
+    // 1. Process existing products updates
+    for (const updateReq of itemsToUpdate) {
+      nextList = nextList.map((t) =>
+        t.id === updateReq.id
+          ? { ...t, ...updateReq.updates, updatedAt: new Date().toISOString() }
+          : t
+      );
+      if (!isFirestoreQuotaExhausted()) {
+        updateTireItem(updateReq.id, updateReq.updates).catch((err) =>
+          console.warn('Failed to update product from bill in Firestore:', err)
+        );
+      }
+    }
+
+    // 2. Process new products creation
+    const createdItems: ProductItem[] = [];
+    for (const createReq of itemsToCreate) {
+      const newId = doc(collection(db, 'products')).id;
+      const sanitized: Omit<ProductItem, 'id'> = {
+        ...createReq,
+        frontLocation: cleanLocationName(createReq.frontLocation),
+        location: cleanLocationName(createReq.location || 'RACK A-01'),
+      };
+      const newProduct: ProductItem = {
+        ...sanitized,
+        id: newId,
+        updatedAt: new Date().toISOString(),
+      };
+      createdItems.push(newProduct);
+
+      if (!isFirestoreQuotaExhausted()) {
+        addNewTire(sanitized, newId).catch((err) =>
+          console.warn('Failed to add new product from bill to Firestore:', err)
+        );
+      }
+    }
+
+    nextList = [...createdItems, ...nextList];
+    persistTires(nextList);
+
+    // Update AppSheet CSV cache quietly in background
+    try {
+      const csvContent = generateAppSheetCsv(nextList);
+      localStorage.setItem('crc_thano_last_csv_content', csvContent);
+      localStorage.setItem('crc_thano_last_csv_timestamp', new Date().toISOString());
+    } catch (e) {}
+
+    // Switch to inventory tab to view newly added products
+    setCurrentTab('inventory');
   };
 
   const handleConfirmDeleteProduct = async () => {
@@ -968,7 +1027,9 @@ export default function App() {
 
   // Quick navigation helpers
   const handleJumpToAudit = (tire: TireItem) => {
-    setCurrentTab('audit');
+    setCurrentTab('inventory');
+    setEditingTire(tire);
+    setIsAddEditOpen(true);
   };
 
   const handleOpenSinglePO = (tire: TireItem) => {
@@ -1274,6 +1335,7 @@ export default function App() {
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
         onToggleStaffPos={() => setIsStaffPosMode(true)}
         onOpenCustomers={() => setIsCustomerManagementOpen(true)}
+        onOpenBillScanner={() => setIsBillScannerOpen(true)}
         isDesktopMode={isDesktopMode}
         onToggleDesktopMode={toggleDesktopMode}
         isOnline={isOnline && !isQuotaExceeded}
@@ -1375,6 +1437,7 @@ export default function App() {
                 onOpenImageMatch={() => setIsImageMatchOpen(true)}
                 onOpenTransferModal={handleOpenTransferModal}
                 onOpenBatchTransfer={handleOpenBatchTransfer}
+                onOpenBillScanner={() => setIsBillScannerOpen(true)}
               />
             )}
 
@@ -1431,6 +1494,15 @@ export default function App() {
         onSave={handleSaveTire}
         onDelete={handleDeleteTire}
         initialProduct={editingTire}
+        onOpenBillScanner={() => setIsBillScannerOpen(true)}
+      />
+
+      <BillScannerModal
+        isOpen={isBillScannerOpen}
+        onClose={() => setIsBillScannerOpen(false)}
+        existingCatalog={tires}
+        onBatchSaveProducts={handleBatchSaveFromBill}
+        onSuccessNotice={(msg) => setAppSheetToast(msg)}
       />
 
       <BarcodeScanModal

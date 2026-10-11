@@ -19,6 +19,7 @@ import {
   ArrowRightLeft,
   ChevronDown,
   ChevronUp,
+  Sparkles,
 } from 'lucide-react';
 import { ProductItem, CustomerGrade } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
@@ -33,6 +34,7 @@ interface AddEditProductModalProps {
   onDelete?: (product: ProductItem) => void;
   initialProduct?: ProductItem | null;
   initialTire?: ProductItem | null; // Compatibility alias
+  onOpenBillScanner?: () => void;
 }
 
 // Compress image via offscreen Canvas to keep storage super lightweight (<35KB)
@@ -88,6 +90,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   onDelete,
   initialProduct,
   initialTire,
+  onOpenBillScanner,
 }) => {
   const currentItem = initialProduct || initialTire;
 
@@ -339,6 +342,36 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 space-y-3.5 overflow-y-auto flex-1 text-xs">
+          {/* AI Bill Scanner Quick Shortcut Banner for New Products */}
+          {onOpenBillScanner && !currentItem && (
+            <div className="p-3 bg-gradient-to-r from-amber-500/15 via-[#F6C90E]/10 to-amber-500/15 border border-[#F6C90E]/40 rounded-2xl flex items-center justify-between gap-2.5 animate-in fade-in">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-[#F6C90E]/20 text-[#F6C90E] flex items-center justify-center flex-shrink-0 shadow-sm">
+                  <Sparkles className="w-4 h-4 text-[#F6C90E]" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-[#EEEEEE] truncate">
+                    มีภาพถ่ายบิลส่งของ / ใบเสร็จไหม?
+                  </p>
+                  <p className="text-[10px] text-[#A0ABB5] truncate">
+                    ใช้ AI สแกนภาพถ่ายบิล เพิ่มสินค้าหลายรายการและคำนวณกำไรอัตโนมัติ
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenBillScanner();
+                }}
+                className="px-3 py-1.5 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-slate-950 font-black text-xs flex-shrink-0 shadow-sm active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                <span>สแกนบิลด้วย AI</span>
+              </button>
+            </div>
+          )}
+
           {/* ============================================================ */}
           {/* 1. ระบบแสกนบาร์โค้ด และรหัสสินค้า (Barcode / Product Code) */}
           {/* ============================================================ */}

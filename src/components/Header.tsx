@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, User, FileSpreadsheet, ShoppingCart, Users, Laptop, Menu } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, ShoppingCart, Users, Laptop, Menu, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenImageMatch?: () => void;
   onToggleStaffPos?: () => void;
   onOpenCustomers?: () => void;
+  onOpenBillScanner?: () => void;
   isDesktopMode?: boolean;
   onToggleDesktopMode?: () => void;
   isOnline: boolean;
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAppSheet,
   onToggleStaffPos,
   onOpenCustomers,
+  onOpenBillScanner,
   isDesktopMode = false,
   onToggleDesktopMode,
   isOnline,
@@ -86,6 +88,19 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <ShoppingCart className="w-4 h-4 text-emerald-400" />
                   <span className="font-semibold">โหมดพนักงานขาย (Staff POS)</span>
+                </button>
+              )}
+
+              {onOpenBillScanner && (
+                <button
+                  onClick={() => {
+                    setIsLogoMenuOpen(false);
+                    onOpenBillScanner();
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs text-[#EEEEEE] hover:bg-amber-400/20 hover:text-amber-300 transition-colors cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span className="font-semibold">AI สแกนบิลเพิ่มสินค้าใหม่</span>
                 </button>
               )}
 
