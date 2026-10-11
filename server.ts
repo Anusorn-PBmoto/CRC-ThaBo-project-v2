@@ -28,10 +28,11 @@ const ai = new GoogleGenAI({
 });
 
 // Multi-tier model candidate list for ultra-fast OCR without rate limits or timeout spikes
-// gemini-3.1-flash-lite has a high 1,500 RPD quota and sub-2s latency, ideal for document OCR
-const GEMINI_PRIMARY_MODEL = 'gemini-3.1-flash-lite';
-const GEMINI_SECONDARY_MODEL = 'gemini-3.8-flash';
-const GEMINI_TERTIARY_MODEL = 'gemini-flash-latest';
+const GEMINI_PRIMARY_MODEL = 'gemini-2.5-flash';
+const GEMINI_SECONDARY_MODEL = 'gemini-2.0-flash';
+const GEMINI_TERTIARY_MODEL = 'gemini-1.5-flash';
+const GEMINI_QUATERNARY_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_QUINARY_MODEL = 'gemini-3.8-flash';
 const GEMINI_FLASH_MODEL = GEMINI_PRIMARY_MODEL;
 const GEMINI_FALLBACK_MODEL = GEMINI_SECONDARY_MODEL;
 
@@ -44,46 +45,59 @@ async function generateWithGemini(params: {
     process.env.GEMINI_MODEL || GEMINI_PRIMARY_MODEL,
     GEMINI_SECONDARY_MODEL,
     GEMINI_TERTIARY_MODEL,
+    GEMINI_QUATERNARY_MODEL,
+    GEMINI_QUINARY_MODEL,
+    'gemini-flash-latest',
   ];
 
   let lastError: any = null;
 
   for (let i = 0; i < candidateModels.length; i++) {
     const currentModel = candidateModels[i];
-    const isLite = currentModel === GEMINI_PRIMARY_MODEL;
+    const isLite = currentModel.includes('lite');
 
     const callConfig = {
       ...params.config,
       ...(isLite ? {} : { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }),
     };
 
-    try {
-      const callPromise = ai.models.generateContent({
-        model: currentModel,
-        contents: params.contents,
-        config: callConfig,
-      });
+    // Try up to 2 attempts per model in case of temporary 503 high demand
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const callPromise = ai.models.generateContent({
+          model: currentModel,
+          contents: params.contents,
+          config: callConfig,
+        });
 
-      // 25s timeout for vision OCR
-      const timeoutMs = 25000;
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Operation timeout with ${currentModel}`)), timeoutMs)
-      );
+        // 25s timeout for vision OCR
+        const timeoutMs = 25000;
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Operation timeout with ${currentModel}`)), timeoutMs)
+        );
 
-      const result = (await Promise.race([callPromise, timeoutPromise])) as any;
-      if (result) {
-        result._usedModel = currentModel;
-        return result;
+        const result = (await Promise.race([callPromise, timeoutPromise])) as any;
+        if (result) {
+          result._usedModel = currentModel;
+          return result;
+        }
+      } catch (err: any) {
+        const errMessage = err?.message || '';
+        console.log(
+          `[Gemini AI] Model ${currentModel} attempt ${attempt} failed (${errMessage.slice(0, 80)})...`
+        );
+        lastError = err;
+        // If 503 or high demand, wait 1s before retry
+        if (attempt === 1 && (errMessage.includes('503') || errMessage.includes('high demand') || errMessage.includes('UNAVAILABLE') || errMessage.includes('timeout'))) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+        break; // move to next model candidate
       }
-    } catch (err: any) {
-      console.log(
-        `[Gemini AI] Model ${currentModel} unavailable (${err?.message?.slice(0, 80)}), switching to next model candidate...`
-      );
-      lastError = err;
     }
   }
 
-  throw lastError || new Error('ทุกโมเดลของ Gemini ไม่สามารถประมวลผลได้ในขณะนี้');
+  throw lastError || new Error('ทุกโมเดลของ Gemini กำลังประสบปัญหาการใช้งานหนาแน่น (503 High Demand) กรุณาลองใหม่อีกครั้งในอีกสักครู่');
 }
 
 // Health check endpoint
