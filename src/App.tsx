@@ -89,6 +89,24 @@ const defaultTiresList: ProductItem[] = INITIAL_PRODUCTS.map((p) => ({
 }));
 
 export default function App() {
+  const [isDesktopMode, setIsDesktopMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('crc_thabo_desktop_mode_v1');
+      if (saved !== null) return JSON.parse(saved);
+    } catch {}
+    return window.innerWidth >= 1024;
+  });
+
+  const toggleDesktopMode = () => {
+    setIsDesktopMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('crc_thabo_desktop_mode_v1', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   const [tires, setTires] = useState<ProductItem[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
@@ -1208,6 +1226,8 @@ export default function App() {
           onDeleteCustomer={handleDeleteCustomer}
           onSaveTiers={handleSaveTiers}
           onUpdateCustomerSpend={handleUpdateCustomerSpend}
+          isDesktopMode={isDesktopMode}
+          onToggleDesktopMode={toggleDesktopMode}
         />
 
         <BarcodeScanModal
@@ -1234,6 +1254,8 @@ export default function App() {
         onOpenAppSheet={() => setIsAppSheetOpen(true)}
         onToggleStaffPos={() => setIsStaffPosMode(true)}
         onOpenCustomers={() => setIsCustomerManagementOpen(true)}
+        isDesktopMode={isDesktopMode}
+        onToggleDesktopMode={toggleDesktopMode}
         isOnline={isOnline && !isQuotaExceeded}
         isQuotaMode={isQuotaExceeded}
         activeZone="คลังอะไหล่มอเตอร์ไซค์"
@@ -1253,7 +1275,7 @@ export default function App() {
       {/* Sandbox Test Mode Banner (Shows in Dev Preview or when user turns on Sandbox) */}
       {isSandboxMode && (
         <div className="bg-gradient-to-r from-amber-950/90 via-[#2E2516] to-[#252C33] border-b border-amber-500/40 px-3 py-1.5 text-xs font-['Prompt',sans-serif] z-20 shadow-md">
-          <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+          <div className={`${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto flex items-center justify-between gap-2 transition-all duration-300`}>
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
               <span className="text-[11px] font-bold text-amber-300 truncate">
@@ -1288,7 +1310,7 @@ export default function App() {
       {/* AppSheet Real-Time Notification Toast */}
       {appSheetToast && (
         <div className="fixed top-16 left-0 right-0 z-40 px-3 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200 font-['Prompt',sans-serif]">
-          <div className="max-w-md mx-auto pointer-events-auto">
+          <div className={`${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto pointer-events-auto transition-all duration-300`}>
             <div className="bg-[#0b281f]/95 border border-emerald-500/50 backdrop-blur-md rounded-xl p-2.5 shadow-2xl flex items-center justify-between gap-2.5 text-xs text-emerald-200">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
@@ -1306,7 +1328,7 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-md mx-auto">
+      <main className={`flex-1 w-full ${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto transition-all duration-300`}>
         {isLoading ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-3">
             <div className="w-10 h-10 border-3 border-amber-400 border-t-transparent rounded-full animate-spin" />

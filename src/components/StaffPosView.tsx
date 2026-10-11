@@ -19,6 +19,7 @@ import {
   User,
   Users,
   Percent,
+  Laptop,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CustomerGrade, CustomerItem, CustomerTier, ProductItem, TireItem } from '../types';
@@ -67,6 +68,8 @@ interface StaffPosViewProps {
   onDeleteCustomer?: (customerId: string) => Promise<void> | void;
   onSaveTiers?: (tiers: CustomerTier[]) => Promise<void> | void;
   onUpdateCustomerSpend?: (customerId: string, addAmount: number) => void;
+  isDesktopMode?: boolean;
+  onToggleDesktopMode?: () => void;
 }
 
 export const StaffPosView: React.FC<StaffPosViewProps> = ({
@@ -85,6 +88,8 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   onDeleteCustomer,
   onSaveTiers,
   onUpdateCustomerSpend,
+  isDesktopMode = false,
+  onToggleDesktopMode,
 }) => {
   // Staff Mode sells strictly from storefront only
   const locationTarget = 'front' as const;
@@ -367,7 +372,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     <div className="min-h-screen bg-slate-100 text-slate-800 flex flex-col font-['Prompt',sans-serif]">
       {/* Top Staff Header (Light Theme) */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-2.5 shadow-sm">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+        <div className={`${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto flex items-center justify-between gap-2 transition-all duration-300`}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
               <ShoppingCart className="w-4 h-4" />
@@ -387,23 +392,41 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
             </div>
           </div>
 
-          {/* Exit / Return to Main Manager Mode Button */}
-          <button
-            type="button"
-            onClick={onExitStaffMode}
-            title="ออกจากโหมดพนักงาน กลับสู่หน้าระบบหลัก"
-            className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm flex-shrink-0 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5 text-rose-500" />
-            <span>กลับหน้าระบบหลัก</span>
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {onToggleDesktopMode && (
+              <button
+                type="button"
+                onClick={onToggleDesktopMode}
+                title={isDesktopMode ? 'สลับเป็นโหมดมือถือ' : 'สลับไปโหมด Desktop คอมพิวเตอร์'}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm cursor-pointer border ${
+                  isDesktopMode
+                    ? 'bg-amber-400 text-slate-950 border-amber-500'
+                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                }`}
+              >
+                <Laptop className="w-3.5 h-3.5" />
+                <span>{isDesktopMode ? 'Desktop' : 'Mobile'}</span>
+              </button>
+            )}
+
+            {/* Exit / Return to Main Manager Mode Button */}
+            <button
+              type="button"
+              onClick={onExitStaffMode}
+              title="ออกจากโหมดพนักงาน กลับสู่หน้าระบบหลัก"
+              className="px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5 text-rose-500" />
+              <span>กลับหน้าระบบหลัก</span>
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Sandbox Test Mode Warning Banner in Staff POS (Light Theme) */}
       {isSandboxMode && (
         <div className="bg-gradient-to-r from-amber-50 via-amber-100/70 to-amber-50 border-b border-amber-200 px-3 py-1.5 text-xs shadow-sm z-20">
-          <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+          <div className={`${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto flex items-center justify-between gap-2 transition-all duration-300`}>
             <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1.5 truncate">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
               <span>🧪 โหมดทดลอง: ไม่บันทึกคลาวด์จริง (ขายเล่นได้)</span>
@@ -427,7 +450,7 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
       {/* Toast Notification (Light Theme) */}
       {toastMessage && (
         <div className="fixed top-14 left-0 right-0 z-50 px-4 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="max-w-md mx-auto pointer-events-auto">
+          <div className={`${isDesktopMode ? 'max-w-[1500px]' : 'max-w-md'} mx-auto pointer-events-auto transition-all duration-300`}>
             <div
               className={`p-2.5 rounded-xl border text-xs shadow-xl flex items-center gap-2 font-medium bg-white ${
                 toastMessage.type === 'warn'
@@ -449,339 +472,490 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
       )}
 
       {/* Main Container */}
-      <main className="flex-1 w-full max-w-md mx-auto px-3 py-3 space-y-3 pb-36">
-        {/* 1. Strict Storefront Location Badge (Light Theme) */}
-        <div className="bg-white border-2 border-amber-400/80 rounded-2xl p-3 shadow-sm flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
-              <Store className="w-5 h-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold text-slate-900">
-                  คลังหน้าร้าน (Storefront)
-                </span>
-                <span className="text-[9px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
-                  <ShieldCheck className="w-2.5 h-2.5" />
-                  ขายได้เฉพาะหน้าร้าน
-                </span>
+      <main className={`flex-1 w-full ${isDesktopMode ? 'max-w-[1600px]' : 'max-w-md'} mx-auto px-3 py-3 ${isDesktopMode ? 'lg:grid lg:grid-cols-12 lg:gap-6 lg:items-start' : 'space-y-3 pb-36'} transition-all duration-300`}>
+        {/* Left Column: Storefront badge, customer selector, search & filters, product catalog */}
+        <div className={isDesktopMode ? 'lg:col-span-8 space-y-3' : 'space-y-3'}>
+          {/* 1. Strict Storefront Location Badge (Light Theme) */}
+          <div className="bg-white border-2 border-amber-400/80 rounded-2xl p-3 shadow-sm flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-900 flex items-center justify-center font-bold flex-shrink-0 shadow-sm">
+                <Store className="w-5 h-5" />
               </div>
-              <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                ตัดสต็อกจากชั้นวางหน้าร้านโดยตรง • ไม่อนุญาตให้ตัดคลังหลังร้าน
-              </p>
-            </div>
-          </div>
-
-          <div className="text-right flex-shrink-0 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-xl">
-            <span className="text-[10px] text-slate-500 block">สินค้าพร้อมขาย</span>
-            <span className="text-xs font-black text-amber-700">
-              {storefrontStats.inStockItems} รุ่น
-            </span>
-          </div>
-        </div>
-
-        {/* 2. Customer Selection Bar (ตัวเลือกรายชื่อลูกค้าโหมดพนักงาน) */}
-        <div className="bg-white border-2 border-slate-200 hover:border-amber-400/80 rounded-2xl p-2.5 shadow-sm transition-all space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-              <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold transition-all ${
-                  selectedCustomer
-                    ? 'bg-amber-400 text-slate-950 shadow-sm'
-                    : 'bg-slate-100 text-slate-500 border border-slate-200'
-                }`}
-              >
-                {selectedCustomer ? <Users className="w-4 h-4" /> : <User className="w-4 h-4" />}
-              </div>
-
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-slate-400 font-semibold">ลูกค้า:</span>
-                  {selectedCustomer ? (
-                    <>
-                      <span className="font-mono font-bold text-[11px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
-                        {selectedCustomer.customerCode || getCustomerDisplayCode(selectedCustomer)}
-                      </span>
-                      <span className="text-xs font-bold text-slate-900 truncate">
-                        {selectedCustomer.name}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${
-                          getGradeBadge(selectedCustomer.grade).badgeClass
-                        }`}
-                      >
-                        {getGradeBadge(selectedCustomer.grade).shortLabel}
-                        {getTierInfo(selectedCustomer.grade, customerTiers).discountPercent > 0 &&
-                          ` (-${getTierInfo(selectedCustomer.grade, customerTiers).discountPercent}%)`}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs font-bold text-slate-700">
-                      ลูกค้าหน้าร้าน (ราคาขายปกติ)
-                    </span>
-                  )}
+                  <span className="text-xs font-bold text-slate-900">
+                    คลังหน้าร้าน (Storefront)
+                  </span>
+                  <span className="text-[9px] bg-amber-100 text-amber-900 border border-amber-300 font-bold px-1.5 py-0.2 rounded inline-flex items-center gap-0.5">
+                    <ShieldCheck className="w-2.5 h-2.5" />
+                    ขายได้เฉพาะหน้าร้าน
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                  ตัดสต็อกจากชั้นวางหน้าร้านโดยตรง • ไม่อนุญาตให้ตัดคลังหลังร้าน
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right flex-shrink-0 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-xl">
+              <span className="text-[10px] text-slate-500 block">สินค้าพร้อมขาย</span>
+              <span className="text-xs font-black text-amber-700">
+                {storefrontStats.inStockItems} รุ่น
+              </span>
+            </div>
+          </div>
+
+          {/* 2. Customer Selection Bar (ตัวเลือกรายชื่อลูกค้าโหมดพนักงาน) */}
+          <div className="bg-white border-2 border-slate-200 hover:border-amber-400/80 rounded-2xl p-2.5 shadow-sm transition-all space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-bold transition-all ${
+                    selectedCustomer
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'bg-slate-100 text-slate-500 border border-slate-200'
+                  }`}
+                >
+                  {selectedCustomer ? <Users className="w-4 h-4" /> : <User className="w-4 h-4" />}
                 </div>
 
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400 font-semibold">ลูกค้า:</span>
+                    {selectedCustomer ? (
+                      <>
+                        <span className="font-mono font-bold text-[11px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                          {selectedCustomer.customerCode || getCustomerDisplayCode(selectedCustomer)}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 truncate">
+                          {selectedCustomer.name}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${
+                            getGradeBadge(selectedCustomer.grade).badgeClass
+                          }`}
+                        >
+                          {getGradeBadge(selectedCustomer.grade).shortLabel}
+                          {getTierInfo(selectedCustomer.grade, customerTiers).discountPercent > 0 &&
+                            ` (-${getTierInfo(selectedCustomer.grade, customerTiers).discountPercent}%)`}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs font-bold text-slate-700">
+                        ลูกค้าหน้าร้าน (ราคาขายปกติ)
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedCustomer && (
+                    <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">
+                      {selectedCustomer.phone}
+                      {selectedCustomer.vehiclePlate ? ` • ทะเบียน ${selectedCustomer.vehiclePlate}` : ''}
+                      {selectedCustomer.vehicleModel ? ` • ${selectedCustomer.vehicleModel}` : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerPickerOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>{selectedCustomer ? 'เปลี่ยนลูกค้า' : 'เลือกรายชื่อลูกค้า'}</span>
+                </button>
+
                 {selectedCustomer && (
-                  <p className="text-[10px] text-slate-500 truncate font-mono mt-0.5">
-                    {selectedCustomer.phone}
-                    {selectedCustomer.vehiclePlate ? ` • ทะเบียน ${selectedCustomer.vehiclePlate}` : ''}
-                    {selectedCustomer.vehicleModel ? ` • ${selectedCustomer.vehicleModel}` : ''}
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCustomer(null)}
+                    title="ยกเลิกการเลือกลูกค้า (กลับเป็นราคาปกติ)"
+                    className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* 3. Fast Search & Barcode Button (Light Theme) */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่อ, ขนาด, เบอร์ยาง, รหัสบาร์โค้ด..."
+                  className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2.5 border border-slate-300 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors shadow-sm"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs p-0.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
               <button
                 type="button"
-                onClick={() => setIsCustomerPickerOpen(true)}
-                className="px-2.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-bold flex items-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                onClick={onOpenScanner}
+                title="เปิดกล้องสแกนบาร์โค้ด"
+                className="p-2.5 bg-white hover:bg-amber-50 text-amber-600 rounded-xl border border-slate-300 active:scale-95 transition-all shadow-sm cursor-pointer"
               >
-                <Users className="w-3.5 h-3.5" />
-                <span>{selectedCustomer ? 'เปลี่ยนลูกค้า' : 'เลือกรายชื่อลูกค้า'}</span>
+                <ScanBarcode className="w-5 h-5" />
               </button>
-
-              {selectedCustomer && (
-                <button
-                  type="button"
-                  onClick={() => handleSelectCustomer(null)}
-                  title="ยกเลิกการเลือกลูกค้า (กลับเป็นราคาปกติ)"
-                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Fast Search & Barcode Button (Light Theme) */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ค้นหาชื่อ, ขนาด, เบอร์ยาง, รหัสบาร์โค้ด..."
-                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs rounded-xl pl-9 pr-3 py-2.5 border border-slate-300 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-colors shadow-sm"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs p-0.5"
-                >
-                  ✕
-                </button>
-              )}
             </div>
 
-            <button
-              type="button"
-              onClick={onOpenScanner}
-              title="เปิดกล้องสแกนบาร์โค้ด"
-              className="p-2.5 bg-white hover:bg-amber-50 text-amber-600 rounded-xl border border-slate-300 active:scale-95 transition-all shadow-sm cursor-pointer"
-            >
-              <ScanBarcode className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Scope Selector: Available Only vs All items (Light Theme) */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 border border-slate-300 rounded-xl text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setStockScope('available_only')}
-              className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                stockScope === 'available_only'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>เฉพาะที่มีในหน้าร้าน ({storefrontStats.inStockItems})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockScope('all')}
-              className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                stockScope === 'all'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span>สินค้าทั้งหมด ({tires.length})</span>
-            </button>
-          </div>
-
-          {/* Quick Brand Filter Pills (Light Theme) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            {brands.map((b) => (
+            {/* Scope Selector: Available Only vs All items (Light Theme) */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-200/80 border border-slate-300 rounded-xl text-xs font-bold">
               <button
-                key={b}
                 type="button"
-                onClick={() => setSelectedBrand(b)}
-                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  selectedBrand === b
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-sm border border-amber-400'
-                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 shadow-sm'
+                onClick={() => setStockScope('available_only')}
+                className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  stockScope === 'available_only'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {b}
+                <Check className="w-3.5 h-3.5" />
+                <span>เฉพาะที่มีในหน้าร้าน ({storefrontStats.inStockItems})</span>
               </button>
-            ))}
-          </div>
-        </div>
+              <button
+                type="button"
+                onClick={() => setStockScope('all')}
+                className={`py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  stockScope === 'all'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>สินค้าทั้งหมด ({tires.length})</span>
+              </button>
+            </div>
 
-        {/* 3. Product Catalog Grid / Big Touch-Friendly Cards (Light Theme) */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs px-1 text-slate-500">
-            <span>แตะการ์ดสินค้าเพื่อเพิ่มลงบิล</span>
-            <span>แสดง {filteredProducts.length} รายการ</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            {filteredProducts.map((tire) => {
-              const breakdown = getProductStockBreakdown(tire);
-              const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
-              const hasSub = Boolean(tire.subUnit && rate > 1);
-              const priceCalc = calculateItemPriceForCustomer(
-                tire,
-                selectedCustomer,
-                customerTiers || DEFAULT_CUSTOMER_TIERS,
-                hasSub
-              );
-              const unitPrice = priceCalc.effectivePrice;
-              const displayStock = hasSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
-              const hasFrontStock = displayStock > 0;
-              const tireImg = resolveProductImage(tire);
-              const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
-              const isCartAtMax = inCartItem ? inCartItem.quantity >= displayStock : false;
-
-              return (
-                <div
-                  key={tire.id}
-                  onClick={() => handleProductCardClick(tire)}
-                  className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
-                    !hasFrontStock
-                      ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
-                      : inCartItem
-                      ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
-                      : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
+            {/* Quick Brand Filter Pills (Light Theme) */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+              {brands.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => setSelectedBrand(b)}
+                  className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedBrand === b
+                      ? 'bg-amber-400 text-slate-950 font-bold shadow-sm border border-amber-400'
+                      : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-300 hover:border-slate-400 shadow-sm'
                   }`}
                 >
-                  {/* Full Background Image */}
-                  <div className="absolute inset-0 w-full h-full bg-slate-200">
-                    {tireImg && tireImg.trim() !== '' ? (
-                      <img
-                        src={tireImg}
-                        alt={tire.name || tire.size || 'สินค้า'}
-                        referrerPolicy="no-referrer"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
-                        <Store className="w-8 h-8" />
-                      </div>
-                    )}
-                    {/* Dark Vignette Overlay for readability */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
-                  </div>
+                  {b}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                  {/* Top Bar: Brand & Cart Badge & Unit Switch */}
-                  <div className="relative z-10 flex items-center justify-between gap-1">
-                    <div className="flex items-center gap-1 min-w-0">
-                      {tire.brand && (
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase truncate">
-                          {tire.brand}
-                        </span>
+          {/* 3. Product Catalog Grid / Big Touch-Friendly Cards (Light Theme) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs px-1 text-slate-500">
+              <span>แตะการ์ดสินค้าเพื่อเพิ่มลงบิล</span>
+              <span>แสดง {filteredProducts.length} รายการ</span>
+            </div>
+
+            <div className={`grid ${isDesktopMode ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+              {filteredProducts.map((tire) => {
+                const breakdown = getProductStockBreakdown(tire);
+                const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
+                const hasSub = Boolean(tire.subUnit && rate > 1);
+                const priceCalc = calculateItemPriceForCustomer(
+                  tire,
+                  selectedCustomer,
+                  customerTiers || DEFAULT_CUSTOMER_TIERS,
+                  hasSub
+                );
+                const unitPrice = priceCalc.effectivePrice;
+                const displayStock = hasSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
+                const hasFrontStock = displayStock > 0;
+                const tireImg = resolveProductImage(tire);
+                const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
+                const isCartAtMax = inCartItem ? inCartItem.quantity >= displayStock : false;
+
+                return (
+                  <div
+                    key={tire.id}
+                    onClick={() => handleProductCardClick(tire)}
+                    className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
+                      !hasFrontStock
+                        ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
+                        : inCartItem
+                        ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
+                        : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
+                    }`}
+                  >
+                    {/* Full Background Image */}
+                    <div className="absolute inset-0 w-full h-full bg-slate-200">
+                      {tireImg && tireImg.trim() !== '' ? (
+                        <img
+                          src={tireImg}
+                          alt={tire.name || tire.size || 'สินค้า'}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+                          <Store className="w-8 h-8" />
+                        </div>
                       )}
-                      {hasSub && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setUnitSelectProduct(tire);
-                          }}
-                          title="กดเพื่อเลือกขายหน่วยใหญ่ (ลัง) หรือหน่วยย่อย (ป๋อง)"
-                          className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-400/40 cursor-pointer active:scale-95"
-                        >
-                          {tire.subUnit}
-                        </button>
+                      {/* Dark Vignette Overlay for readability */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
+                    </div>
+
+                    {/* Top Bar: Brand & Cart Badge & Unit Switch */}
+                    <div className="relative z-10 flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1 min-w-0">
+                        {tire.brand && (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase truncate">
+                            {tire.brand}
+                          </span>
+                        )}
+                        {hasSub && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setUnitSelectProduct(tire);
+                            }}
+                            title="กดเพื่อเลือกขายหน่วยใหญ่ (ลัง) หรือหน่วยย่อย (ป๋อง)"
+                            className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-400/40 cursor-pointer active:scale-95"
+                          >
+                            {tire.subUnit}
+                          </button>
+                        )}
+                      </div>
+
+                      {inCartItem && (
+                        <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5 flex-shrink-0">
+                          <span>×{inCartItem.quantity}</span>
+                        </div>
                       )}
                     </div>
 
-                    {inCartItem && (
-                      <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5 flex-shrink-0">
-                        <span>×{inCartItem.quantity}</span>
-                      </div>
-                    )}
-                  </div>
+                    {/* Bottom Translucent Overlay with Title, Price & Stock */}
+                    <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
+                      <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
+                        {tire.name || tire.size}
+                      </span>
 
-                  {/* Bottom Translucent Overlay with Title, Price & Stock */}
-                  <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
-                    <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
-                      {tire.name || tire.size}
-                    </span>
-
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="text-xs font-black font-mono text-amber-300">
-                          ฿{unitPrice.toLocaleString()}
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-xs font-black font-mono text-amber-300">
+                            ฿{unitPrice.toLocaleString()}
+                          </span>
+                          {priceCalc.discountPercent > 0 && (
+                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
+                              -{priceCalc.discountPercent}%
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[100px] ${
+                            !hasFrontStock
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          }`}
+                        >
+                          {!hasFrontStock ? 'หมด' : `${displayStock} ${hasSub ? tire.subUnit : (tire.unit || 'ชิ้น')}`}
                         </span>
-                        {priceCalc.discountPercent > 0 && (
-                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
-                            -{priceCalc.discountPercent}%
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {filteredProducts.length === 0 && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-sm my-4">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                  <Search className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-slate-700">ไม่พบสินค้าในสต็อกหน้าร้าน</p>
+                  <p className="text-xs text-slate-500">
+                    {stockScope === 'available_only'
+                      ? 'สินค้าอาจไม่มีสต็อกในคลังหน้าร้าน หรือลองเปลี่ยนคำค้นหา'
+                      : 'ลองตรวจสอบการสะกดคำ หรือเปลี่ยนตัวกรองยี่ห้อ'}
+                  </p>
+                </div>
+                {stockScope === 'available_only' && (
+                  <button
+                    type="button"
+                    onClick={() => setStockScope('all')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold border border-amber-300 transition-colors cursor-pointer"
+                  >
+                    ดูสินค้าทั้งหมดในระบบ ({tires.length} รายการ)
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Desktop Cart & Checkout Sidebar */}
+        {isDesktopMode && (
+          <div className="hidden lg:block lg:col-span-4 lg:sticky lg:top-16 bg-white border border-slate-200 rounded-3xl p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-xs">
+                  <ShoppingCart className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-xs font-bold text-slate-900">ตะกร้าสินค้าหน้าร้าน ({totalQuantity} ชิ้น)</span>
+              </div>
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCart([])}
+                  className="text-[11px] text-slate-400 hover:text-rose-600 font-medium cursor-pointer"
+                >
+                  ล้างตะกร้า
+                </button>
+              )}
+            </div>
+
+            {cart.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 space-y-2">
+                <ShoppingCart className="w-10 h-10 mx-auto opacity-30" />
+                <p className="text-xs font-semibold">ยังไม่มีสินค้าในตะกร้า</p>
+                <p className="text-[10px] text-slate-400">แตะการ์ดสินค้าด้านซ้ายเพื่อเพิ่มลงบิล</p>
+              </div>
+            ) : (
+              <>
+                <div className="max-h-[calc(100vh-320px)] overflow-y-auto space-y-1.5 pr-1">
+                  {cart.map((item) => (
+                    <div
+                      key={`${item.tire.id}-${item.isSubUnit ? 'sub' : 'main'}`}
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 flex items-center justify-between text-xs shadow-sm"
+                    >
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-slate-900 text-xs truncate block">
+                            {item.tire.name || item.tire.size}
+                          </span>
+                          <span className={`text-[9px] font-bold px-1 rounded ${item.isSubUnit ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                            {item.isSubUnit ? item.tire.subUnit : item.tire.unit}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-600">
+                          ฿{item.unitPrice.toLocaleString()} × {item.quantity} ={' '}
+                          <strong className="text-amber-600 font-mono">
+                            ฿{(item.unitPrice * item.quantity).toLocaleString()}
+                          </strong>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), -1)}
+                          className="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 text-slate-800 font-bold flex items-center justify-center active:scale-95 border border-slate-300 cursor-pointer"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="w-7 text-center font-bold font-mono text-slate-900 text-xs">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={!item.isSubUnit && item.quantity >= item.maxStorefrontStock}
+                          onClick={() => updateCartQty(item.tire.id, Boolean(item.isSubUnit), 1)}
+                          className={`w-7 h-7 rounded-lg font-bold flex items-center justify-center active:scale-95 border cursor-pointer ${
+                            !item.isSubUnit && item.quantity >= item.maxStorefrontStock
+                              ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed'
+                              : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300'
+                          }`}
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeFromCart(item.tire.id, Boolean(item.isSubUnit))}
+                          className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Customer in Desktop Cart Sidebar */}
+                <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-200">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="text-[10px] text-slate-500 font-semibold">ลูกค้า:</span>
+                    {selectedCustomer ? (
+                      <div className="flex items-center gap-1 min-w-0 flex-wrap">
+                        <span className="font-mono font-bold text-[10px] px-1 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-300">
+                          {selectedCustomer.customerCode || getCustomerDisplayCode(selectedCustomer)}
+                        </span>
+                        <span className="font-bold text-slate-900 truncate max-w-[120px] text-xs">
+                          {selectedCustomer.name}
+                        </span>
+                        {getTierInfo(selectedCustomer.grade, customerTiers).discountPercent > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-1 py-0.2 rounded">
+                            ลด {getTierInfo(selectedCustomer.grade, customerTiers).discountPercent}%
                           </span>
                         )}
                       </div>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[100px] ${
-                          !hasFrontStock
-                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        }`}
-                      >
-                        {!hasFrontStock ? 'หมด' : `${displayStock} ${hasSub ? tire.subUnit : (tire.unit || 'ชิ้น')}`}
-                      </span>
-                    </div>
+                    ) : (
+                      <span className="text-slate-600 text-xs">ลูกค้าหน้าร้าน (ราคาปกติ)</span>
+                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
 
-          {filteredProducts.length === 0 && (
-            <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-sm my-4">
-              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 mx-auto flex items-center justify-center">
-                <Search className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-slate-700">ไม่พบสินค้าในสต็อกหน้าร้าน</p>
-                <p className="text-xs text-slate-500">
-                  {stockScope === 'available_only'
-                    ? 'สินค้าอาจไม่มีสต็อกในคลังหน้าร้าน หรือลองเปลี่ยนคำค้นหา'
-                    : 'ลองตรวจสอบการสะกดคำ หรือเปลี่ยนตัวกรองยี่ห้อ'}
-                </p>
-              </div>
-              {stockScope === 'available_only' && (
-                <button
-                  type="button"
-                  onClick={() => setStockScope('all')}
-                  className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold border border-amber-300 transition-colors cursor-pointer"
-                >
-                  ดูสินค้าทั้งหมดในระบบ ({tires.length} รายการ)
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerPickerOpen(true)}
+                    className="text-[10px] font-bold text-amber-700 hover:text-amber-900 underline flex items-center gap-0.5 cursor-pointer ml-2 flex-shrink-0"
+                  >
+                    <Users className="w-3 h-3" />
+                    <span>{selectedCustomer ? 'เปลี่ยนลูกค้า' : 'เลือกรายชื่อลูกค้า'}</span>
+                  </button>
+                </div>
+
+                {/* Total & Checkout Action Button */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">
+                      รวมสินค้า {totalQuantity} ชิ้น • <strong className="text-amber-700">ตัดสต็อกหน้าร้าน</strong>
+                    </span>
+                    <span className="text-xl font-black font-mono text-slate-900">
+                      ฿{totalAmount.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmCheckout}
+                    disabled={isProcessing}
+                    className="w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all disabled:opacity-50 bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-amber-400/30 cursor-pointer"
+                  >
+                    <CheckCircle className="w-4 h-4 text-slate-950" />
+                    <span>
+                      {isProcessing ? 'กำลังตัดสต็อก...' : `คิดเงินหน้าร้าน ฿${totalAmount.toLocaleString()}`}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </main>
 
-      {/* Floating Bottom Cart Bar (Light Theme) */}
-      {cart.length > 0 && (
+      {/* Floating Bottom Cart Bar (Mobile Only when cart.length > 0) */}
+      {!isDesktopMode && cart.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 p-3 shadow-2xl">
           <div className="max-w-md mx-auto space-y-2.5">
             {/* Cart Items Preview / Quick Adjust */}

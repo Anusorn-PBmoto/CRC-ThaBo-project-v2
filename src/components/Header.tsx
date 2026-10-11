@@ -1,5 +1,5 @@
 import React from 'react';
-import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart, Users } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, Image as ImageIcon, ShoppingCart, Users, Laptop } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
@@ -8,6 +8,8 @@ interface HeaderProps {
   onOpenImageMatch?: () => void;
   onToggleStaffPos?: () => void;
   onOpenCustomers?: () => void;
+  isDesktopMode?: boolean;
+  onToggleDesktopMode?: () => void;
   isOnline: boolean;
   isQuotaMode?: boolean;
   activeZone?: string;
@@ -21,17 +23,34 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenImageMatch,
   onToggleStaffPos,
   onOpenCustomers,
+  isDesktopMode = false,
+  onToggleDesktopMode,
   isOnline,
   isQuotaMode = false,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-[#20262D]/95 backdrop-blur-md border-b border-[#3A4750] px-4 py-2.5">
-      <div className="max-w-md mx-auto flex items-center justify-between">
+      <div className={`${isDesktopMode ? 'max-w-[1600px]' : 'max-w-md'} mx-auto flex items-center justify-between transition-all duration-300`}>
         {/* Brand Title */}
-        <div className="flex items-center">
+        <div className="flex items-center gap-2">
           <h1 className="text-lg font-black tracking-wider text-[#F6C90E] leading-none">
             CRC THABO
           </h1>
+          {onToggleDesktopMode && (
+            <button
+              onClick={onToggleDesktopMode}
+              aria-label="สลับโหมดหน้าจอคอมพิวเตอร์ / มือถือ"
+              title={isDesktopMode ? 'สลับกลับเป็นโหมดมือถือ / แท็บเล็ต' : 'สลับไปโหมด Desktop คอมพิวเตอร์ (เต็มจอ กว้างพิเศษ)'}
+              className={`h-7 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer border ${
+                isDesktopMode
+                  ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-sm'
+                  : 'bg-[#3A4750] text-[#EEEEEE] hover:bg-[#43525D] border-[#475662]'
+              }`}
+            >
+              <Laptop className="w-3.5 h-3.5" />
+              <span>{isDesktopMode ? 'Desktop' : 'Mobile'}</span>
+            </button>
+          )}
         </div>
 
         {/* Right Action Buttons */}
