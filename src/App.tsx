@@ -107,52 +107,65 @@ export default function App() {
     });
   };
 
+  const [deletedTireIds, setDeletedTireIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('crc_thabo_deleted_tire_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
   const [tires, setTires] = useState<ProductItem[]>(() => {
+    let rawItems: ProductItem[] = [];
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY_TIRES);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.map((p: ProductItem) => {
-            const recImg = resolveProductImage(p);
-            return {
-              ...p,
-              imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
-              frontLocation: cleanLocationName(p.frontLocation),
-              location: cleanLocationName(p.location || 'RACK A-01'),
-            };
-          });
-          try {
-            localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(cleaned));
-          } catch {}
-          return cleaned;
+          rawItems = parsed;
         }
-      }
-
-      // Migrate from legacy v4 if available
-      const legacySaved = localStorage.getItem('crc_thabo_parts_itemdetails_v4');
-      if (legacySaved) {
-        const parsed = JSON.parse(legacySaved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.map((p: ProductItem) => {
-            const recImg = resolveProductImage(p);
-            return {
-              ...p,
-              imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
-              frontLocation: cleanLocationName(p.frontLocation),
-              location: cleanLocationName(p.location || 'RACK A-01'),
-            };
-          });
-          try {
-            localStorage.setItem(LOCAL_STORAGE_KEY_TIRES, JSON.stringify(cleaned));
-          } catch {}
-          return cleaned;
+      } else {
+        const legacySaved = localStorage.getItem('crc_thabo_parts_itemdetails_v4');
+        if (legacySaved) {
+          const parsed = JSON.parse(legacySaved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            rawItems = parsed;
+          }
         }
       }
     } catch (e) {
       console.warn('Failed reading products from localStorage', e);
     }
-    return defaultTiresList;
+
+    if (rawItems.length === 0) {
+      rawItems = defaultTiresList;
+    }
+
+    let deletedIds: string[] = [];
+    try {
+      const dSaved = localStorage.getItem('crc_thabo_deleted_tire_ids');
+      if (dSaved) {
+        const dParsed = JSON.parse(dSaved);
+        if (Array.isArray(dParsed)) deletedIds = dParsed;
+      }
+    } catch {}
+
+    const cleaned = rawItems
+      .filter((p) => !deletedIds.includes(p.id))
+      .map((p: ProductItem) => {
+        const recImg = resolveProductImage(p);
+        return {
+          ...p,
+          imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
+          frontLocation: cleanLocationName(p.frontLocation),
+          location: cleanLocationName(p.location || 'RACK A-01'),
+        };
+      });
+
+    return cleaned;
   });
 
   const [sessions, setSessions] = useState<AuditSession[]>(() => {
@@ -427,10 +440,11 @@ export default function App() {
           (remoteData) => {
             if (remoteData && remoteData.length > 0) {
               setTires((currentTires) => {
+                const validRemoteData = remoteData.filter((p) => !deletedTireIds.includes(p.id));
                 const localMap = new Map(currentTires.map((t) => [t.id, t]));
-                const remoteIds = new Set(remoteData.map((p) => p.id));
+                const remoteIds = new Set(validRemoteData.map((p) => p.id));
 
-                const mergedRemote = remoteData.map((remoteItem) => {
+                const mergedRemote = validRemoteData.map((remoteItem) => {
                   const localItem = localMap.get(remoteItem.id);
                   const recoveredImg = resolveProductImage(remoteItem);
                   const effectiveImg =
@@ -455,7 +469,7 @@ export default function App() {
                 });
 
                 // Preserve any product that was created locally and not yet synced to remoteData
-                const locallyAdded = currentTires.filter((t) => !remoteIds.has(t.id));
+                const locallyAdded = currentTires.filter((t) => !remoteIds.has(t.id) && !deletedTireIds.includes(t.id));
 
                 const nextCombined = [...locallyAdded, ...mergedRemote];
                 try {
@@ -470,7 +484,8 @@ export default function App() {
                 if (saved) {
                   const parsed = JSON.parse(saved);
                   if (Array.isArray(parsed) && parsed.length > 0) {
-                    persistTires(parsed);
+                    const filtered = parsed.filter((p: ProductItem) => !deletedTireIds.includes(p.id));
+                    persistTires(filtered);
                     setIsOnline(true);
                     return;
                   }
@@ -478,7 +493,7 @@ export default function App() {
               } catch (e) {
                 console.warn('Error checking local storage fallback:', e);
               }
-              persistTires(INITIAL_PRODUCTS);
+              persistTires(INITIAL_PRODUCTS.filter((p) => !deletedTireIds.includes(p.id)));
             }
             setIsOnline(true);
           },
@@ -691,6 +706,12 @@ export default function App() {
     if (!productToDelete) return;
     const target = productToDelete;
     setProductToDelete(null);
+
+    const nextDeleted = Array.from(new Set([...deletedTireIds, target.id]));
+    setDeletedTireIds(nextDeleted);
+    try {
+      localStorage.setItem('crc_thabo_deleted_tire_ids', JSON.stringify(nextDeleted));
+    } catch {}
 
     // Optimistic delete + localStorage persist
     persistTires((prev) => prev.filter((t) => t.id !== target.id));
