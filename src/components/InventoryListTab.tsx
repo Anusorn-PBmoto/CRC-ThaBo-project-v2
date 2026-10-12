@@ -11,11 +11,9 @@ import {
   TrendingUp,
   X,
   Maximize2,
-  Image as ImageIcon,
   Store,
   Warehouse,
   ArrowRightLeft,
-  AlertTriangle,
   ArrowUp,
   Sparkles,
 } from 'lucide-react';
@@ -61,8 +59,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   const [locationFilter, setLocationFilter] = useState<LocationFilter>('all');
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previewProduct, setPreviewProduct] = useState<ProductItem | null>(null);
 
   // Available categories or brands
@@ -75,21 +71,17 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
     return ['ทั้งหมด', ...Array.from(set)];
   }, [tires]);
 
-  // Filter products by location scope, search query, stock status, and category
+  // Filter products
   const filteredProducts = useMemo(() => {
     return tires.filter((p) => {
       const breakdown = getProductStockBreakdown(p);
 
-      // 1. Location View filter
       if (locationFilter === 'front') {
-        // In storefront view, user wants to see storefront items (or items that need storefront stocking)
         if (stockFilter === 'out_of_stock' && breakdown.frontQty > 0) return false;
       } else if (locationFilter === 'warehouse') {
-        // In warehouse view
         if (stockFilter === 'out_of_stock' && breakdown.warehouseQty > 0) return false;
       }
 
-      // 2. Search text filter
       const q = searchQuery.toLowerCase();
       const matchSearch =
         (p.name || p.size || '').toLowerCase().includes(q) ||
@@ -100,13 +92,11 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         (p.frontLocation || '').toLowerCase().includes(q) ||
         (p.description || '').toLowerCase().includes(q);
 
-      // 3. Category filter
       const matchCategory =
         selectedCategory === 'ทั้งหมด' ||
         (p.category || '').toLowerCase() === selectedCategory.toLowerCase() ||
         (p.brand || '').toLowerCase() === selectedCategory.toLowerCase();
 
-      // 4. Stock filter based on active location view
       let matchStock = true;
       const relevantQty =
         locationFilter === 'front'
@@ -128,21 +118,11 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
     }).sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
   }, [tires, searchQuery, selectedCategory, stockFilter, locationFilter]);
 
-  // Overall catalog summary stats
   const totalItems = tires.length;
   const availablePieces = tires.reduce((acc, t) => acc + (t.actualQty || 0), 0);
+  const storefrontTotalPieces = tires.reduce((acc, t) => acc + getProductStockBreakdown(t).frontQty, 0);
+  const warehouseTotalPieces = tires.reduce((acc, t) => acc + getProductStockBreakdown(t).warehouseQty, 0);
 
-  // Breakdown across catalog
-  const storefrontTotalPieces = tires.reduce(
-    (acc, t) => acc + getProductStockBreakdown(t).frontQty,
-    0
-  );
-  const warehouseTotalPieces = tires.reduce(
-    (acc, t) => acc + getProductStockBreakdown(t).warehouseQty,
-    0
-  );
-
-  // Items needing storefront restock: front has 0 but warehouse has stock
   const storefrontRestockNeeded = tires.filter((t) => {
     const b = getProductStockBreakdown(t);
     return b.frontQty === 0 && b.warehouseQty > 0;
@@ -151,47 +131,10 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   const lowStockItems = tires.filter(
     (t) => t.actualQty > 0 && t.actualQty <= (t.minStock || 2)
   ).length;
-  const outOfStockItems = tires.filter((t) => t.actualQty === 0).length;
   const totalStockValue = tires.reduce(
     (acc, t) => acc + (t.actualQty || 0) * (t.sellingPrice || t.price || 0),
     0
   );
-
-  // Toggle selection in multi-select mode
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAll = () => {
-    if (selectedIds.size === filteredProducts.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredProducts.map((p) => p.id)));
-    }
-  };
-
-  const handleBatchPOAction = () => {
-    const selected = tires.filter((t) => selectedIds.has(t.id));
-    if (selected.length > 0) {
-      onOpenBatchPO(selected);
-      setSelectedIds(new Set());
-      setIsMultiSelectMode(false);
-    }
-  };
-
-  const handleBatchTransferAction = () => {
-    const selected = tires.filter((t) => selectedIds.has(t.id));
-    if (selected.length > 0 && onOpenBatchTransfer) {
-      onOpenBatchTransfer(selected);
-      setSelectedIds(new Set());
-      setIsMultiSelectMode(false);
-    }
-  };
 
   return (
     <div className="pb-32 pt-2 px-3 space-y-3 max-w-md mx-auto font-['Prompt',sans-serif]">
@@ -209,22 +152,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => {
-                if (isMultiSelectMode) {
-                  setSelectedIds(new Set());
-                }
-                setIsMultiSelectMode(!isMultiSelectMode);
-              }}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
-                isMultiSelectMode
-                  ? 'bg-[#F6C90E] text-[#252C33] border-[#F6C90E] font-bold'
-                  : 'bg-[#252C33] text-[#EEEEEE] border-[#475662] hover:bg-[#43525D]'
-              }`}
-            >
-              {isMultiSelectMode ? 'ยกเลิก' : 'เลือกหลายรายการ'}
-            </button>
-
             {onOpenBillScanner && (
               <button
                 type="button"
@@ -247,7 +174,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </div>
         </div>
 
-        {/* Location View Switcher (หน้าร้าน vs คลังสินค้า vs รวม) */}
+        {/* Location View Switcher */}
         <div className="grid grid-cols-3 gap-1.5 p-1 bg-[#252C33] border border-[#475662] rounded-xl text-xs">
           <button
             onClick={() => setLocationFilter('all')}
@@ -286,7 +213,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </button>
         </div>
 
-        {/* Simple & Clean Stock Breakdown (Storefront vs Warehouse vs Total) */}
+        {/* Stock Breakdown */}
         <div className="bg-[#252C33] rounded-xl p-2.5 border border-[#475662]/75 grid grid-cols-3 gap-2 text-center">
           <div className="bg-[#1F252B] rounded-lg p-1.5 border border-[#475662]/50">
             <span className="text-[10px] text-[#A0ABB5] block flex items-center justify-center gap-1">
@@ -316,7 +243,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </div>
         </div>
 
-        {/* 3 Metric Stats depending on active location */}
+        {/* 3 Metric Stats */}
         <div className="grid grid-cols-3 gap-2 pt-1 border-t border-[#475662]/80 text-center">
           <div className="bg-[#252C33] rounded-xl p-2 border border-[#475662]/50">
             <span className="text-[10px] text-[#A0ABB5] block">
@@ -357,7 +284,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         </div>
       </div>
 
-      {/* Restock Storefront Alert Banner (if any item out of stock in front but in warehouse) */}
+      {/* Restock Storefront Alert Banner */}
       {storefrontRestockNeeded.length > 0 && locationFilter !== 'warehouse' && (
         <div className="bg-[#F6C90E]/15 border border-[#F6C90E]/50 rounded-2xl p-3 flex items-center justify-between gap-2.5 animate-in fade-in">
           <div className="flex items-center gap-2">
@@ -382,52 +309,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           >
             ดูรายการเติม
           </button>
-        </div>
-      )}
-
-      {/* Multi-select action banner */}
-      {isMultiSelectMode && (
-        <div className="bg-[#2C353E] border border-[#F6C90E]/50 rounded-2xl p-3 space-y-2 text-xs animate-in fade-in shadow-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#F6C90E] animate-pulse" />
-              <span className="text-[#EEEEEE] font-medium">
-                เลือกไว้ <strong className="text-[#F6C90E] text-sm">{selectedIds.size}</strong> / {filteredProducts.length} รายการ
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={selectAll}
-                className="px-2 py-1 rounded-lg bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] text-[11px] font-semibold transition-all active:scale-95"
-              >
-                {selectedIds.size === filteredProducts.length ? 'ล้างทั้งหมด' : 'เลือกทั้งหมด'}
-              </button>
-            </div>
-          </div>
-
-          {selectedIds.size > 0 && (
-            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#3A4750]">
-              {onOpenBatchTransfer && (
-                <button
-                  type="button"
-                  onClick={handleBatchTransferAction}
-                  className="py-2 px-3 bg-gradient-to-r from-[#F6C90E] to-amber-500 hover:from-[#E5B800] hover:to-amber-600 text-[#252C33] font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-[#F6C90E]/20 active:scale-95 transition-all"
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>โอนย้ายสต็อก ({selectedIds.size})</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleBatchPOAction}
-                className="py-2 px-3 bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-[#475662] active:scale-95 transition-all"
-              >
-                <Package className="w-3.5 h-3.5 text-[#F6C90E]" />
-                <span>สั่งซื้อ PO ({selectedIds.size})</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -499,7 +380,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         </button>
       </div>
 
-      {/* 4. Category Filter Tags (if any exist) */}
+      {/* 4. Category Filter Tags */}
       {categories.length > 1 && (
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
           <span className="text-[#A0ABB5] font-medium pl-1 flex-shrink-0">หมวด:</span>
@@ -525,7 +406,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
       {/* 5. Products List */}
       <div className="space-y-2.5">
         {totalItems === 0 ? (
-          /* Empty Catalog State */
           <div className="bg-[#3A4750] border border-dashed border-[#475662] rounded-2xl p-8 text-center space-y-3">
             <div className="w-14 h-14 rounded-2xl bg-[#252C33] border border-[#F6C90E]/30 text-[#F6C90E] flex items-center justify-center mx-auto">
               <Package className="w-7 h-7" />
@@ -589,20 +469,16 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                 ? breakdown.warehouseQty > 0 && breakdown.warehouseQty <= (product.minStock || 2)
                 : breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
 
-            const isSelected = selectedIds.has(product.id);
             const unitLabel = product.unit || 'ชิ้น';
             const productImg = resolveProductImage(product);
 
             return (
               <div
                 key={product.id}
-                className={`bg-[#3A4750] hover:bg-[#43525D] border rounded-2xl p-3.5 shadow-sm transition-all relative overflow-hidden ${
-                  isSelected ? 'border-[#F6C90E] bg-[#43525D]' : 'border-[#475662]'
-                }`}
+                className="bg-[#3A4750] hover:bg-[#43525D] border border-[#475662] rounded-2xl p-3.5 shadow-sm transition-all relative overflow-hidden space-y-3"
               >
-                {/* Top Section: Left Photo + Right Info & Actions */}
+                {/* Top Section */}
                 <div className="flex items-start gap-3">
-                  {/* Left Side: Product Photo */}
                   {productImg && productImg.trim() !== '' && (
                     <button
                       type="button"
@@ -622,185 +498,126 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                     </button>
                   )}
 
-                  {/* Right Side: Product Details & Actions */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-1">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        {isMultiSelectMode && (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelect(product.id)}
-                            className="w-4 h-4 rounded text-[#F6C90E] bg-[#252C33] border-[#475662] focus:ring-0 flex-shrink-0"
-                          />
+                  <div className="min-w-0 flex-1 flex items-start justify-between gap-1 w-full">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-sm font-bold text-[#EEEEEE]">
+                          {product.name || product.size}
+                        </h4>
+                        {product.unit && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
+                            {product.unit}
+                          </span>
                         )}
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="text-sm font-bold text-[#EEEEEE]">
-                              {product.name || product.size}
-                            </h4>
-                            {product.unit && (
-                              <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#252C33] text-[#EEEEEE] border border-[#475662]">
-                                {product.unit}
-                              </span>
-                            )}
-                          </div>
-
-                          {product.barcode && (
-                            <div className="mt-1">
-                              <span className="inline-flex text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 items-center gap-1">
-                                <ScanBarcode className="w-2.5 h-2.5" />
-                                <span>{product.barcode}</span>
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Subtitle / Prices */}
-                          <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
-                            {product.sellingPrice > 0 && (
-                              <span className="text-[#F6C90E] font-bold font-mono">
-                                ฿{product.sellingPrice.toLocaleString()}
-                              </span>
-                            )}
-                            {product.description && (
-                              <span className="text-[#A0ABB5] text-xs truncate max-w-[130px]">
-                                • {product.description}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Clean Stock Breakdown per item (Storefront | Warehouse | Total) */}
-                          <div className="bg-[#252C33]/90 border border-[#475662]/70 rounded-xl px-2.5 py-1.5 mt-2 flex items-center justify-between text-[11px] font-mono">
-                            <span className="text-[#F6C90E]">
-                              หน้าร้าน: <strong>{breakdown.frontQty}</strong>
-                              {product.subUnit && product.conversionRate && product.conversionRate > 1 && breakdown.frontQty % 1 !== 0 && (
-                                <span className="text-[10px] text-amber-300 ml-1">
-                                  ({Math.round(breakdown.frontQty * product.conversionRate)} {product.subUnit})
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-[#A0ABB5]">|</span>
-                            <span className="text-sky-300">
-                              คลัง: <strong>{breakdown.warehouseQty}</strong>
-                            </span>
-                            <span className="text-[#A0ABB5]">|</span>
-                            <span className="text-[#EEEEEE]">
-                              รวม: <strong>{breakdown.totalQty}</strong> {unitLabel}
-                            </span>
-                          </div>
-                        </div>
                       </div>
 
-                      {/* Right Action buttons & Stock Badge */}
-                      <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
-                        {/* Scope Stock Quantity Badge */}
-                        {isZero ? (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-rose-500/50 text-rose-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                            <span>
-                              {locationFilter === 'front'
-                                ? 'หน้าร้านหมด'
-                                : locationFilter === 'warehouse'
-                                ? 'ในคลังหมด'
-                                : 'หมด'}
-                            </span>
+                      {product.barcode && (
+                        <div className="mt-1">
+                          <span className="inline-flex text-[9px] font-mono font-medium px-1.5 py-0.5 rounded bg-[#252C33] text-[#F6C90E] border border-[#F6C90E]/40 items-center gap-1">
+                            <ScanBarcode className="w-2.5 h-2.5" />
+                            <span>{product.barcode}</span>
                           </span>
-                        ) : isLow ? (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-[#F6C90E]/50 text-[#F6C90E] flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#F6C90E]" />
-                            <span>
-                              {locationFilter === 'front'
-                                ? `${breakdown.frontQty} ${unitLabel}`
-                                : locationFilter === 'warehouse'
-                                ? `${breakdown.warehouseQty} ${unitLabel}`
-                                : `${breakdown.totalQty} ${unitLabel}`}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-emerald-500/40 text-emerald-400 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                            <span>
-                              {locationFilter === 'front'
-                                ? `${breakdown.frontQty} ${unitLabel}`
-                                : locationFilter === 'warehouse'
-                                ? `${breakdown.warehouseQty} ${unitLabel}`
-                                : `${breakdown.totalQty} ${unitLabel}`}
-                            </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
+                        {product.sellingPrice > 0 && (
+                          <span className="text-[#F6C90E] font-bold font-mono">
+                            ฿{product.sellingPrice.toLocaleString()}
                           </span>
                         )}
+                        {product.description && (
+                          <span className="text-[#A0ABB5] text-xs truncate max-w-[130px]">
+                            • {product.description}
+                          </span>
+                        )}
+                      </div>
 
-                        <div className="flex items-center gap-1">
-                          {/* Quick PO Button */}
-                          <button
-                            onClick={() => onOpenPO(product)}
-                            title="สั่งซื้อเพิ่ม (PO)"
-                            className="p-1 text-[#A0ABB5] hover:text-[#F6C90E] rounded-lg transition-colors"
-                          >
-                            <TrendingUp className="w-3.5 h-3.5" />
-                          </button>
+                      <div className="bg-[#252C33]/90 border border-[#475662]/70 rounded-xl px-2.5 py-1.5 mt-2 flex items-center justify-between text-[11px] font-mono">
+                        <span className="text-[#F6C90E]">
+                          หน้าร้าน: <strong>{breakdown.frontQty}</strong>
+                        </span>
+                        <span className="text-[#A0ABB5]">|</span>
+                        <span className="text-sky-300">
+                          คลัง: <strong>{breakdown.warehouseQty}</strong>
+                        </span>
+                        <span className="text-[#A0ABB5]">|</span>
+                        <span className="text-[#EEEEEE]">
+                          รวม: <strong>{breakdown.totalQty}</strong> {unitLabel}
+                        </span>
+                      </div>
+                    </div>
 
-                          {/* Edit Button */}
-                          <button
-                            onClick={() => onEditTire(product)}
-                            title="แก้ไขข้อมูล"
-                            className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg transition-colors"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-1">
+                      {isZero ? (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-rose-500/50 text-rose-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                          <span>หมด</span>
+                        </span>
+                      ) : isLow ? (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-[#F6C90E]/50 text-[#F6C90E] flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#F6C90E]" />
+                          <span>ใกล้หมด</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#252C33] border border-emerald-500/40 text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          <span>ปกติ</span>
+                        </span>
+                      )}
 
-                          {/* Delete Button */}
-                          <button
-                            onClick={() => onDeleteTire(product)}
-                            title="ลบรายการ"
-                            className="p-1 text-[#A0ABB5] hover:text-rose-400 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => onOpenPO(product)}
+                          title="สั่งซื้อเพิ่ม (PO)"
+                          className="p-1 text-[#A0ABB5] hover:text-[#F6C90E] rounded-lg transition-colors"
+                        >
+                          <TrendingUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onEditTire(product)}
+                          title="แก้ไขข้อมูล"
+                          className="p-1 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => onDeleteTire(product)}
+                          title="ลบรายการ"
+                          className="p-1 text-[#A0ABB5] hover:text-rose-400 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Location & Stock Transfer Actions Row */}
-                <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-[#475662]/60 text-xs gap-2 flex-wrap">
+                {/* Bottom Actions Row */}
+                <div className="flex items-center justify-between pt-2 border-t border-[#475662]/60 text-xs gap-2 flex-wrap">
                   <div className="flex items-center gap-2 text-[11px] text-[#A0ABB5] flex-wrap">
                     <span className="flex items-center gap-1" title="ตำแหน่งหน้าร้าน">
                       <Store className="w-3 h-3 text-[#F6C90E]" />
-                      <span className="text-[#EEEEEE] font-medium">{breakdown.frontLocation}</span>
+                      <span className="text-[#EEEEEE] font-medium">{breakdown.frontLocation || '-'}</span>
                     </span>
                     <span>•</span>
-                    <span className="flex items-center gap-1" title="ตำแหน่งในคลังหลังร้าน">
+                    <span className="flex items-center gap-1" title="ตำแหน่งในคลัง">
                       <Warehouse className="w-3 h-3 text-sky-400" />
-                      <span className="text-[#EEEEEE] font-medium">{breakdown.warehouseLocation}</span>
+                      <span className="text-[#EEEEEE] font-medium">{breakdown.warehouseLocation || '-'}</span>
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5 ml-auto">
-                    {/* Stock Transfer Modal trigger */}
                     {onOpenTransferModal && (
                       <button
                         onClick={() => onOpenTransferModal(product)}
-                        title="โอนย้ายสต็อกระหว่างคลังและหน้าร้าน"
+                        title="โอนย้ายสต็อก"
                         className="px-2.5 py-1 rounded-xl bg-[#252C33] hover:bg-[#2C353E] border border-[#475662] hover:border-[#F6C90E] text-[#F6C90E] text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
                       >
                         <ArrowRightLeft className="w-3 h-3 text-[#F6C90E]" />
-                        <span>โอนย้ายสต็อก</span>
+                        <span>โอนย้าย</span>
                       </button>
                     )}
-
-                    {/* Quick Restock Front Shortcut if warehouse has stock */}
-                    {breakdown.canRestockFromWarehouse && onOpenTransferModal && (
-                      <button
-                        onClick={() => onOpenTransferModal(product)}
-                        className="px-2 py-1 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] text-[10px] font-black flex items-center gap-1 active:scale-95 transition-all shadow-sm"
-                      >
-                        <Plus className="w-3 h-3 text-[#252C33]" />
-                        <span>เติมหน้าร้าน</span>
-                      </button>
-                    )}
-
                     <button
                       onClick={() => onJumpToAudit(product)}
                       className="text-[#F6C90E] hover:text-[#E5B800] text-[11px] font-bold flex items-center gap-0.5 ml-1"
@@ -830,7 +647,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         </div>
       )}
 
-      {/* Product Photo Full-Screen / Lightbox Preview Modal */}
+      {/* Product Photo Preview Modal */}
       {previewProduct && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"

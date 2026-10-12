@@ -109,6 +109,10 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   // Modal for unit selection when product has subUnit conversion
   const [unitSelectProduct, setUnitSelectProduct] = useState<ProductItem | null>(null);
 
+  // View mode for performance optimization & space saving: 'categories' (accordion cards) or 'grid' (all grid)
+  const [viewMode, setViewMode] = useState<'categories' | 'grid'>('categories');
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
   const showToast = (text: string, type: 'success' | 'warn' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => {
@@ -116,13 +120,19 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
     }, 3000);
   };
 
-  // Available brands for quick filter
+  // Available brands for quick filter (case-insensitive deduplication & clean trim)
   const brands = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     tires.forEach((t) => {
-      if (t.brand && t.brand.trim() !== '') set.add(t.brand.trim());
+      if (t.brand && t.brand.trim() !== '') {
+        const raw = t.brand.trim();
+        const key = raw.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, raw);
+        }
+      }
     });
-    return ['ทั้งหมด', ...Array.from(set).sort()];
+    return ['ทั้งหมด', ...Array.from(map.values()).sort((a, b) => a.localeCompare(b))];
   }, [tires]);
 
   // Overall catalog storefront stats
@@ -176,6 +186,37 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
         return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
       });
   }, [tires, searchQuery, selectedBrand, stockScope]);
+
+  // Group filtered products by category for accordion view mode with case-insensitive normalization to prevent duplication
+  const categorizedProducts = useMemo(() => {
+    const map = new Map<string, { originalName: string; items: ProductItem[] }>();
+    filteredProducts.forEach((p) => {
+      const rawCat = p.category && p.category.trim() !== '' 
+        ? p.category.trim() 
+        : (p.brand && p.brand.trim() !== '' ? p.brand.trim() : 'สินค้าทั่วไป');
+      
+      const normKey = rawCat.toLowerCase().replace(/\s+/g, ' ');
+      
+      if (!map.has(normKey)) {
+        map.set(normKey, {
+          originalName: rawCat,
+          items: [],
+        });
+      }
+      map.get(normKey)!.items.push(p);
+    });
+
+    const entries = Array.from(map.values()).sort((a, b) => {
+      if (a.originalName === 'สินค้าทั่วไป' || a.originalName === 'อื่นๆ') return 1;
+      if (b.originalName === 'สินค้าทั่วไป' || b.originalName === 'อื่นๆ') return -1;
+      return a.originalName.localeCompare(b.originalName);
+    });
+
+    return entries.map((entry) => ({
+      category: entry.originalName,
+      items: entry.items,
+    }));
+  }, [filteredProducts]);
 
   // Handle click on product card: sell in subUnit directly if available, otherwise main unit
   const handleProductCardClick = (product: ProductItem) => {
@@ -660,123 +701,288 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
             </div>
           </div>
 
-          {/* 3. Product Catalog Grid / Big Touch-Friendly Cards (Light Theme) */}
-          <div className="space-y-2">
+          {/* 3. Product Catalog Grid / Categorized Accordion Cards */}
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs px-1 text-slate-500">
-              <span>แตะการ์ดสินค้าเพื่อเพิ่มลงบิล</span>
-              <span>แสดง {filteredProducts.length} รายการ</span>
+              <span className="font-semibold text-slate-700">แตะการ์ดสินค้าเพื่อเพิ่มลงบิล ({filteredProducts.length} รายการ)</span>
+              <div className="flex items-center gap-1 bg-slate-200 p-0.5 rounded-xl text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('categories')}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    viewMode === 'categories' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📂 แยกหมวดหมู่ ({categorizedProducts.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    viewMode === 'grid' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🔲 ตารางรวม
+                </button>
+              </div>
             </div>
 
-            <div className={`grid ${isDesktopMode ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-3'} gap-2`}>
-              {filteredProducts.map((tire) => {
-                const breakdown = getProductStockBreakdown(tire);
-                const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
-                const hasSub = Boolean(tire.subUnit && rate > 1);
-                const priceCalc = calculateItemPriceForCustomer(
-                  tire,
-                  selectedCustomer,
-                  customerTiers || DEFAULT_CUSTOMER_TIERS,
-                  hasSub
-                );
-                const unitPrice = priceCalc.effectivePrice;
-                const displayStock = hasSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
-                const hasFrontStock = displayStock > 0;
-                const tireImg = resolveProductImage(tire);
-                const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
-                const isCartAtMax = inCartItem ? inCartItem.quantity >= displayStock : false;
+            {viewMode === 'categories' ? (
+              <div className="space-y-2.5">
+                {categorizedProducts.map(({ category, items }) => {
+                  const isExpanded = expandedCategories[category] ?? true;
+                  const inStockCount = items.filter((i) => {
+                    const b = getProductStockBreakdown(i);
+                    const rate = i.conversionRate && i.conversionRate > 1 ? i.conversionRate : 1;
+                    return (i.subUnit && rate > 1 ? Math.round(b.frontQty * rate) : b.frontQty) > 0;
+                  }).length;
 
-                return (
-                  <div
-                    key={tire.id}
-                    onClick={() => handleProductCardClick(tire)}
-                    className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
-                      !hasFrontStock
-                        ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
-                        : inCartItem
-                        ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
-                        : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
-                    }`}
-                  >
-                    {/* Full Background Image */}
-                    <div className="absolute inset-0 w-full h-full bg-slate-200">
-                      {tireImg && tireImg.trim() !== '' ? (
-                        <img
-                          src={tireImg}
-                          alt={tire.name || tire.size || 'สินค้า'}
-                          referrerPolicy="no-referrer"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
-                          <Store className="w-8 h-8" />
+                  return (
+                    <div key={category} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm transition-all">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCategories((prev) => ({ ...prev, [category]: !isExpanded }))}
+                        className="w-full px-3.5 py-2.5 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 flex-shrink-0 shadow-sm" />
+                          <span className="text-xs font-black text-slate-900 truncate">{category}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex-shrink-0">
+                            {items.length} รายการ (พร้อมขาย {inStockCount})
+                          </span>
+                        </div>
+                        <div className="text-slate-500 flex items-center gap-1.5 text-xs font-bold flex-shrink-0">
+                          <span>{isExpanded ? 'ซ่อน' : 'แสดง'}</span>
+                          <span className={`transform transition-transform text-[10px] ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="p-2.5 bg-slate-900 border-t border-slate-200">
+                          <div className={`grid ${isDesktopMode ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+                            {items.map((tire) => {
+                              const breakdown = getProductStockBreakdown(tire);
+                              const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
+                              const hasSub = Boolean(tire.subUnit && rate > 1);
+                              const priceCalc = calculateItemPriceForCustomer(
+                                tire,
+                                selectedCustomer,
+                                customerTiers || DEFAULT_CUSTOMER_TIERS,
+                                hasSub
+                              );
+                              const unitPrice = priceCalc.effectivePrice;
+                              const displayStock = hasSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
+                              const hasFrontStock = displayStock > 0;
+                              const tireImg = resolveProductImage(tire);
+                              const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
+
+                              return (
+                                <div
+                                  key={tire.id}
+                                  onClick={() => handleProductCardClick(tire)}
+                                  className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
+                                    !hasFrontStock
+                                      ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
+                                      : inCartItem
+                                      ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
+                                      : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
+                                  }`}
+                                >
+                                  {/* Full Background Image */}
+                                  <div className="absolute inset-0 w-full h-full bg-slate-200">
+                                    {tireImg && tireImg.trim() !== '' ? (
+                                      <img
+                                        src={tireImg}
+                                        alt={tire.name || tire.size || 'สินค้า'}
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+                                        <Store className="w-8 h-8" />
+                                      </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
+                                  </div>
+
+                                  {/* Top Bar */}
+                                  <div className="relative z-10 flex items-center justify-between gap-1">
+                                    <div className="flex items-center gap-1 min-w-0">
+                                      {tire.brand && (
+                                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase truncate">
+                                          {tire.brand}
+                                        </span>
+                                      )}
+                                      {hasSub && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setUnitSelectProduct(tire);
+                                          }}
+                                          title="กดเพื่อเลือกขายหน่วยใหญ่หรือหน่วยย่อย"
+                                          className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-400/40 cursor-pointer active:scale-95"
+                                        >
+                                          {tire.subUnit}
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {inCartItem && (
+                                      <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5 flex-shrink-0">
+                                        <span>×{inCartItem.quantity}</span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Bottom Translucent Overlay */}
+                                  <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
+                                    <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
+                                      {tire.name || tire.size}
+                                    </span>
+
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="flex items-center gap-1 min-w-0">
+                                        <span className="text-xs font-black font-mono text-amber-300">
+                                          ฿{unitPrice.toLocaleString()}
+                                        </span>
+                                        {priceCalc.discountPercent > 0 && (
+                                          <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
+                                            -{priceCalc.discountPercent}%
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span
+                                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[100px] ${
+                                          !hasFrontStock
+                                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                        }`}
+                                      >
+                                        {!hasFrontStock ? 'หมด' : `${displayStock} ${hasSub ? tire.subUnit : (tire.unit || 'ชิ้น')}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
-                      {/* Dark Vignette Overlay for readability */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
                     </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className={`grid ${isDesktopMode ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-3'} gap-2`}>
+                {filteredProducts.map((tire) => {
+                  const breakdown = getProductStockBreakdown(tire);
+                  const rate = tire.conversionRate && tire.conversionRate > 1 ? tire.conversionRate : 1;
+                  const hasSub = Boolean(tire.subUnit && rate > 1);
+                  const priceCalc = calculateItemPriceForCustomer(
+                    tire,
+                    selectedCustomer,
+                    customerTiers || DEFAULT_CUSTOMER_TIERS,
+                    hasSub
+                  );
+                  const unitPrice = priceCalc.effectivePrice;
+                  const displayStock = hasSub ? Math.round(breakdown.frontQty * rate) : breakdown.frontQty;
+                  const hasFrontStock = displayStock > 0;
+                  const tireImg = resolveProductImage(tire);
+                  const inCartItem = cart.find((c) => c.tire.id === tire.id && c.isSubUnit === hasSub);
 
-                    {/* Top Bar: Brand & Cart Badge & Unit Switch */}
-                    <div className="relative z-10 flex items-center justify-between gap-1">
-                      <div className="flex items-center gap-1 min-w-0">
-                        {tire.brand && (
-                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase truncate">
-                            {tire.brand}
-                          </span>
+                  return (
+                    <div
+                      key={tire.id}
+                      onClick={() => handleProductCardClick(tire)}
+                      className={`rounded-2xl overflow-hidden transition-all flex flex-col justify-between shadow-sm border relative aspect-square p-2 ${
+                        !hasFrontStock
+                          ? 'opacity-60 border-slate-200 bg-slate-100 cursor-not-allowed'
+                          : inCartItem
+                          ? 'border-amber-400 ring-2 ring-amber-400/40 bg-amber-50 cursor-pointer'
+                          : 'bg-slate-900 border-slate-200 hover:border-amber-400 cursor-pointer active:scale-[0.98]'
+                      }`}
+                    >
+                      {/* Full Background Image */}
+                      <div className="absolute inset-0 w-full h-full bg-slate-200">
+                        {tireImg && tireImg.trim() !== '' ? (
+                          <img
+                            src={tireImg}
+                            alt={tire.name || tire.size || 'สินค้า'}
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+                            <Store className="w-8 h-8" />
+                          </div>
                         )}
-                        {hasSub && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setUnitSelectProduct(tire);
-                            }}
-                            title="กดเพื่อเลือกขายหน่วยใหญ่ (ลัง) หรือหน่วยย่อย (ป๋อง)"
-                            className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-400/40 cursor-pointer active:scale-95"
-                          >
-                            {tire.subUnit}
-                          </button>
-                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/30" />
                       </div>
 
-                      {inCartItem && (
-                        <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5 flex-shrink-0">
-                          <span>×{inCartItem.quantity}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Bottom Translucent Overlay with Title, Price & Stock */}
-                    <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
-                      <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
-                        {tire.name || tire.size}
-                      </span>
-
-                      <div className="flex items-center justify-between gap-1">
+                      {/* Top Bar */}
+                      <div className="relative z-10 flex items-center justify-between gap-1">
                         <div className="flex items-center gap-1 min-w-0">
-                          <span className="text-xs font-black font-mono text-amber-300">
-                            ฿{unitPrice.toLocaleString()}
-                          </span>
-                          {priceCalc.discountPercent > 0 && (
-                            <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
-                              -{priceCalc.discountPercent}%
+                          {tire.brand && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md text-amber-300 border border-white/20 uppercase truncate">
+                              {tire.brand}
                             </span>
                           )}
+                          {hasSub && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setUnitSelectProduct(tire);
+                              }}
+                              title="กดเพื่อเลือกขายหน่วยใหญ่หรือหน่วยย่อย"
+                              className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-sky-200 border border-sky-400/40 cursor-pointer active:scale-95"
+                            >
+                              {tire.subUnit}
+                            </button>
+                          )}
                         </div>
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[100px] ${
-                            !hasFrontStock
-                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          }`}
-                        >
-                          {!hasFrontStock ? 'หมด' : `${displayStock} ${hasSub ? tire.subUnit : (tire.unit || 'ชิ้น')}`}
+
+                        {inCartItem && (
+                          <div className="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-lg border border-white flex items-center gap-0.5 flex-shrink-0">
+                            <span>×{inCartItem.quantity}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bottom Translucent Overlay */}
+                      <div className="relative z-10 bg-black/60 backdrop-blur-md -mx-2 -mb-2 p-2 border-t border-white/10 space-y-1">
+                        <span className="font-bold text-white text-[11px] leading-tight line-clamp-1 block">
+                          {tire.name || tire.size}
                         </span>
+
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1 min-w-0">
+                            <span className="text-xs font-black font-mono text-amber-300">
+                              ฿{unitPrice.toLocaleString()}
+                            </span>
+                            {priceCalc.discountPercent > 0 && (
+                              <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/70 px-1 py-0.2 rounded border border-emerald-500/30">
+                                -{priceCalc.discountPercent}%
+                              </span>
+                            )}
+                          </div>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded truncate max-w-[100px] ${
+                              !hasFrontStock
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            {!hasFrontStock ? 'หมด' : `${displayStock} ${hasSub ? tire.subUnit : (tire.unit || 'ชิ้น')}`}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {filteredProducts.length === 0 && (
               <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-3 shadow-sm my-4">
