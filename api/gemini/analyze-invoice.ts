@@ -5,6 +5,12 @@ export const config = {
   maxDuration: 60,
 };
 
+// Valid models according to Google GenAI standards:
+// 1. gemini-3.8-flash (Flagship multimodal OCR for complex tables & Thai text)
+// 2. gemini-flash-latest (Stable high-speed Flash alias)
+// 3. gemini-3.1-flash-lite (Ultra-fast, high quota 1500 RPD, resilient against 503 high demand)
+const VALID_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+
 export default async function handler(req: Request, res: Response) {
   // Support CORS if needed
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -43,10 +49,18 @@ export default async function handler(req: Request, res: Response) {
       }
     }
 
-    const { imageBase64, mimeType = 'image/jpeg', catalog = [] } = body || {};
+    const {
+      imageBase64,
+      mimeType = 'image/jpeg',
+      catalog = [],
+      preferredModel = 'auto',
+    } = body || {};
 
     if (!imageBase64) {
-      return res.status(400).json({ success: false, error: 'ไม่พบข้อมูลรูปภาพบิล (imageBase64 is required)' });
+      return res.status(400).json({
+        success: false,
+        error: 'ไม่พบข้อมูลรูปภาพบิล (imageBase64 is required)',
+      });
     }
 
     const cleanBase64 = imageBase64.replace(/^data:[^;]+;base64,/, '');
@@ -54,13 +68,14 @@ export default async function handler(req: Request, res: Response) {
       ? imageBase64.substring(5, imageBase64.indexOf(';'))
       : mimeType;
 
-    const catalogMiniList = Array.isArray(catalog) && catalog.length > 0
-      ? `รายการสินค้าตัวอย่างในระบบ CRC THABO (${catalog.length} รายการ):\n` +
-        catalog
-          .slice(0, 30)
-          .map((c: any) => `- ID: ${c.id} | Barcode: ${c.barcode || '-'} | Name: ${c.name || ''}`)
-          .join('\n')
-      : 'ยังไม่มีแคตตาล็อกสินค้า';
+    const catalogMiniList =
+      Array.isArray(catalog) && catalog.length > 0
+        ? `รายการสินค้าตัวอย่างในระบบ CRC THABO (${catalog.length} รายการ):\n` +
+          catalog
+            .slice(0, 30)
+            .map((c: any) => `- ID: ${c.id} | Barcode: ${c.barcode || '-'} | Name: ${c.name || ''}`)
+            .join('\n')
+        : 'ยังไม่มีแคตตาล็อกสินค้า';
 
     const systemPrompt = `คุณคือผู้ช่วยจัดการสต็อกสินค้าอัจฉริยะ (AI Inventory & Goods Receiving Assistant) สำหรับร้านขายยางรถจักรยานยนต์ ยางรถยนต์ และอะไหล่ยานยนต์ CRC THABO
 หน้าที่ของคุณคืออ่าน "ภาพถ่ายบิลส่งของ / ใบเสร็จรับเงิน / ใบกำกับภาษี / ใบส่งสินค้า/ใบวางบิล (Invoice / Delivery Order / Receipt)"
@@ -97,21 +112,25 @@ ${catalogMiniList}
       },
     });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: [
-        {
-          inlineData: {
-            mimeType: detectedMime || 'image/jpeg',
-            data: cleanBase64,
-          },
-        },
-        {
-          text: systemPrompt,
-        },
-      ],
-      config: {
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    // Build ordered list of candidate models based on user preference
+    const candidateModels: string[] = [];
+    if (preferredModel && preferredModel !== 'auto' && VALID_MODELS.includes(preferredModel)) {
+      candidateModels.push(preferredModel);
+    }
+    for (const m of VALID_MODELS) {
+      if (!candidateModels.includes(m)) {
+        candidateModels.push(m);
+      }
+    }
+
+    let response: any = null;
+    let usedModel = candidateModels[0];
+    let lastError: any = null;
+
+    // Multi-tier fallback and auto-retry for 503 high demand spikes
+    for (const model of candidateModels) {
+      const isLite = model.includes('lite');
+      const callConfig: any = {
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -145,8 +164,73 @@ ${catalogMiniList}
           },
           required: ['supplier', 'items', 'summary'],
         },
-      },
-    });
+      };
+
+      if (!isLite) {
+        callConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+      }
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const genPromise = ai.models.generateContent({
+            model,
+            contents: [
+              {
+                inlineData: {
+                  mimeType: detectedMime || 'image/jpeg',
+                  data: cleanBase64,
+                },
+              },
+              {
+                text: systemPrompt,
+              },
+            ],
+            config: callConfig,
+          });
+
+          // Timeout protection (22 seconds per call to avoid 60s Vercel execution limit)
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout with model ${model}`)), 22000)
+          );
+
+          const result: any = await Promise.race([genPromise, timeoutPromise]);
+          if (result) {
+            response = result;
+            usedModel = model;
+            break;
+          }
+        } catch (err: any) {
+          const msg = String(err?.message || err || '');
+          console.warn(`[Gemini OCR] Model ${model} attempt ${attempt} failed: ${msg.slice(0, 100)}`);
+          lastError = err;
+
+          const isTransient =
+            msg.includes('503') ||
+            msg.includes('high demand') ||
+            msg.includes('UNAVAILABLE') ||
+            msg.includes('429') ||
+            msg.includes('RESOURCE_EXHAUSTED') ||
+            msg.includes('Timeout') ||
+            msg.includes('quota');
+
+          if (attempt === 1 && isTransient) {
+            // Wait 1.2s before quick retry
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+          // Move to next candidate model
+          break;
+        }
+      }
+
+      if (response) {
+        break;
+      }
+    }
+
+    if (!response) {
+      throw lastError || new Error('ทุกโมเดลของ Gemini AI ไม่พร้อมให้บริการชั่วคราว');
+    }
 
     const rawText = response.text || '{}';
     let cleanJson = rawText.trim();
@@ -204,16 +288,19 @@ ${catalogMiniList}
           });
         }
 
-        const cost = typeof item.costPrice === 'string'
-          ? parseFloat(item.costPrice.replace(/,/g, '')) || 0
-          : Number(item.costPrice) || 0;
-        const qty = typeof item.quantity === 'string'
-          ? parseFloat(item.quantity.replace(/,/g, '')) || 1
-          : Math.max(1, Number(item.quantity) || 1);
+        const cost =
+          typeof item.costPrice === 'string'
+            ? parseFloat(item.costPrice.replace(/,/g, '')) || 0
+            : Number(item.costPrice) || 0;
+        const qty =
+          typeof item.quantity === 'string'
+            ? parseFloat(item.quantity.replace(/,/g, '')) || 1
+            : Math.max(1, Number(item.quantity) || 1);
 
-        let sellPrice = typeof item.sellingPrice === 'string'
-          ? parseFloat(item.sellingPrice.replace(/,/g, '')) || 0
-          : Number(item.sellingPrice) || 0;
+        let sellPrice =
+          typeof item.sellingPrice === 'string'
+            ? parseFloat(item.sellingPrice.replace(/,/g, '')) || 0
+            : Number(item.sellingPrice) || 0;
 
         if (sellPrice <= cost && cost > 0) {
           const rawSell = cost * 1.25;
@@ -247,15 +334,30 @@ ${catalogMiniList}
 
     return res.status(200).json({
       success: true,
-      model: 'gemini-3.8-flash',
+      model: usedModel,
       durationMs,
       data: parsedData,
     });
   } catch (error: any) {
     console.error('Error analyzing invoice in Vercel API:', error);
+    let errorMsg = String(error?.message || error || 'เกิดข้อผิดพลาดในการวิเคราะห์บิลด้วย Gemini AI');
+
+    // Convert raw JSON or technical 503 error into friendly Thai message
+    if (
+      errorMsg.includes('503') ||
+      errorMsg.includes('high demand') ||
+      errorMsg.includes('UNAVAILABLE')
+    ) {
+      errorMsg =
+        'โมเดล AI ของ Google มีผู้ใช้งานหนาแน่นชั่วคราว (503 High Demand) กรุณากด "ลองสแกนอีกครั้ง" หรือเลือกโมเดล "Gemini 3.1 Flash-Lite" ด้านบนเพื่อสแกนทันที';
+    } else if (errorMsg.includes('429') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+      errorMsg =
+        'โควตาการเรียกใช้งาน Gemini AI เต็มชั่วคราว กรุณารอสักครู่แล้วลองสแกนอีกครั้ง หรือเลือกโมเดล Gemini 3.1 Flash-Lite';
+    }
+
     return res.status(500).json({
       success: false,
-      error: error?.message || 'เกิดข้อผิดพลาดในการวิเคราะห์บิลด้วย Gemini AI',
+      error: errorMsg,
       durationMs: Date.now() - startTime,
     });
   }

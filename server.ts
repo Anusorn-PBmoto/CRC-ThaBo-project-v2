@@ -28,11 +28,12 @@ const ai = new GoogleGenAI({
 });
 
 // Multi-tier model candidate list for ultra-fast OCR without rate limits or timeout spikes
-const GEMINI_PRIMARY_MODEL = 'gemini-2.5-flash';
-const GEMINI_SECONDARY_MODEL = 'gemini-2.0-flash';
-const GEMINI_TERTIARY_MODEL = 'gemini-1.5-flash';
-const GEMINI_QUATERNARY_MODEL = 'gemini-3.1-flash-lite';
-const GEMINI_QUINARY_MODEL = 'gemini-3.8-flash';
+// gemini-3.8-flash: Flagship multimodal model for complex Thai receipts and tables
+// gemini-flash-latest: Stable fallback alias
+// gemini-3.1-flash-lite: Ultra-fast, 1,500 RPD quota, resilient against 503 high demand spikes
+const GEMINI_PRIMARY_MODEL = 'gemini-3.8-flash';
+const GEMINI_SECONDARY_MODEL = 'gemini-flash-latest';
+const GEMINI_TERTIARY_MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_FLASH_MODEL = GEMINI_PRIMARY_MODEL;
 const GEMINI_FALLBACK_MODEL = GEMINI_SECONDARY_MODEL;
 
@@ -40,15 +41,22 @@ const GEMINI_FALLBACK_MODEL = GEMINI_SECONDARY_MODEL;
 async function generateWithGemini(params: {
   contents: any;
   config?: any;
+  preferredModel?: string;
 }) {
-  const candidateModels = [
+  const candidateModels: string[] = [];
+  if (params.preferredModel && params.preferredModel !== 'auto') {
+    candidateModels.push(params.preferredModel);
+  }
+  const defaultList = [
     process.env.GEMINI_MODEL || GEMINI_PRIMARY_MODEL,
     GEMINI_SECONDARY_MODEL,
     GEMINI_TERTIARY_MODEL,
-    GEMINI_QUATERNARY_MODEL,
-    GEMINI_QUINARY_MODEL,
-    'gemini-flash-latest',
   ];
+  for (const m of defaultList) {
+    if (!candidateModels.includes(m)) {
+      candidateModels.push(m);
+    }
+  }
 
   let lastError: any = null;
 
@@ -82,14 +90,20 @@ async function generateWithGemini(params: {
           return result;
         }
       } catch (err: any) {
-        const errMessage = err?.message || '';
+        const errMessage = String(err?.message || '');
         console.log(
           `[Gemini AI] Model ${currentModel} attempt ${attempt} failed (${errMessage.slice(0, 80)})...`
         );
         lastError = err;
-        // If 503 or high demand, wait 1s before retry
-        if (attempt === 1 && (errMessage.includes('503') || errMessage.includes('high demand') || errMessage.includes('UNAVAILABLE') || errMessage.includes('timeout'))) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+        // If 503 or high demand, wait 1.2s before retry
+        if (
+          attempt === 1 &&
+          (errMessage.includes('503') ||
+            errMessage.includes('high demand') ||
+            errMessage.includes('UNAVAILABLE') ||
+            errMessage.includes('timeout'))
+        ) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
           continue;
         }
         break; // move to next model candidate
@@ -97,7 +111,12 @@ async function generateWithGemini(params: {
     }
   }
 
-  throw lastError || new Error('ทุกโมเดลของ Gemini กำลังประสบปัญหาการใช้งานหนาแน่น (503 High Demand) กรุณาลองใหม่อีกครั้งในอีกสักครู่');
+  throw (
+    lastError ||
+    new Error(
+      'ทุกโมเดลของ Gemini กำลังประสบปัญหาการใช้งานหนาแน่น (503 High Demand) กรุณาลองใหม่อีกครั้งในอีกสักครู่'
+    )
+  );
 }
 
 // Health check endpoint
@@ -382,7 +401,12 @@ ${catalogSummary}
 app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Promise<void> => {
   const startTime = Date.now();
   try {
-    const { imageBase64, mimeType = 'image/jpeg', catalog = [] } = req.body;
+    const {
+      imageBase64,
+      mimeType = 'image/jpeg',
+      catalog = [],
+      preferredModel = 'auto',
+    } = req.body;
 
     if (!imageBase64) {
       res.status(400).json({ error: 'ไม่พบข้อมูลรูปภาพบิล (imageBase64 is required)' });
@@ -444,6 +468,7 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
           text: systemPrompt,
         },
       ],
+      preferredModel,
       config: {
         responseMimeType: 'application/json',
         responseSchema: {

@@ -21,6 +21,9 @@ import {
   Square,
   FlipHorizontal,
   Info,
+  RotateCw,
+  Sun,
+  Zap,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem } from '../types';
@@ -77,8 +80,15 @@ const CATEGORIES = [
 
 const UNITS = ['เส้น', 'ชิ้น', 'คู่', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ชุด', 'อัน', 'แผ่น'];
 
-// Helper to compress image before uploading to Gemini API while keeping high clarity for OCR (~400KB - 800KB)
-async function compressImageFile(file: File | Blob, maxWidth = 2048, maxHeight = 2800, quality = 0.90): Promise<string> {
+export function getModelDisplayName(model: string): string {
+  if (model.includes('3.8')) return 'Gemini 3.8 Flash (แม่นยำสูงสุด)';
+  if (model.includes('3.1') || model.includes('lite')) return 'Gemini 3.1 Flash-Lite (ความเร็วสูง/โควตาสูง)';
+  if (model.includes('flash')) return 'Gemini Flash (มาตรฐาน)';
+  return model;
+}
+
+// Helper to compress image before uploading to Gemini API while keeping high clarity for OCR (~400KB - 750KB)
+async function compressImageFile(file: File | Blob, maxWidth = 1600, maxHeight = 2200, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -126,6 +136,51 @@ async function compressImageFile(file: File | Blob, maxWidth = 2048, maxHeight =
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+}
+
+// Rotate image 90 degrees clockwise
+async function rotateImageFile(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.height;
+      canvas.height = img.width;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((90 * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+// Boost contrast for faint or thermal receipts
+async function boostImageContrast(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(dataUrl);
+        return;
+      }
+      ctx.filter = 'contrast(135%) brightness(105%)';
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
   });
 }
 
@@ -229,6 +284,12 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
+
+  // AI Model Selection state: 'auto' | 'gemini-3.8-flash' | 'gemini-flash-latest' | 'gemini-3.1-flash-lite'
+  const [selectedModel, setSelectedModel] = useState<'auto' | 'gemini-3.8-flash' | 'gemini-flash-latest' | 'gemini-3.1-flash-lite'>('auto');
+  const [usedModel, setUsedModel] = useState<string>('gemini-3.8-flash');
+  const [isRotating, setIsRotating] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
 
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -345,11 +406,41 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
     setAnalysisError(null);
   };
 
+  // Handle rotate image 90 degrees
+  const handleRotateImage = async () => {
+    if (!imagePreview || isRotating) return;
+    setIsRotating(true);
+    try {
+      const rotated = await rotateImageFile(imagePreview);
+      setImagePreview(rotated);
+    } catch (e) {
+      console.warn('Rotate failed:', e);
+    } finally {
+      setIsRotating(false);
+    }
+  };
+
+  // Handle boost image contrast for faint receipts
+  const handleEnhanceImage = async () => {
+    if (!imagePreview || isEnhancing) return;
+    setIsEnhancing(true);
+    try {
+      const enhanced = await boostImageContrast(imagePreview);
+      setImagePreview(enhanced);
+    } catch (e) {
+      console.warn('Enhance failed:', e);
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
   // Call Server-side Gemini API (/api/gemini/analyze-invoice)
-  const handleAnalyzeBill = async () => {
+  const handleAnalyzeBill = async (overrideModel?: string) => {
     if (!imagePreview) return;
     setIsAnalyzing(true);
     setAnalysisError(null);
+
+    const modelToUse = overrideModel || selectedModel;
 
     try {
       // Send only a lightweight sample (first 25 items) to keep payload small and fast
@@ -368,6 +459,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
           imageBase64: imagePreview,
           mimeType: 'image/jpeg',
           catalog: payloadCatalog,
+          preferredModel: modelToUse,
         }),
       });
 
@@ -383,7 +475,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
         } else if (res.status === 413) {
           throw new Error('รูปภาพมีขนาดไฟล์ใหญ่เกินไป กรุณาถ่ายภาพใหม่หรือลดขนาดภาพ');
         } else if (res.status === 504 || res.status === 502) {
-          throw new Error('การประมวลผลบิลใช้เวลานานเกินไป กรุณากดลองสแกนใหม่อีกครั้ง');
+          throw new Error('การประมวลผลบิลใช้เวลานานเกินไป กรุณากด "ลองสแกนอีกครั้ง" หรือเลือกโมเดล Gemini Flash-Lite');
         }
         throw new Error(
           `เกิดข้อผิดพลาดในการรับข้อมูลจากเซิร์ฟเวอร์ (${res.status}): ${
@@ -397,6 +489,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       }
 
       const data: BillData = result.data;
+      setUsedModel(result.model || (modelToUse === 'auto' ? 'gemini-3.8-flash' : modelToUse));
       setSupplier(data.supplier || 'ร้านค้าคู่ค้า');
       setInvoiceNo(data.invoiceNo || `BILL-${Date.now().toString().slice(-4)}`);
       setInvoiceDate(data.date || new Date().toISOString().slice(0, 10));
