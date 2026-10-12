@@ -17,6 +17,27 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
+function safeStringify(obj: any, space?: number): string {
+  const seen = new WeakSet();
+  return JSON.stringify(
+    obj,
+    (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return '[Circular Reference]';
+        }
+        seen.add(value);
+      }
+      if (typeof value === 'function' || typeof value === 'symbol') {
+        return undefined;
+      }
+      return value;
+    },
+    space
+  );
+}
+
+
 // Initialize GoogleGenAI server-side with telemetry User-Agent
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -666,7 +687,7 @@ app.post('/api/gemini/voice-search', async (req: Request, res: Response): Promis
 - "ของที่หมดสต็อกมีอะไรบ้าง" -> กรองสินค้าที่มี actualQty = 0
 
 ฐานข้อมูลสินค้าในร้าน (${catalogList.length} รายการ):
-${JSON.stringify(catalogList.slice(0, 50), null, 1)}
+${safeStringify(catalogList.slice(0, 50), 1)}
 
 หน้าที่ของคุณ:
 1. วิเคราะห์เจตนาของผู้ใช้ (Intent)
@@ -795,7 +816,7 @@ app.post('/api/gemini/stock-advisor', async (req: Request, res: Response): Promi
 - สินค้าที่ยอดนับจริงไม่ตรงกับระบบ: ${discrepancy.length} รายการ
 
 ข้อมูลสินค้าในระบบ (ตัวอย่าง 50 รายการ):
-${JSON.stringify(inventorySnapshot, null, 2)}
+${safeStringify(inventorySnapshot, 2)}
 
 โจทย์ที่ต้องทำ:
 ${instruction}

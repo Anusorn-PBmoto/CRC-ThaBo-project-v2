@@ -28,6 +28,7 @@ import {
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem } from '../types';
 import { cleanLocationName } from '../utils/stockUtils';
+import { safeStringify } from '../utils/safeJSON';
 
 export interface ExtractedBillItem {
   id: string;
@@ -455,7 +456,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       const res = await fetch('/api/gemini/analyze-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: safeStringify({
           imageBase64: imagePreview,
           mimeType: 'image/jpeg',
           catalog: payloadCatalog,
@@ -1032,7 +1033,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                   {!isAnalyzing && (
                     <button
                       type="button"
-                      onClick={handleAnalyzeBill}
+                      onClick={() => handleAnalyzeBill()}
                       className="w-full py-3 px-4 bg-gradient-to-r from-[#F6C90E] via-amber-400 to-[#F6C90E] hover:from-[#E5B800] hover:to-amber-500 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-[#F6C90E]/20 active:scale-[0.98] transition-all"
                     >
                       <Sparkles className="w-5 h-5 fill-slate-950" />

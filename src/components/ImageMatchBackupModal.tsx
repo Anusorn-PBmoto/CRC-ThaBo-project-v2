@@ -19,6 +19,7 @@ import {
   FolderSync,
 } from 'lucide-react';
 import { ProductItem } from '../types';
+import { safeStringify } from '../utils/safeJSON';
 import {
   SYSTEM_BACKUP_IMAGES,
   SystemBackupImage,
@@ -219,7 +220,7 @@ export const ImageMatchBackupModal: React.FC<ImageMatchBackupModalProps> = ({
         products: products,
       };
 
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], {
+      const blob = new Blob([safeStringify(backupData, 2)], {
         type: 'application/json',
       });
       const url = URL.createObjectURL(blob);
