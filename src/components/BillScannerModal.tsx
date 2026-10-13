@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { ProductItem, TireItem } from '../types';
-import { cleanLocationName } from '../utils/stockUtils';
+import { cleanLocationName, getProductStockBreakdown } from '../utils/stockUtils';
 import { safeStringify } from '../utils/safeJSON';
 
 export interface ExtractedBillItem {
@@ -304,6 +304,11 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
   const [extractedItems, setExtractedItems] = useState<ExtractedBillItem[]>([]);
   const [destinationLocation, setDestinationLocation] = useState<'front' | 'warehouse'>('front');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Manual Merge state
+  const [mergingItemId, setMergingItemId] = useState<string | null>(null);
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState('');
 
   // References
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -608,11 +613,12 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
   const handleConfirmSave = async () => {
     const selectedItems = extractedItems.filter((it) => it.selected);
     if (selectedItems.length === 0) {
-      alert('กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการเพื่อบันทึก');
+      setSaveError('กรุณาเลือกรายการสินค้าอย่างน้อย 1 รายการเพื่อบันทึก');
       return;
     }
 
     setIsSaving(true);
+    setSaveError(null);
     try {
       const itemsToCreate: Array<Omit<ProductItem, 'id'>> = [];
       const itemsToUpdate: Array<{ id: string; updates: Partial<ProductItem> }> = [];
@@ -622,11 +628,15 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
         const cost = Number(item.costPrice) || 0;
         const sell = Number(item.sellingPrice) || 0;
 
-        if (item.matchedProduct && !item.isNew) {
-          // Existing product: increase stock and update cost/sell price
-          const matched = item.matchedProduct;
-          const currentFront = matched.frontQty ?? 0;
-          const currentWarehouse = matched.warehouseQty ?? 0;
+        const matched =
+          item.matchedProduct ||
+          (item.matchedCatalogId ? existingCatalog.find((c) => c.id === item.matchedCatalogId) : null);
+
+        if (matched && !item.isNew) {
+          // Existing product: increase stock accurately using getProductStockBreakdown
+          const breakdown = getProductStockBreakdown(matched);
+          const currentFront = breakdown.frontQty;
+          const currentWarehouse = breakdown.warehouseQty;
 
           const newFront = destinationLocation === 'front' ? currentFront + qty : currentFront;
           const newWarehouse = destinationLocation === 'warehouse' ? currentWarehouse + qty : currentWarehouse;
@@ -699,7 +709,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       handleClose();
     } catch (err: any) {
       console.error('Batch save error:', err);
-      alert(`เกิดข้อผิดพลาดในการบันทึก: ${err?.message || 'ไม่สามารถบันทึกได้'}`);
+      setSaveError(err?.message || 'ไม่สามารถบันทึกสินค้าได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsSaving(false);
     }
@@ -1116,6 +1126,18 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                   </div>
                 </div>
 
+                {saveError && (
+                  <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <span>{saveError}</span>
+                    </div>
+                    <button type="button" onClick={() => setSaveError(null)} className="text-rose-400 hover:text-white">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Editable Bill Meta */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
                   <div>
@@ -1215,17 +1237,37 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                           </button>
                           <span className="text-xs font-bold text-[#A0ABB5]">#{idx + 1}</span>
 
-                          {/* New vs Matched Badge */}
+                          {/* New vs Matched Badge & Manual Merge Button */}
                           {item.isNew ? (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
-                              <Sparkles className="w-3 h-3 text-emerald-400" />
-                              สินค้าใหม่ ✨
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-emerald-400" />
+                                สินค้าใหม่ ✨
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setMergingItemId(item.id)}
+                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 flex items-center gap-1 transition-all"
+                                title="คลิกเพื่อเลือกสินค้าในคลังมาผูก/รวมกับรายการนี้"
+                              >
+                                <span>🔗 ผูกกับสินค้าเดิม (Merge)</span>
+                              </button>
+                            </div>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1">
-                              <RefreshCw className="w-3 h-3 text-sky-400" />
-                              มีในระบบแล้ว (+เพิ่มสต็อก)
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center gap-1">
+                                <RefreshCw className="w-3 h-3 text-sky-400" />
+                                มีในระบบแล้ว ({item.matchedProduct?.name || ''})
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setMergingItemId(item.id)}
+                                className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-700 text-slate-300 hover:bg-slate-600 flex items-center gap-1 transition-all"
+                                title="เปลี่ยนสินค้าที่ผูก หรือตั้งเป็นสินค้าใหม่"
+                              >
+                                <span>เปลี่ยนสินค้า / แยกเป็นสินค้าใหม่</span>
+                              </button>
+                            </div>
                           )}
                         </div>
 
@@ -1457,6 +1499,138 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Manual Merge Catalog Modal */}
+      {mergingItemId && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#252C33] border border-[#475662] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="px-5 py-4 border-b border-[#3A4750] flex items-center justify-between bg-[#20262D]">
+              <div>
+                <h3 className="text-sm font-bold text-[#EEEEEE] flex items-center gap-2">
+                  <span className="text-[#F6C90E]">🔗</span> ผูกรายการบิลนี้กับสินค้าที่มีอยู่แล้วในคลัง (Manual Merge)
+                </h3>
+                <p className="text-[11px] text-[#A0ABB5] mt-0.5">
+                  เลือกสินค้าในคลังที่ตรงกับรายการนี้ เพื่อให้อัปสต็อกเข้าสินค้าเดิมแทนการสร้างสินค้าใหม่
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMergingItemId(null)}
+                className="p-1.5 text-[#A0ABB5] hover:text-[#EEEEEE] rounded-lg hover:bg-[#3A4750]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-[#3A4750] bg-[#20262D]/50 flex flex-col gap-3">
+              <input
+                type="text"
+                value={catalogSearchQuery}
+                onChange={(e) => setCatalogSearchQuery(e.target.value)}
+                placeholder="🔍 ค้นหาชื่อสินค้า, แบรนด์, หรือบาร์โค้ดในคลัง..."
+                className="w-full bg-[#20262D] border border-[#475662] rounded-xl px-3 py-2 text-xs text-[#EEEEEE] focus:outline-none focus:border-[#F6C90E]"
+                autoFocus
+              />
+
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateItem(mergingItemId, {
+                    matchedCatalogId: null,
+                    matchedProduct: null,
+                    isNew: true,
+                  });
+                  setMergingItemId(null);
+                }}
+                className="w-full py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>✨ ตั้งเป็นสินค้าใหม่ (ไม่ผูกกับใคร สร้างรายการใหม่)</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {existingCatalog
+                .filter((p) => {
+                  const q = catalogSearchQuery.toLowerCase();
+                  if (!q) return true;
+                  return (
+                    p.name?.toLowerCase().includes(q) ||
+                    p.brand?.toLowerCase().includes(q) ||
+                    p.barcode?.toLowerCase().includes(q) ||
+                    p.category?.toLowerCase().includes(q)
+                  );
+                })
+                .slice(0, 50)
+                .map((product) => (
+                  <div
+                    key={product.id}
+                    className="p-3 bg-[#20262D] hover:bg-[#2A343D] border border-[#3A4750] rounded-xl flex items-center justify-between gap-3 transition-all"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#252C33] border border-[#475662] flex items-center justify-center overflow-hidden shrink-0">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <Tag className="w-5 h-5 text-[#A0ABB5]" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#EEEEEE]">{product.name}</div>
+                        <div className="text-[10px] text-[#A0ABB5] flex items-center gap-2 mt-0.5">
+                          <span>บาร์โค้ด: <strong className="font-mono text-[#F6C90E]">{product.barcode || '-'}</strong></span>
+                          <span>แบรนด์: {product.brand || '-'}</span>
+                          <span>หมวดหมู่: {product.category || '-'}</span>
+                          <span>สต็อกเดิม: <strong className="text-emerald-400">{product.systemQty ?? product.actualQty ?? 0} {product.unit}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!mergingItemId) return;
+                        const billItem = extractedItems.find((it) => it.id === mergingItemId);
+                        handleUpdateItem(mergingItemId, {
+                          matchedCatalogId: product.id,
+                          matchedProduct: product,
+                          isNew: false,
+                          name: product.name,
+                          brand: product.brand || billItem?.brand || '',
+                          category: product.category || billItem?.category || 'อะไหล่ทั่วไป',
+                          unit: product.unit || billItem?.unit || 'ชิ้น',
+                          costPrice: billItem && billItem.costPrice > 0 ? billItem.costPrice : (product.costPrice || 0),
+                          sellingPrice: billItem && billItem.sellingPrice > 0 ? billItem.sellingPrice : (product.sellingPrice || 0),
+                          barcode: product.barcode || billItem?.barcode || '',
+                        });
+                        setMergingItemId(null);
+                      }}
+                      className="px-3 py-1.5 bg-[#F6C90E] hover:bg-[#E5B800] text-slate-950 font-black rounded-xl text-xs shrink-0 flex items-center gap-1 shadow-sm active:scale-95 transition-all"
+                    >
+                      <span>🔗 เลือกผูกสินค้านี้</span>
+                    </button>
+                  </div>
+                ))}
+
+              {existingCatalog.length === 0 && (
+                <div className="text-center py-10 text-xs text-[#A0ABB5]">
+                  ไม่มีสินค้าในคลัง
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-[#3A4750] bg-[#20262D] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setMergingItemId(null)}
+                className="px-4 py-2 bg-[#3A4750] hover:bg-[#43525D] text-[#EEEEEE] rounded-xl text-xs font-semibold"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

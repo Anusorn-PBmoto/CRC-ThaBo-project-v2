@@ -575,12 +575,17 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
             if (cleanBarcode && c.barcode && c.barcode.replace(/[^0-9a-zA-Z]/g, '').toLowerCase() === cleanBarcode) {
               return true;
             }
-            const cName = `${c.brand || ''} ${c.size || ''} ${c.name || ''}`.toLowerCase();
-            return (
-              (item.size && cName.includes(item.size.toLowerCase())) ||
-              (item.name && cName.includes(item.name.toLowerCase())) ||
-              cName.includes(itemSearch.trim())
-            );
+            const cName = `${c.brand || ''} ${c.size || ''} ${c.name || ''}`.toLowerCase().trim();
+            const rawName = (item.name || item.rawName || '').toLowerCase().trim();
+            if (rawName && cName && (rawName === cName || (rawName.length >= 8 && cName.includes(rawName)))) {
+              return true;
+            }
+            if (item.brand && item.size && item.brand.length >= 2 && item.size.length >= 3) {
+              if (cName.includes(item.brand.toLowerCase()) && cName.includes(item.size.toLowerCase())) {
+                return true;
+              }
+            }
+            return false;
           });
         }
 

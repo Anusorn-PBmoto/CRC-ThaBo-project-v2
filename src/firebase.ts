@@ -799,6 +799,33 @@ export async function saveAuditSession(
   }
 }
 
+// Add single Audit Log to Firestore
+export async function addAuditLog(
+  log: Omit<AuditLog, 'id'>,
+  customId?: string
+): Promise<string> {
+  const newRef = customId ? doc(db, 'audit_logs', customId) : doc(collection(db, 'audit_logs'));
+  const newId = newRef.id;
+
+  try {
+    const payload = sanitizeForFirestore({
+      ...log,
+      id: newId,
+      productId: log.productId || log.tireId || '',
+      productName: log.productName || log.tireName || '',
+      timestamp: log.timestamp || new Date().toISOString(),
+    });
+    await setDoc(newRef, payload);
+  } catch (error) {
+    if (isQuotaError(error)) {
+      markQuotaExhausted();
+    }
+    console.warn('addAuditLog offline/error:', error);
+  }
+  return newId;
+}
+
+
 // Real-time Transactions Listener
 export function subscribeToTransactions(
   onData: (transactions: Transaction[]) => void,

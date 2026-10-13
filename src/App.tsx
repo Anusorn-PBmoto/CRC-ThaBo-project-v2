@@ -29,6 +29,7 @@ import {
   updateCustomerSpend,
   subscribeToCustomerTiers,
   saveCustomerTiers,
+  addAuditLog,
   db,
 } from './firebase';
 import { collection, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
@@ -635,11 +636,29 @@ export default function App() {
 
       if (id) {
         // Optimistic update
+        const oldItem = tires.find((t) => t.id === id);
         nextList = tires.map((t) =>
           t.id === id ? { ...t, ...sanitizedTireData, updatedAt: new Date().toISOString() } : t
         );
         persistTires(nextList);
         await updateTireItem(id, sanitizedTireData);
+
+        // Record history log for product update
+        const logId = `log-edit-${Date.now()}`;
+        const log: AuditLog = {
+          id: logId,
+          productId: id,
+          productName: sanitizedTireData.name,
+          brand: sanitizedTireData.brand || '',
+          diff: (sanitizedTireData.actualQty || 0) - (oldItem?.actualQty || 0),
+          previousQty: oldItem?.actualQty || 0,
+          newQty: sanitizedTireData.actualQty || 0,
+          action: '✏️ แก้ไขข้อมูลสินค้า',
+          timestamp: new Date().toISOString(),
+          note: `แก้ไขข้อมูลสินค้า/สต็อก (${sanitizedTireData.unit || 'ชิ้น'}) ทุน ฿${sanitizedTireData.costPrice || 0} / ขาย ฿${sanitizedTireData.sellingPrice || 0}`,
+        };
+        persistLogs((prev) => [log, ...prev.slice(0, 99)]);
+        addAuditLog(log, logId).catch(() => {});
       } else {
         // Generate permanent Firestore document ID upfront
         const newId = doc(collection(db, 'products')).id;
@@ -652,6 +671,43 @@ export default function App() {
         persistTires(nextList);
 
         await addNewTire(sanitizedTireData, newId);
+
+        // Record history log for adding new product
+        const logId = `log-new-${Date.now()}`;
+        const log: AuditLog = {
+          id: logId,
+          productId: newId,
+          productName: newTire.name,
+          brand: newTire.brand || '',
+          diff: newTire.actualQty || 0,
+          previousQty: 0,
+          newQty: newTire.actualQty || 0,
+          action: '✨ เพิ่มสินค้าใหม่',
+          timestamp: new Date().toISOString(),
+          note: `เพิ่มสินค้าใหม่เข้าระบบ จำนวน ${newTire.actualQty || 0} ${newTire.unit || 'ชิ้น'} (ทุน ฿${newTire.costPrice || 0} / ขาย ฿${newTire.sellingPrice || 0})`,
+        };
+        persistLogs((prev) => [log, ...prev.slice(0, 99)]);
+        addAuditLog(log, logId).catch(() => {});
+
+        // Also record as transaction entry if initial stock > 0
+        if ((newTire.actualQty || 0) > 0) {
+          const newTx: Transaction = {
+            id: `tx-init-${Date.now()}`,
+            type: 'purchase',
+            productId: newId,
+            productName: newTire.name,
+            brand: newTire.brand || '',
+            quantity: newTire.actualQty || 1,
+            unitPrice: newTire.costPrice || 0,
+            totalPrice: (newTire.actualQty || 1) * (newTire.costPrice || 0),
+            customerOrSupplier: 'เพิ่มสินค้าใหม่เข้าคลัง',
+            unit: newTire.unit || 'ชิ้น',
+            locationTarget: (newTire.frontQty ?? 0) > 0 ? 'front' : 'warehouse',
+            note: 'บันทึกสต็อกเริ่มต้นเมื่อเพิ่มสินค้าใหม่',
+            createdAt: new Date().toISOString(),
+          };
+          persistTransactions((prev) => [newTx, ...prev.slice(0, 99)]);
+        }
       }
 
       // Cache latest CSV data quietly in background without triggering browser download popup
@@ -708,9 +764,12 @@ export default function App() {
     itemsToUpdate: Array<{ id: string; updates: Partial<ProductItem> }>
   ) => {
     let nextList = [...tires];
+    const newLogs: AuditLog[] = [];
+    const newTxs: Transaction[] = [];
 
     // 1. Process existing products updates
     for (const updateReq of itemsToUpdate) {
+      const existingItem = tires.find((t) => t.id === updateReq.id);
       nextList = nextList.map((t) =>
         t.id === updateReq.id
           ? { ...t, ...updateReq.updates, updatedAt: new Date().toISOString() }
@@ -720,6 +779,43 @@ export default function App() {
         updateTireItem(updateReq.id, updateReq.updates).catch((err) =>
           console.warn('Failed to update product from bill in Firestore:', err)
         );
+      }
+
+      if (existingItem) {
+        const prevQty = existingItem.actualQty ?? 0;
+        const newQty = updateReq.updates.actualQty ?? prevQty;
+        const diff = newQty - prevQty;
+        const logId = `log-bill-upd-${Date.now()}-${updateReq.id}`;
+        const log: AuditLog = {
+          id: logId,
+          productId: updateReq.id,
+          productName: existingItem.name,
+          brand: existingItem.brand || '',
+          diff,
+          previousQty: prevQty,
+          newQty,
+          action: '📥 รับเข้าสต็อก (จากบิล AI)',
+          timestamp: new Date().toISOString(),
+          note: `รับเข้าจากบิล +${diff} ${existingItem.unit || 'ชิ้น'} (ทุน ฿${updateReq.updates.costPrice || existingItem.costPrice || 0} / ขาย ฿${updateReq.updates.sellingPrice || existingItem.sellingPrice || 0})`,
+        };
+        newLogs.push(log);
+        addAuditLog(log, logId).catch(() => {});
+
+        newTxs.push({
+          id: `tx-bill-upd-${Date.now()}-${updateReq.id}`,
+          type: 'purchase',
+          productId: updateReq.id,
+          productName: existingItem.name,
+          brand: existingItem.brand || '',
+          quantity: diff > 0 ? diff : 1,
+          unitPrice: updateReq.updates.costPrice || existingItem.costPrice || 0,
+          totalPrice: (diff > 0 ? diff : 1) * (updateReq.updates.costPrice || existingItem.costPrice || 0),
+          customerOrSupplier: 'รับเข้าจากบิลส่งของ (AI)',
+          unit: existingItem.unit || 'ชิ้น',
+          locationTarget: 'front',
+          note: `สแกนบิลรับเข้าสต็อก +${diff} ${existingItem.unit || 'ชิ้น'}`,
+          createdAt: new Date().toISOString(),
+        });
       }
     }
 
@@ -744,6 +840,45 @@ export default function App() {
           console.warn('Failed to add new product from bill to Firestore:', err)
         );
       }
+
+      const logId = `log-bill-new-${Date.now()}-${newId}`;
+      const log: AuditLog = {
+        id: logId,
+        productId: newId,
+        productName: newProduct.name,
+        brand: newProduct.brand || '',
+        diff: newProduct.actualQty || 0,
+        previousQty: 0,
+        newQty: newProduct.actualQty || 0,
+        action: '✨ เพิ่มสินค้าใหม่ (จากบิล AI)',
+        timestamp: new Date().toISOString(),
+        note: `สแกนบิลสร้างสินค้าใหม่ ${newProduct.actualQty} ${newProduct.unit} (ทุน ฿${newProduct.costPrice} / ขาย ฿${newProduct.sellingPrice})`,
+      };
+      newLogs.push(log);
+      addAuditLog(log, logId).catch(() => {});
+
+      newTxs.push({
+        id: `tx-bill-new-${Date.now()}-${newId}`,
+        type: 'purchase',
+        productId: newId,
+        productName: newProduct.name,
+        brand: newProduct.brand || '',
+        quantity: newProduct.actualQty || 1,
+        unitPrice: newProduct.costPrice || 0,
+        totalPrice: (newProduct.actualQty || 1) * (newProduct.costPrice || 0),
+        customerOrSupplier: 'รับเข้าจากบิลส่งของ (AI)',
+        unit: newProduct.unit || 'ชิ้น',
+        locationTarget: (newProduct.frontQty ?? 0) > 0 ? 'front' : 'warehouse',
+        note: `สแกนบิลเพิ่มสินค้าใหม่ ${newProduct.name}`,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    if (newLogs.length > 0) {
+      persistLogs((prev) => [...newLogs, ...prev.slice(0, 99)]);
+    }
+    if (newTxs.length > 0) {
+      persistTransactions((prev) => [...newTxs, ...prev.slice(0, 99)]);
     }
 
     nextList = [...createdItems, ...nextList];

@@ -138,6 +138,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
@@ -257,8 +258,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
     if (!name.trim()) {
-      alert('กรุณากรอกชื่อสินค้า');
+      setValidationError('กรุณาระบุชื่อสินค้า');
       return;
     }
 
@@ -342,6 +344,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-4 space-y-3.5 overflow-y-auto flex-1 text-xs">
+          {validationError && (
+            <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center justify-between">
+              <span>⚠️ {validationError}</span>
+              <button type="button" onClick={() => setValidationError(null)} className="text-rose-400 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           {/* AI Bill Scanner Quick Shortcut Banner for New Products */}
           {onOpenBillScanner && !currentItem && (
             <div className="p-3 bg-gradient-to-r from-amber-500/15 via-[#F6C90E]/10 to-amber-500/15 border border-[#F6C90E]/40 rounded-2xl flex items-center justify-between gap-2.5 animate-in fade-in">
