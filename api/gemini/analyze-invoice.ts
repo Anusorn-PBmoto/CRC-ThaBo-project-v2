@@ -6,10 +6,10 @@ export const config = {
 };
 
 // Valid models according to Google GenAI standards:
-// 1. gemini-3.8-flash (Flagship multimodal OCR for complex tables & Thai text)
+// 1. gemini-3.1-flash-lite (Ultra-fast, high quota 1500 RPD, resilient against 503 high demand)
 // 2. gemini-flash-latest (Stable high-speed Flash alias)
-// 3. gemini-3.1-flash-lite (Ultra-fast, high quota 1500 RPD, resilient against 503 high demand)
-const VALID_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+// 3. gemini-3.8-flash (Multimodal fallback)
+const VALID_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
 export default async function handler(req: Request, res: Response) {
   // Support CORS if needed
@@ -158,7 +158,7 @@ ${catalogMiniList}
                   barcode: { type: Type.STRING },
                   matchedCatalogId: { type: Type.STRING, nullable: true },
                 },
-                required: ['rawName', 'name', 'quantity', 'costPrice'],
+                required: ['rawName', 'name'],
               },
             },
           },
@@ -170,61 +170,40 @@ ${catalogMiniList}
         callConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
       }
 
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const genPromise = ai.models.generateContent({
-            model,
-            contents: [
-              {
-                inlineData: {
-                  mimeType: detectedMime || 'image/jpeg',
-                  data: cleanBase64,
-                },
+      try {
+        const genPromise = ai.models.generateContent({
+          model,
+          contents: [
+            {
+              inlineData: {
+                mimeType: detectedMime || 'image/jpeg',
+                data: cleanBase64,
               },
-              {
-                text: systemPrompt,
-              },
-            ],
-            config: callConfig,
-          });
+            },
+            {
+              text: systemPrompt,
+            },
+          ],
+          config: callConfig,
+        });
 
-          // Timeout protection (22 seconds per call to avoid 60s Vercel execution limit)
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout with model ${model}`)), 22000)
-          );
+        // Timeout protection (18 seconds per call)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout with model ${model}`)), 18000)
+        );
 
-          const result: any = await Promise.race([genPromise, timeoutPromise]);
-          if (result) {
-            response = result;
-            usedModel = model;
-            break;
-          }
-        } catch (err: any) {
-          const msg = String(err?.message || err || '');
-          console.warn(`[Gemini OCR] Model ${model} attempt ${attempt} failed: ${msg.slice(0, 100)}`);
-          lastError = err;
-
-          const isTransient =
-            msg.includes('503') ||
-            msg.includes('high demand') ||
-            msg.includes('UNAVAILABLE') ||
-            msg.includes('429') ||
-            msg.includes('RESOURCE_EXHAUSTED') ||
-            msg.includes('Timeout') ||
-            msg.includes('quota');
-
-          if (attempt === 1 && isTransient) {
-            // Wait 1.2s before quick retry
-            await new Promise((r) => setTimeout(r, 1200));
-            continue;
-          }
-          // Move to next candidate model
+        const result: any = await Promise.race([genPromise, timeoutPromise]);
+        if (result) {
+          response = result;
+          usedModel = model;
           break;
         }
-      }
-
-      if (response) {
-        break;
+      } catch (err: any) {
+        const msg = String(err?.message || err || '');
+        console.warn(`[Gemini OCR] Model ${model} unavailable: ${msg.slice(0, 90)}. Fast failover...`);
+        lastError = err;
+        // Instantly try next model without getting stuck on 503/429
+        continue;
       }
     }
 

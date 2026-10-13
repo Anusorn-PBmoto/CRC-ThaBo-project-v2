@@ -5,7 +5,7 @@ export const config = {
   maxDuration: 60,
 };
 
-const VALID_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+const VALID_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
 export default async function handler(req: Request, res: Response) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -125,46 +125,38 @@ ${catalogSummary}
         callConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
       }
 
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const genPromise = ai.models.generateContent({
-            model,
-            contents: [
-              {
-                inlineData: {
-                  mimeType: detectedMime || 'image/jpeg',
-                  data: cleanBase64,
-                },
+      try {
+        const genPromise = ai.models.generateContent({
+          model,
+          contents: [
+            {
+              inlineData: {
+                mimeType: detectedMime || 'image/jpeg',
+                data: cleanBase64,
               },
-              {
-                text: systemPrompt,
-              },
-            ],
-            config: callConfig,
-          });
+            },
+            {
+              text: systemPrompt,
+            },
+          ],
+          config: callConfig,
+        });
 
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout with model ${model}`)), 22000)
-          );
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout with model ${model}`)), 18000)
+        );
 
-          const result: any = await Promise.race([genPromise, timeoutPromise]);
-          if (result) {
-            response = result;
-            usedModel = model;
-            break;
-          }
-        } catch (err: any) {
-          lastError = err;
-          const msg = String(err?.message || '');
-          if (
-            attempt === 1 &&
-            (msg.includes('503') || msg.includes('high demand') || msg.includes('UNAVAILABLE'))
-          ) {
-            await new Promise((r) => setTimeout(r, 1200));
-            continue;
-          }
+        const result: any = await Promise.race([genPromise, timeoutPromise]);
+        if (result) {
+          response = result;
+          usedModel = model;
           break;
         }
+      } catch (err: any) {
+        lastError = err;
+        const msg = String(err?.message || '');
+        console.warn(`[Gemini Tire OCR] Model ${model} unavailable: ${msg.slice(0, 90)}. Fast failover...`);
+        continue;
       }
 
       if (response) break;

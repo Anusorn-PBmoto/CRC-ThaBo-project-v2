@@ -82,9 +82,9 @@ const CATEGORIES = [
 const UNITS = ['เส้น', 'ชิ้น', 'คู่', 'กล่อง', 'ลัง', 'ขวด', 'กระป๋อง', 'ชุด', 'อัน', 'แผ่น'];
 
 export function getModelDisplayName(model: string): string {
-  if (model.includes('3.8')) return 'Gemini 3.8 Flash (แม่นยำสูงสุด)';
-  if (model.includes('3.1') || model.includes('lite')) return 'Gemini 3.1 Flash-Lite (ความเร็วสูง/โควตาสูง)';
-  if (model.includes('flash')) return 'Gemini Flash (มาตรฐาน)';
+  if (model.includes('3.1') || model.includes('lite')) return 'Gemini 3.1 Flash-Lite (เสถียร & 1,500 ครั้ง/วัน)';
+  if (model.includes('3.8')) return 'Gemini 3.8 Flash (โมเดลรอง)';
+  if (model.includes('flash')) return 'Gemini Flash';
   return model;
 }
 
@@ -286,9 +286,9 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // AI Model Selection state: 'auto' | 'gemini-3.8-flash' | 'gemini-flash-latest' | 'gemini-3.1-flash-lite'
-  const [selectedModel, setSelectedModel] = useState<'auto' | 'gemini-3.8-flash' | 'gemini-flash-latest' | 'gemini-3.1-flash-lite'>('auto');
-  const [usedModel, setUsedModel] = useState<string>('gemini-3.8-flash');
+  // AI Model Selection state: 'auto' | 'gemini-3.1-flash-lite' | 'gemini-3.8-flash' | 'gemini-flash-latest'
+  const [selectedModel, setSelectedModel] = useState<'auto' | 'gemini-3.1-flash-lite' | 'gemini-3.8-flash' | 'gemini-flash-latest'>('auto');
+  const [usedModel, setUsedModel] = useState<string>('gemini-3.1-flash-lite');
   const [isRotating, setIsRotating] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
 
@@ -495,7 +495,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       }
 
       const data: BillData = result.data;
-      setUsedModel(result.model || (modelToUse === 'auto' ? 'gemini-3.8-flash' : modelToUse));
+      setUsedModel(result.model || (modelToUse === 'auto' ? 'gemini-3.1-flash-lite' : modelToUse));
       setSupplier(data.supplier || 'ร้านค้าคู่ค้า');
       setInvoiceNo(data.invoiceNo || `BILL-${Date.now().toString().slice(-4)}`);
       setInvoiceDate(data.date || new Date().toISOString().slice(0, 10));
