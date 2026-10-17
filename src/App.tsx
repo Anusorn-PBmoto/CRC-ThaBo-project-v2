@@ -158,8 +158,10 @@ export default function App() {
       .filter((p) => !deletedIds.includes(p.id))
       .map((p: ProductItem) => {
         const recImg = resolveProductImage(p);
+        const normalizedCategory = p.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : p.category;
         return {
           ...p,
+          category: normalizedCategory,
           imageUrl: (!p.imageUrl || p.imageUrl.trim() === '') && recImg ? recImg : p.imageUrl,
           frontLocation: cleanLocationName(p.frontLocation),
           location: cleanLocationName(p.location || 'RACK A-01'),
@@ -460,8 +462,12 @@ export default function App() {
                   const hasLocalFront = localItem && typeof localItem.frontQty === 'number';
                   const hasRemoteFront = typeof remoteItem.frontQty === 'number';
 
+                  const effectiveCategory =
+                    remoteItem.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : remoteItem.category;
+
                   return {
                     ...remoteItem,
+                    category: effectiveCategory,
                     imageUrl: effectiveImg,
                     frontQty: hasRemoteFront ? remoteItem.frontQty : hasLocalFront ? localItem.frontQty : undefined,
                     warehouseQty: hasRemoteFront ? remoteItem.warehouseQty : hasLocalFront ? localItem.warehouseQty : undefined,
@@ -629,6 +635,7 @@ export default function App() {
     try {
       const sanitizedTireData: Omit<TireItem, 'id'> = {
         ...tireData,
+        category: tireData.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : tireData.category,
         frontLocation: cleanLocationName(tireData.frontLocation),
         location: cleanLocationName(tireData.location || 'RACK A-01'),
       };
@@ -1556,6 +1563,7 @@ export default function App() {
             {currentTab === 'inventory' && (
               <InventoryListTab
                 tires={tires}
+                isDesktopMode={isDesktopMode}
                 onOpenAddModal={() => {
                   setEditingTire(null);
                   setIsAddEditOpen(true);

@@ -121,6 +121,15 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
       }
     }
 
+    // 5. Match by ending digits of barcode (e.g. typing or scanning last 4-6 digits)
+    if (!matched && cleanDigits.length >= 4) {
+      matched = tires.find((t) => {
+        if (!t.barcode) return false;
+        const tBarcode = t.barcode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return tBarcode.endsWith(cleanDigits) || tBarcode.includes(cleanDigits);
+      });
+    }
+
     if (matched) {
       setScannedResult(matched);
       setUnmatchedBarcode(null);
@@ -292,7 +301,8 @@ export const BarcodeScanModal: React.FC<BarcodeScanModalProps> = ({
                       setManualCode(e.target.value);
                       handleSearchCode(e.target.value);
                     }}
-                    placeholder="เช่น 8851234567890 หรือชื่อสินค้า"
+                    autoFocus
+                    placeholder="พิมพ์เลขท้าย 4-6 หลัก, รหัสเต็ม หรือชื่อสินค้า..."
                     className={`flex-1 rounded-xl px-3 py-2 text-xs focus:outline-none font-mono ${
                       isLightMode
                         ? 'bg-slate-50 border border-slate-300 text-slate-900 focus:border-amber-500'

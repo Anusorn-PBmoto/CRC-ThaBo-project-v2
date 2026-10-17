@@ -461,7 +461,7 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
    - quantity: จำนวนที่ซื้อ (ตัวเลขจำนวนเต็ม เช่น 1, 6, 10, 60)
    - unit: หน่วยนับตามบิล (เช่น ลัง, ลูก, แพค, อัน, ตัว, ชุด, หลอด, เส้น, ชิ้น)
    - costPrice: ราคาต่อหน่วย (ต้นทุน) ตัดเครื่องหมายจุลภาคออก เช่น 1,595.00 -> 1595
-   - sellingPrice: ราคาขายปลีกแนะนำ โดยบวกกำไรมาตรฐาน 20-30% จากราคาต้นทุน
+   - sellingPrice: ราคาขายปลีกแนะนำ โดยบวกกำไรมาตรฐานไม่ต่ำกว่า 35% จากราคาต้นทุน (costPrice * 1.35 ขึ้นไป เช่น ต้นทุน 100บ. -> 135-140บ.)
    - lineTotal: ราคารวมของแถวนี้ (quantity * costPrice)
 3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย 1 ประโยค เช่น "พบ 14 รายการ ยอดรวม 23,450 บาท จาก ร้าน เจริญชัย"`;
 
@@ -588,10 +588,11 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
           ? parseFloat(item.sellingPrice.replace(/,/g, '')) || 0
           : Number(item.sellingPrice) || 0;
 
-        if (sellPrice <= cost && cost > 0) {
-          // Recommend 25-30% margin rounded nicely
-          const rawSell = cost * 1.25;
-          sellPrice = rawSell >= 100 ? Math.round(rawSell / 10) * 10 : Math.round(rawSell);
+        const minSell35 = cost > 0 ? Math.ceil(cost * 1.35) : 0;
+        if ((sellPrice < minSell35 || sellPrice <= cost) && cost > 0) {
+          // Rule: selling price must not be lower than 35% of cost price
+          const rawSell = cost * 1.35;
+          sellPrice = rawSell >= 100 ? Math.ceil(rawSell / 10) * 10 : Math.ceil(rawSell);
         }
 
         return {

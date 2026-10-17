@@ -510,9 +510,10 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       const formattedItems: ExtractedBillItem[] = rawItems.map((item, idx) => {
         const cost = Number(item.costPrice) || 0;
         let sell = Number(item.sellingPrice) || 0;
-        if (sell <= cost && cost > 0) {
-          const raw = cost * 1.25;
-          sell = raw >= 100 ? Math.round(raw / 10) * 10 : Math.round(raw);
+        const min35 = cost > 0 ? Math.ceil(cost * 1.35) : 0;
+        if (cost > 0 && (sell < min35 || sell <= cost)) {
+          const raw = cost * 1.35;
+          sell = raw >= 100 ? Math.ceil(raw / 10) * 10 : Math.ceil(raw);
         }
 
         // Check if matched in catalog
@@ -666,7 +667,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
             unit: item.unit || 'ชิ้น',
             costPrice: cost,
             sellingPrice: sell,
-            category: item.category || 'อะไหล่ทั่วไป',
+            category: (item.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : item.category) || 'อะไหล่ทั่วไป',
             brand: item.brand?.trim() || '',
             size: item.size?.trim() || '',
             frontQty: destinationLocation === 'front' ? qty : 0,
@@ -1407,13 +1408,33 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                         <div className="sm:col-span-3 flex flex-col justify-end">
                           <div className="bg-[#20262D] rounded-xl px-2.5 py-1.5 border border-[#475662]/60 flex items-center justify-between text-[11px]">
                             <span className="text-[#A0ABB5]">กำไร/ชิ้น:</span>
-                            <span
-                              className={`font-bold font-mono ${
-                                profit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                              }`}
-                            >
-                              ฿{profit.toLocaleString()} ({marginPct}%)
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`font-bold font-mono ${
+                                  profit <= 0
+                                    ? 'text-rose-400'
+                                    : marginPct < 35
+                                    ? 'text-amber-400'
+                                    : 'text-emerald-400'
+                                }`}
+                              >
+                                ฿{profit.toLocaleString()} ({marginPct}%)
+                              </span>
+                              {item.costPrice > 0 && marginPct < 35 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const min35 = Math.ceil(item.costPrice * 1.35);
+                                    const rounded = min35 >= 100 ? Math.ceil(min35 / 10) * 10 : min35;
+                                    handleUpdateItem(item.id, { sellingPrice: rounded });
+                                  }}
+                                  className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-[#F6C90E] border border-amber-400/40 hover:bg-amber-400/30 transition-all cursor-pointer"
+                                  title="ปรับราคาขายให้ได้กำไรอย่างน้อย 35%"
+                                >
+                                  +35%
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

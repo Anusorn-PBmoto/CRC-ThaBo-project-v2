@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 import { ProductItem, CustomerGrade } from '../types';
 import { CameraBarcodeScanner } from './CameraBarcodeScanner';
@@ -164,7 +165,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setLocation(cleanLocationName(currentItem.location || 'RACK A-01'));
       setMinFrontStock(currentItem.minFrontStock !== undefined ? currentItem.minFrontStock : 2);
       setBrand(currentItem.brand || '');
-      setCategory(currentItem.category || '');
+      setCategory(currentItem.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : currentItem.category || '');
       setDescription(currentItem.description || '');
       setSubUnit(currentItem.subUnit || '');
       setConversionRate(currentItem.conversionRate !== undefined ? currentItem.conversionRate : '');
@@ -248,11 +249,42 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     }
   };
 
-  // Calculate profit preview
+  // Calculate profit preview and 35% minimum threshold
   const costNum = Number(costPrice) || 0;
   const sellNum = Number(sellingPrice) || 0;
   const profit = sellNum - costNum;
-  const profitMargin = sellNum > 0 ? ((profit / sellNum) * 100).toFixed(1) : null;
+  const min35Sell = costNum > 0 ? Math.ceil(costNum * 1.35) : 0;
+  const isBelow35 = costNum > 0 && sellNum > 0 && sellNum < min35Sell;
+  const markupPct = costNum > 0 && sellNum > 0 ? Math.round(((sellNum - costNum) / costNum) * 100) : null;
+
+  // Auto-calculate selling price when cost price changes (must be >= 35% markup)
+  const handleCostPriceChange = (val: string) => {
+    if (val === '') {
+      setCostPrice('');
+      return;
+    }
+    const num = parseFloat(val);
+    if (isNaN(num)) return;
+    setCostPrice(num);
+
+    if (num > 0) {
+      const minRequired = Math.ceil(num * 1.35);
+      const cleanRounded = minRequired >= 100 ? Math.ceil(minRequired / 5) * 5 : minRequired;
+      // Auto-set selling price if empty or lower than 35% threshold
+      if (!currentItem || sellingPrice === '' || Number(sellingPrice) <= 0 || Number(sellingPrice) < minRequired) {
+        setSellingPrice(cleanRounded);
+      }
+    }
+  };
+
+  const applyMarkupPercent = (pct: number) => {
+    if (costNum > 0) {
+      const raw = Math.ceil(costNum * (1 + pct / 100));
+      const cleanRounded = raw >= 100 ? Math.ceil(raw / 5) * 5 : raw;
+      setSellingPrice(cleanRounded);
+      setValidationError(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -264,10 +296,20 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       return;
     }
 
+    const numericCost = Number(costPrice) || 0;
+    const numericSell = Number(sellingPrice) || 0;
+    const minRequiredSell = Math.ceil(numericCost * 1.35);
+
+    // Rule: Retail selling price must not be lower than 35% of cost price
+    if (numericCost > 0 && numericSell < minRequiredSell) {
+      setValidationError(
+        `ราคาขายปลีก (฿${numericSell.toLocaleString()}) ต้องไม่ต่ำกว่า 35% ของราคาทุน (ขั้นต่ำ ฿${minRequiredSell.toLocaleString()})`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const numericCost = Number(costPrice) || 0;
-      const numericSell = Number(sellingPrice) || 0;
       const numFront = Math.max(0, Number(frontQty) || 0);
       const numWarehouse = Math.max(0, Number(warehouseQty) || 0);
       const totalNumericQty = numFront + numWarehouse;
@@ -279,7 +321,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         costPrice: numericCost,
         sellingPrice: numericSell,
         imageUrl: imageUrl.trim() || '',
-        category: category.trim() || '',
+        category: category.trim() === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : category.trim() || '',
         brand: brand.trim() || '',
         location: cleanLocationName(location),
         frontLocation: cleanLocationName(frontLocation),
@@ -548,46 +590,126 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
           {/* ============================================================ */}
           {/* 4. ราคาซื้อ & 5. ราคาขาย */}
           {/* ============================================================ */}
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[#EEEEEE] font-semibold text-xs">
-                  4. ราคาซื้อ / ต้นทุน
-                </label>
-                <span className="text-[10px] text-[#A0ABB5]">(ไม่แสดงหน้าร้าน)</span>
+          <div className="space-y-2 pt-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[#EEEEEE] font-semibold text-xs">
+                    4. ราคาซื้อ / ต้นทุน
+                  </label>
+                  <span className="text-[10px] text-[#A0ABB5]">(ไม่แสดงหน้าร้าน)</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5] font-bold">฿</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={costPrice}
+                    onChange={(e) => handleCostPriceChange(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5] font-bold">฿</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={costPrice}
-                  onChange={(e) => setCostPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                  placeholder="0.00"
-                  className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
-                />
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[#EEEEEE] font-semibold text-xs">
+                    5. ราคาขายปลีก (บาท) <span className="text-[#F6C90E]">*</span>
+                  </label>
+                  {costNum > 0 && (
+                    <span className="text-[10px] text-[#F6C90E]">
+                      (ขั้นต่ำ ฿{min35Sell.toLocaleString()})
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F6C90E] font-bold">฿</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    value={sellingPrice}
+                    onChange={(e) => {
+                      setSellingPrice(e.target.value === '' ? '' : parseFloat(e.target.value));
+                      setValidationError(null);
+                    }}
+                    placeholder="0.00"
+                    className={`w-full bg-[#252C33] border rounded-xl pl-7 pr-3 py-2 text-[#F6C90E] font-bold font-mono text-sm focus:outline-none ${
+                      isBelow35 ? 'border-rose-500 focus:border-rose-400' : 'border-[#475662] focus:border-[#F6C90E]'
+                    }`}
+                  />
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-[#EEEEEE] font-semibold mb-1 text-xs">
-                5. ราคาขาย (บาท) <span className="text-[#F6C90E]">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#F6C90E] font-bold">฿</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  required
-                  value={sellingPrice}
-                  onChange={(e) => setSellingPrice(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                  placeholder="0.00"
-                  className="w-full bg-[#252C33] border border-[#475662] text-[#F6C90E] font-bold rounded-xl pl-7 pr-3 py-2 focus:border-[#F6C90E] focus:outline-none font-mono text-sm"
-                />
+            {/* Quick Markup Helpers & Profit Margin Banner */}
+            {costNum > 0 && (
+              <div className="bg-[#20262D] rounded-xl p-2.5 border border-[#3A4750] space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[#A0ABB5] text-[11px]">กำไรต่อหน่วย:</span>
+                    <span
+                      className={`font-mono font-bold text-xs ${
+                        sellNum >= min35Sell ? 'text-emerald-400' : sellNum > costNum ? 'text-amber-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {profit >= 0 ? `+฿${profit.toLocaleString()}` : `-฿${Math.abs(profit).toLocaleString()}`}
+                      {markupPct !== null ? ` (+${markupPct}%)` : ''}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-[#A0ABB5]">
+                    เกณฑ์ขั้นต่ำ +35%: <span className="font-mono font-bold text-[#F6C90E]">฿{min35Sell.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Preset Margin Buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-[#A0ABB5]">คำนวณราคาขาย:</span>
+                  <button
+                    type="button"
+                    onClick={() => applyMarkupPercent(35)}
+                    className="px-2.5 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#F6C90E]/60 text-[#F6C90E] text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
+                  >
+                    +35% (ขั้นต่ำ ฿{min35Sell.toLocaleString()})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMarkupPercent(40)}
+                    className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                  >
+                    +40% (฿{Math.ceil(costNum * 1.4).toLocaleString()})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMarkupPercent(50)}
+                    className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                  >
+                    +50% (฿{Math.ceil(costNum * 1.5).toLocaleString()})
+                  </button>
+                </div>
+
+                {/* Warning if lower than 35% */}
+                {isBelow35 && (
+                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/40 flex items-center justify-between gap-2 text-[11px] text-rose-300">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                      <span>ราคาขายต่ำกว่าเกณฑ์ 35% ของทุน (ขาดอีก ฿{(min35Sell - sellNum).toLocaleString()})</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyMarkupPercent(35)}
+                      className="px-2.5 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-white font-bold text-[10px] whitespace-nowrap active:scale-95 transition-all cursor-pointer"
+                    >
+                      ปรับเป็น 35%
+                    </button>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* ============================================================ */}

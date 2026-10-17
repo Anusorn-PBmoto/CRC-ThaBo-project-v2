@@ -191,10 +191,15 @@ export const StaffPosView: React.FC<StaffPosViewProps> = ({
   const categorizedProducts = useMemo(() => {
     const map = new Map<string, { originalName: string; items: ProductItem[] }>();
     filteredProducts.forEach((p) => {
-      const rawCat = p.category && p.category.trim() !== '' 
+      let rawCat = p.category && p.category.trim() !== '' 
         ? p.category.trim() 
         : (p.brand && p.brand.trim() !== '' ? p.brand.trim() : 'สินค้าทั่วไป');
       
+      // Merge "ยางมอเตอร์ไซค์" and "ยางนอก" together
+      if (rawCat === 'ยางมอเตอร์ไซค์') {
+        rawCat = 'ยางนอก';
+      }
+
       const normKey = rawCat.toLowerCase().replace(/\s+/g, ' ');
       
       if (!map.has(normKey)) {

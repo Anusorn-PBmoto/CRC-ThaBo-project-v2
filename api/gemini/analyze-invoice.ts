@@ -99,7 +99,7 @@ ${catalogMiniList}
    - quantity: จำนวนที่ซื้อ (ตัวเลขจำนวนเต็ม เช่น 1, 3, 5, 10)
    - unit: หน่วยนับตามบิล (เช่น ลัง, กระป๋อง, เส้น, อัน, ตัว, ชุด, ชิ้น)
    - costPrice: ราคาต่อหน่วย (ต้นทุน) ตัดเครื่องหมายจุลภาคออก เช่น 380.00 -> 380
-   - sellingPrice: ราคาขายปลีกแนะนำ โดยบวกกำไรมาตรฐาน 20-30% จากราคาต้นทุน เช่น ต้นทุน 380บ. -> 480บ.
+   - sellingPrice: ราคาขายปลีกแนะนำ โดยบวกกำไรมาตรฐานไม่ต่ำกว่า 35% จากราคาต้นทุน (costPrice * 1.35 ขึ้นไป เช่น ต้นทุน 380บ. -> 515-520บ.)
    - lineTotal: ราคารวมของแถวนี้ (quantity * costPrice)
 3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย 1 ประโยค เช่น "พบ 13 รายการ ยอดรวม 10,850 บาท จาก ร้าน เจริญชัย"`;
 
@@ -286,9 +286,10 @@ ${catalogMiniList}
             ? parseFloat(item.sellingPrice.replace(/,/g, '')) || 0
             : Number(item.sellingPrice) || 0;
 
-        if (sellPrice <= cost && cost > 0) {
-          const rawSell = cost * 1.25;
-          sellPrice = rawSell >= 100 ? Math.round(rawSell / 10) * 10 : Math.round(rawSell);
+        const minSell35 = cost > 0 ? Math.ceil(cost * 1.35) : 0;
+        if ((sellPrice < minSell35 || sellPrice <= cost) && cost > 0) {
+          const rawSell = cost * 1.35;
+          sellPrice = rawSell >= 100 ? Math.ceil(rawSell / 10) * 10 : Math.ceil(rawSell);
         }
 
         return {
