@@ -25,6 +25,7 @@ import {
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
 import { getProductStockBreakdown } from '../utils/stockUtils';
+import { normalizeCategory } from '../utils/categoryUtils';
 
 interface InventoryListTabProps {
   tires: ProductItem[];
@@ -144,12 +145,11 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
     } catch {}
   };
 
-  // Categories list with item counts
+  // Categories list with item counts (unifying redundant categories)
   const categoriesWithCounts = useMemo(() => {
     const map = new Map<string, number>();
     tires.forEach((t) => {
-      let cat = t.category || t.brand || 'อะไหล่ทั่วไป';
-      if (cat === 'ยางมอเตอร์ไซค์') cat = 'ยางนอก';
+      const cat = normalizeCategory(t.category || t.brand);
       map.set(cat, (map.get(cat) || 0) + 1);
     });
 
@@ -187,13 +187,14 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         if (!matchSearch) return false;
       }
 
-      // Category match (combining ยางมอเตอร์ไซค์ and ยางนอก)
+      // Category match (combining redundant categories seamlessly)
       if (selectedCategory !== 'ทั้งหมด') {
-        const itemCat = p.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : (p.category || '');
+        const itemCat = normalizeCategory(p.category);
+        const selCat = normalizeCategory(selectedCategory);
         const matchCategory =
-          itemCat.toLowerCase() === selectedCategory.toLowerCase() ||
-          (p.brand || '').toLowerCase() === selectedCategory.toLowerCase() ||
-          (p.category || '').toLowerCase() === selectedCategory.toLowerCase();
+          itemCat.toLowerCase() === selCat.toLowerCase() ||
+          (p.brand || '').toLowerCase() === selCat.toLowerCase() ||
+          (p.category || '').toLowerCase() === selCat.toLowerCase();
         if (!matchCategory) return false;
       }
 
@@ -849,7 +850,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
             const unitLabel = product.unit || 'ชิ้น';
             const productImg = resolveProductImage(product);
-            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
+            const catName = normalizeCategory(product.category || product.brand);
 
             return (
               <div
@@ -976,7 +977,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
             const unitLabel = product.unit || 'ชิ้น';
             const productImg = resolveProductImage(product);
-            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
+            const catName = normalizeCategory(product.category || product.brand);
 
             return (
               <div
@@ -1181,7 +1182,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                   const unitLabel = product.unit || 'ชิ้น';
                   const isZero = breakdown.totalQty === 0;
                   const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
-                  const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || '-';
+                  const catName = normalizeCategory(product.category || product.brand);
 
                   return (
                     <tr
@@ -1375,7 +1376,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
 
             const unitLabel = product.unit || 'ชิ้น';
             const productImg = resolveProductImage(product);
-            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
+            const catName = normalizeCategory(product.category || product.brand);
 
             return (
               <div

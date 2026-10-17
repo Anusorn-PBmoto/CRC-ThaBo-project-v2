@@ -29,6 +29,7 @@ import confetti from 'canvas-confetti';
 import { ProductItem, TireItem } from '../types';
 import { cleanLocationName, getProductStockBreakdown } from '../utils/stockUtils';
 import { safeStringify } from '../utils/safeJSON';
+import { normalizeCategory } from '../utils/categoryUtils';
 
 export interface ExtractedBillItem {
   id: string;
@@ -525,7 +526,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
           name: item.name || item.rawName || `สินค้าใหม่ #${idx + 1}`,
           brand: item.brand || matched?.brand || '',
           size: item.size || matched?.size || '',
-          category: item.category || matched?.category || 'อะไหล่ทั่วไป',
+          category: normalizeCategory(item.category || matched?.category),
           quantity: Math.max(1, Number(item.quantity) || 1),
           unit: item.unit || matched?.unit || 'ชิ้น',
           costPrice: cost,
@@ -667,7 +668,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
             unit: item.unit || 'ชิ้น',
             costPrice: cost,
             sellingPrice: sell,
-            category: (item.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : item.category) || 'อะไหล่ทั่วไป',
+            category: normalizeCategory(item.category),
             brand: item.brand?.trim() || '',
             size: item.size?.trim() || '',
             frontQty: destinationLocation === 'front' ? qty : 0,

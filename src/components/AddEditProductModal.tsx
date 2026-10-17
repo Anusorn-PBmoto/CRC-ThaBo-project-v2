@@ -27,6 +27,7 @@ import { CameraBarcodeScanner } from './CameraBarcodeScanner';
 import { resolveProductImage } from '../utils/productImages';
 import { uploadProductImageToStorage } from '../firebase';
 import { getProductStockBreakdown, cleanLocationName } from '../utils/stockUtils';
+import { normalizeCategory, STANDARD_CATEGORIES } from '../utils/categoryUtils';
 
 interface AddEditProductModalProps {
   isOpen: boolean;
@@ -165,7 +166,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
       setLocation(cleanLocationName(currentItem.location || 'RACK A-01'));
       setMinFrontStock(currentItem.minFrontStock !== undefined ? currentItem.minFrontStock : 2);
       setBrand(currentItem.brand || '');
-      setCategory(currentItem.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : currentItem.category || '');
+      setCategory(normalizeCategory(currentItem.category));
       setDescription(currentItem.description || '');
       setSubUnit(currentItem.subUnit || '');
       setConversionRate(currentItem.conversionRate !== undefined ? currentItem.conversionRate : '');
@@ -321,7 +322,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
         costPrice: numericCost,
         sellingPrice: numericSell,
         imageUrl: imageUrl.trim() || '',
-        category: category.trim() === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : category.trim() || '',
+        category: normalizeCategory(category),
         brand: brand.trim() || '',
         location: cleanLocationName(location),
         frontLocation: cleanLocationName(frontLocation),
@@ -512,6 +513,35 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
               placeholder="เช่น สายพานแท้ Click 125i, ผ้าเบรกหน้า Wave 110i, น้ำมันเครื่อง 4T 0.8L"
               className="w-full bg-[#252C33] border border-[#475662] text-[#EEEEEE] placeholder-[#A0ABB5] rounded-xl px-3 py-2.5 focus:border-[#F6C90E] focus:outline-none text-xs font-medium"
             />
+          </div>
+
+          {/* หมวดหมู่สินค้า (Category) */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[#EEEEEE] font-semibold text-xs">
+                หมวดหมู่สินค้า
+              </label>
+              <span className="text-[10px] text-[#A0ABB5]">เลือกด่วนตามหมวดมาตรฐาน</span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {STANDARD_CATEGORIES.map((cat) => {
+                const isSelected = normalizeCategory(category) === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
+                        : 'bg-[#252C33] text-[#EEEEEE] hover:bg-[#43525D] border border-[#475662]'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* ============================================================ */}

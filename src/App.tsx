@@ -75,6 +75,7 @@ import {
 } from './utils/appsheetCsv';
 import { resolveProductImage } from './utils/productImages';
 import { cleanLocationName } from './utils/stockUtils';
+import { normalizeCategory } from './utils/categoryUtils';
 
 const LOCAL_STORAGE_KEY_TIRES = 'crc_thabo_parts_itemdetails_v5';
 const LOCAL_STORAGE_KEY_TRANSACTIONS = 'crc_thabo_transactions_itemdetails_v5';
@@ -158,7 +159,7 @@ export default function App() {
       .filter((p) => !deletedIds.includes(p.id))
       .map((p: ProductItem) => {
         const recImg = resolveProductImage(p);
-        const normalizedCategory = p.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : p.category;
+        const normalizedCategory = normalizeCategory(p.category);
         return {
           ...p,
           category: normalizedCategory,
@@ -462,8 +463,7 @@ export default function App() {
                   const hasLocalFront = localItem && typeof localItem.frontQty === 'number';
                   const hasRemoteFront = typeof remoteItem.frontQty === 'number';
 
-                  const effectiveCategory =
-                    remoteItem.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : remoteItem.category;
+                  const effectiveCategory = normalizeCategory(remoteItem.category);
 
                   return {
                     ...remoteItem,
@@ -635,7 +635,7 @@ export default function App() {
     try {
       const sanitizedTireData: Omit<TireItem, 'id'> = {
         ...tireData,
-        category: tireData.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : tireData.category,
+        category: normalizeCategory(tireData.category),
         frontLocation: cleanLocationName(tireData.frontLocation),
         location: cleanLocationName(tireData.location || 'RACK A-01'),
       };
