@@ -15,8 +15,10 @@ import {
   ArrowRightLeft,
   ArrowUp,
   Sparkles,
-  LayoutGrid,
   List,
+  Columns3,
+  Grid3X3,
+  Image as ImageIcon,
   ArrowUpDown,
   Filter,
 } from 'lucide-react';
@@ -44,7 +46,46 @@ interface InventoryListTabProps {
 type StockFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 type LocationFilter = 'all' | 'front' | 'warehouse';
 type SortOption = 'updated' | 'name' | 'stockDesc' | 'stockAsc' | 'priceDesc' | 'priceAsc';
-type ViewMode = 'grid' | 'table';
+export type InventoryViewMode = 'icons' | 'list' | 'columns' | 'gallery';
+
+interface ViewOption {
+  id: InventoryViewMode;
+  label: string;
+  enLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+}
+
+const VIEW_OPTIONS: ViewOption[] = [
+  {
+    id: 'icons',
+    label: 'ไอคอน',
+    enLabel: 'Icons',
+    icon: Grid3X3,
+    description: 'แสดงแบบไอคอนขนาดกะทัดรัด (show items as icons)',
+  },
+  {
+    id: 'list',
+    label: 'รายการ',
+    enLabel: 'List',
+    icon: List,
+    description: 'แสดงเป็นรายการแนวนอน อ่านง่าย ละเอียด (show items in a list)',
+  },
+  {
+    id: 'columns',
+    label: 'คอลัมน์',
+    enLabel: 'Columns',
+    icon: Columns3,
+    description: 'แสดงเป็นตารางแยกคอลัมน์ชัดเจน (show items in columns)',
+  },
+  {
+    id: 'gallery',
+    label: 'แกลเลอรี',
+    enLabel: 'Gallery',
+    icon: ImageIcon,
+    description: 'แสดงการ์ดรูปภาพใหญ่ สไตล์โชว์รูม (show items in a gallery)',
+  },
+];
 
 const PAGE_SIZE = 36;
 
@@ -69,12 +110,16 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   const [stockFilter, setStockFilter] = useState<StockFilter>('all');
   const [selectedCategory, setSelectedCategory] = useState('ทั้งหมด');
   const [sortBy, setSortBy] = useState<SortOption>('updated');
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+  const [viewMode, setViewMode] = useState<InventoryViewMode>(() => {
     try {
-      const saved = localStorage.getItem('crc_catalog_view_mode');
-      if (saved === 'grid' || saved === 'table') return saved;
+      const saved = localStorage.getItem('crc_catalog_view_mode') as InventoryViewMode;
+      if (saved === 'icons' || saved === 'list' || saved === 'columns' || saved === 'gallery') {
+        return saved;
+      }
+      if ((saved as string) === 'grid') return 'gallery';
+      if ((saved as string) === 'table') return 'columns';
     } catch {}
-    return isDesktopMode ? 'grid' : 'grid';
+    return isDesktopMode ? 'gallery' : 'gallery';
   });
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [previewProduct, setPreviewProduct] = useState<ProductItem | null>(null);
@@ -92,7 +137,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
     setVisibleCount(PAGE_SIZE);
   }, [searchQuery, locationFilter, stockFilter, selectedCategory, sortBy]);
 
-  const handleSetViewMode = (mode: ViewMode) => {
+  const handleSetViewMode = (mode: InventoryViewMode) => {
     setViewMode(mode);
     try {
       localStorage.setItem('crc_catalog_view_mode', mode);
@@ -148,86 +193,110 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         const matchCategory =
           itemCat.toLowerCase() === selectedCategory.toLowerCase() ||
           (p.brand || '').toLowerCase() === selectedCategory.toLowerCase() ||
-          (selectedCategory === 'ยางนอก' && (p.category === 'ยางมอเตอร์ไซค์' || p.category === 'ยางนอก'));
+          (p.category || '').toLowerCase() === selectedCategory.toLowerCase();
         if (!matchCategory) return false;
       }
 
       // Stock status filter
-      const relevantQty =
-        locationFilter === 'front'
-          ? breakdown.frontQty
-          : locationFilter === 'warehouse'
-          ? breakdown.warehouseQty
-          : breakdown.totalQty;
+      if (stockFilter !== 'all') {
+        const effectiveQty =
+          locationFilter === 'front'
+            ? breakdown.frontQty
+            : locationFilter === 'warehouse'
+            ? breakdown.warehouseQty
+            : breakdown.totalQty;
 
-      if (stockFilter === 'in_stock') {
-        if (relevantQty <= 0) return false;
-      } else if (stockFilter === 'low_stock') {
-        const threshold = locationFilter === 'front' ? p.minFrontStock || 2 : p.minStock || 2;
-        if (relevantQty <= 0 || relevantQty > threshold) return false;
-      } else if (stockFilter === 'out_of_stock') {
-        if (relevantQty !== 0) return false;
+        const effectiveMin =
+          locationFilter === 'front'
+            ? p.minFrontStock || 2
+            : locationFilter === 'warehouse'
+            ? p.minStock || 2
+            : p.minStock || 2;
+
+        if (stockFilter === 'in_stock' && effectiveQty <= 0) return false;
+        if (stockFilter === 'out_of_stock' && effectiveQty > 0) return false;
+        if (stockFilter === 'low_stock' && (effectiveQty <= 0 || effectiveQty > effectiveMin)) return false;
       }
 
       return true;
     });
 
-    // Sorting
+    // Sort products
     return result.sort((a, b) => {
-      if (sortBy === 'name') {
-        return (a.name || a.size || '').localeCompare(b.name || b.size || '', 'th');
+      const bkA = getProductStockBreakdown(a);
+      const bkB = getProductStockBreakdown(b);
+
+      const qtyA =
+        locationFilter === 'front'
+          ? bkA.frontQty
+          : locationFilter === 'warehouse'
+          ? bkA.warehouseQty
+          : bkA.totalQty;
+
+      const qtyB =
+        locationFilter === 'front'
+          ? bkB.frontQty
+          : locationFilter === 'warehouse'
+          ? bkB.warehouseQty
+          : bkB.totalQty;
+
+      const priceA = a.sellingPrice || a.price || 0;
+      const priceB = b.sellingPrice || b.price || 0;
+
+      switch (sortBy) {
+        case 'name':
+          return (a.name || a.size || '').localeCompare(b.name || b.size || '', 'th');
+        case 'stockDesc':
+          return qtyB - qtyA;
+        case 'stockAsc':
+          return qtyA - qtyB;
+        case 'priceDesc':
+          return priceB - priceA;
+        case 'priceAsc':
+          return priceA - priceB;
+        case 'updated':
+        default: {
+          const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          return timeB - timeA;
+        }
       }
-      if (sortBy === 'stockDesc') {
-        return (b.actualQty || 0) - (a.actualQty || 0);
-      }
-      if (sortBy === 'stockAsc') {
-        return (a.actualQty || 0) - (b.actualQty || 0);
-      }
-      if (sortBy === 'priceDesc') {
-        const pA = a.sellingPrice || a.price || 0;
-        const pB = b.sellingPrice || b.price || 0;
-        return pB - pA;
-      }
-      if (sortBy === 'priceAsc') {
-        const pA = a.sellingPrice || a.price || 0;
-        const pB = b.sellingPrice || b.price || 0;
-        return pA - pB;
-      }
-      // default: updated
-      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
     });
-  }, [tires, searchQuery, selectedCategory, stockFilter, locationFilter, sortBy]);
+  }, [tires, searchQuery, locationFilter, stockFilter, selectedCategory, sortBy]);
 
-  // Key metrics calculation
-  const totalItems = tires.length;
-  const availablePieces = useMemo(() => tires.reduce((acc, t) => acc + (t.actualQty || 0), 0), [tires]);
-  const storefrontTotalPieces = useMemo(
-    () => tires.reduce((acc, t) => acc + getProductStockBreakdown(t).frontQty, 0),
-    [tires]
-  );
-  const warehouseTotalPieces = useMemo(
-    () => tires.reduce((acc, t) => acc + getProductStockBreakdown(t).warehouseQty, 0),
-    [tires]
-  );
+  // Overall statistics
+  const { totalItems, availablePieces, storefrontTotalPieces, warehouseTotalPieces, lowStockCount, outOfStockCount } =
+    useMemo(() => {
+      let pieces = 0;
+      let frontPieces = 0;
+      let whPieces = 0;
+      let low = 0;
+      let out = 0;
 
-  const storefrontRestockNeeded = useMemo(() => {
-    return tires.filter((t) => {
-      const b = getProductStockBreakdown(t);
-      return b.frontQty === 0 && b.warehouseQty > 0;
-    });
-  }, [tires]);
+      tires.forEach((p) => {
+        const b = getProductStockBreakdown(p);
+        pieces += b.totalQty;
+        frontPieces += b.frontQty;
+        whPieces += b.warehouseQty;
 
-  const lowStockItems = useMemo(
-    () => tires.filter((t) => t.actualQty > 0 && t.actualQty <= (t.minStock || 2)).length,
-    [tires]
-  );
+        if (b.totalQty === 0) {
+          out++;
+        } else if (b.totalQty <= (p.minStock || 2)) {
+          low++;
+        }
+      });
 
-  const totalStockValue = useMemo(
-    () => tires.reduce((acc, t) => acc + (t.actualQty || 0) * (t.sellingPrice || t.price || 0), 0),
-    [tires]
-  );
+      return {
+        totalItems: tires.length,
+        availablePieces: pieces,
+        storefrontTotalPieces: frontPieces,
+        warehouseTotalPieces: whPieces,
+        lowStockCount: low,
+        outOfStockCount: out,
+      };
+    }, [tires]);
 
-  // Paginated products for smooth, zero-stutter rendering
+  // Paginated slice
   const paginatedProducts = useMemo(() => {
     return filteredProducts.slice(0, visibleCount);
   }, [filteredProducts, visibleCount]);
@@ -236,92 +305,176 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
 
   return (
     <div
-      className={`pb-32 pt-2 px-3 sm:px-4 ${
-        isDesktopMode ? 'max-w-[1600px] w-full' : 'max-w-md'
-      } mx-auto space-y-4 font-['Prompt',sans-serif] transition-all duration-300`}
+      className={`px-3 ${
+        isDesktopMode ? 'sm:px-6 max-w-[1600px] w-full' : 'max-w-md w-full'
+      } py-4 mx-auto space-y-4 font-['Prompt',sans-serif] transition-all duration-300`}
     >
       {/* 1. Header Catalog Overview Bar */}
-      <div className="bg-[#242C33] border border-[#3A4750] rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center">
-                <Package className="w-4 h-4 text-[#F6C90E]" />
+      <div className="bg-[#242C33] border border-[#3A4750] rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5">
+        {isDesktopMode ? (
+          /* ================= DESKTOP HEADER ================= */
+          <div className="flex flex-row items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center">
+                  <Package className="w-4 h-4 text-[#F6C90E]" />
+                </div>
+                <h2 className="text-lg font-bold text-[#EEEEEE] tracking-tight">
+                  แคตตาล็อกสินค้า & อะไหล่
+                </h2>
               </div>
-              <h2 className="text-base sm:text-lg font-bold text-[#EEEEEE] tracking-tight">
-                แคตตาล็อกสินค้า & อะไหล่
-              </h2>
+              <div className="flex items-center gap-2 text-xs text-[#A0ABB5] mt-1 pl-10">
+                <span>ทั้งหมด {totalItems.toLocaleString()} รายการ</span>
+                <span aria-hidden="true">·</span>
+                <span>สต็อกรวม {availablePieces.toLocaleString()} ชิ้น</span>
+                {filteredProducts.length !== totalItems && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="text-[#F6C90E] font-medium">ตรงเงื่อนไข {filteredProducts.length.toLocaleString()} รายการ</span>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-[#A0ABB5] mt-1 pl-10">
-              <span>ทั้งหมด {totalItems.toLocaleString()} รายการ</span>
-              <span aria-hidden="true">·</span>
-              <span>สต็อกรวม {availablePieces.toLocaleString()} ชิ้น</span>
-              {filteredProducts.length !== totalItems && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="text-[#F6C90E] font-medium">ตรงเงื่อนไข {filteredProducts.length.toLocaleString()} รายการ</span>
-                </>
+
+            {/* Desktop Action buttons & View mode toggle */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* 4 View Modes Switcher */}
+              <div
+                className="flex items-center bg-[#1A1F26] p-1 rounded-xl border border-[#3A4750] shadow-inner"
+                role="group"
+                aria-label="ตัวเลือกรูปแบบการแสดงการ์ดสินค้า"
+              >
+                {VIEW_OPTIONS.map((opt) => {
+                  const isActive = viewMode === opt.id;
+                  const IconComponent = opt.icon;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleSetViewMode(opt.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                        isActive
+                          ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
+                          : 'text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#252C33]'
+                      }`}
+                      title={`${opt.label} (${opt.enLabel}) - ${opt.description}`}
+                    >
+                      <IconComponent className="w-3.5 h-3.5" />
+                      <span>{opt.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {onOpenBillScanner && (
+                <button
+                  type="button"
+                  onClick={onOpenBillScanner}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                  title="ใช้ AI สแกนภาพถ่ายบิล/ใบเสร็จ เพื่อสกัดและเพิ่มสินค้าหลายรายการพร้อมกัน"
+                >
+                  <Sparkles className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+                  <span>ถ่ายบิลเพิ่มสินค้า (AI)</span>
+                </button>
               )}
-            </div>
-          </div>
 
-          {/* Action buttons & View mode toggle */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* View Switcher on Desktop */}
-            {isDesktopMode && (
-              <div className="flex items-center bg-[#1A1F26] p-1 rounded-xl border border-[#3A4750] mr-1">
-                <button
-                  type="button"
-                  onClick={() => handleSetViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-all ${
-                    viewMode === 'grid'
-                      ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
-                      : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
-                  }`}
-                  title="มุมมองการ์ดสินค้า (Grid)"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetViewMode('table')}
-                  className={`p-1.5 rounded-lg transition-all ${
-                    viewMode === 'table'
-                      ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
-                      : 'text-[#A0ABB5] hover:text-[#EEEEEE]'
-                  }`}
-                  title="มุมมองตารางรายการ (Table)"
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {onOpenBillScanner && (
               <button
                 type="button"
-                onClick={onOpenBillScanner}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
-                title="ใช้ AI สแกนภาพถ่ายบิล/ใบเสร็จ เพื่อสกัดและเพิ่มสินค้าหลายรายการพร้อมกัน"
+                onClick={onOpenAddModal}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
               >
-                <Sparkles className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
-                <span>ถ่ายบิลเพิ่มสินค้า (AI)</span>
+                <Plus className="w-4 h-4 text-[#252C33] stroke-[2.5]" />
+                <span>เพิ่มสินค้า</span>
               </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onOpenAddModal}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
-            >
-              <Plus className="w-4 h-4 text-[#252C33] stroke-[2.5]" />
-              <span>เพิ่มสินค้า</span>
-            </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* ================= MOBILE HEADER (CLEAN & FULL-WIDTH) ================= */
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center">
+                  <Package className="w-4 h-4 text-[#F6C90E]" />
+                </div>
+                <h2 className="text-base font-bold text-[#EEEEEE] tracking-tight">
+                  แคตตาล็อกสินค้า & อะไหล่
+                </h2>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#A0ABB5] mt-1 pl-10">
+                <span>ทั้งหมด {totalItems.toLocaleString()} รายการ</span>
+                <span aria-hidden="true">·</span>
+                <span>สต็อกรวม {availablePieces.toLocaleString()} ชิ้น</span>
+                {filteredProducts.length !== totalItems && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span className="text-[#F6C90E] font-medium">ตรง {filteredProducts.length.toLocaleString()}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Mobile View Switcher: 4 Equal Grid Columns */}
+            <div
+              className="grid grid-cols-4 gap-1 p-1 bg-[#1A1F26] rounded-xl border border-[#3A4750] shadow-inner"
+              role="group"
+              aria-label="ตัวเลือกรูปแบบการแสดงการ์ดสินค้า"
+            >
+              {VIEW_OPTIONS.map((opt) => {
+                const isActive = viewMode === opt.id;
+                const IconComponent = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleSetViewMode(opt.id)}
+                    className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#F6C90E] text-[#252C33] font-bold shadow-sm'
+                        : 'text-[#A0ABB5] hover:text-[#EEEEEE] hover:bg-[#252C33]'
+                    }`}
+                    title={`${opt.label} (${opt.enLabel}) - ${opt.description}`}
+                  >
+                    <IconComponent className="w-3.5 h-3.5" />
+                    <span className="truncate">{opt.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Mobile Actions: 2-column Full Width */}
+            <div className="grid grid-cols-2 gap-2">
+              {onOpenBillScanner && (
+                <button
+                  type="button"
+                  onClick={onOpenBillScanner}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                  title="ใช้ AI สแกนภาพถ่ายบิล/ใบเสร็จ"
+                >
+                  <Sparkles className="w-3.5 h-3.5 fill-slate-950 text-slate-950 flex-shrink-0" />
+                  <span className="truncate">ถ่ายบิลเพิ่มสินค้า (AI)</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onOpenAddModal}
+                className={`flex items-center justify-center gap-1.5 px-3 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer ${
+                  !onOpenBillScanner ? 'col-span-2' : ''
+                }`}
+              >
+                <Plus className="w-4 h-4 text-[#252C33] stroke-[2.5] flex-shrink-0" />
+                <span>เพิ่มสินค้า</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Clean Executive Metrics Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-[#3A4750]/70">
+        <div
+          className={`grid ${
+            isDesktopMode ? 'grid-cols-4 gap-3' : 'grid-cols-2 gap-2'
+          } pt-1 border-t border-[#3A4750]/70`}
+        >
           <button
             type="button"
             onClick={() => {
@@ -362,13 +515,13 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             <div className="flex items-center justify-between text-xs text-[#A0ABB5] mb-1">
               <span className="flex items-center gap-1">
                 <Warehouse className="w-3.5 h-3.5 text-sky-400" />
-                คลังหลังร้าน
+                คลังหลัง
               </span>
               {locationFilter === 'warehouse' && (
-                <span className="text-[10px] text-sky-300 font-medium">กำลังกรอง</span>
+                <span className="text-[10px] text-sky-400 font-medium">กำลังกรอง</span>
               )}
             </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-sky-300">
+            <div className="text-base sm:text-lg font-bold font-mono text-sky-400">
               {warehouseTotalPieces.toLocaleString()}{' '}
               <span className="text-xs font-normal text-[#A0ABB5]">ชิ้น</span>
             </div>
@@ -386,115 +539,106 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             }`}
           >
             <div className="flex items-center justify-between text-xs text-[#A0ABB5] mb-1">
-              <span>ใกล้หมด / ต้องสั่ง</span>
-              {lowStockItems > 0 && (
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                สต็อกเหลือน้อย
+              </span>
+              {stockFilter === 'low_stock' && (
+                <span className="text-[10px] text-amber-400 font-medium">กำลังกรอง</span>
               )}
             </div>
-            <div className="text-base sm:text-lg font-bold font-mono text-[#F6C90E]">
-              {lowStockItems.toLocaleString()}{' '}
+            <div className="text-base sm:text-lg font-bold font-mono text-amber-400">
+              {lowStockCount.toLocaleString()}{' '}
               <span className="text-xs font-normal text-[#A0ABB5]">รายการ</span>
             </div>
           </button>
 
-          <div className="p-2.5 rounded-xl bg-[#1F252B] border border-[#3A4750]/60">
-            <div className="text-xs text-[#A0ABB5] mb-1">มูลค่าสต็อกรวม</div>
-            <div className="text-base sm:text-lg font-bold font-mono text-[#EEEEEE]">
-              ฿{totalStockValue.toLocaleString()}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Restock Needed Notification Banner */}
-      {storefrontRestockNeeded.length > 0 && locationFilter !== 'warehouse' && (
-        <div className="bg-amber-400/10 border border-amber-400/30 rounded-2xl p-3 sm:p-3.5 flex items-center justify-between gap-3 animate-in fade-in">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-400/20 text-[#F6C90E] flex items-center justify-center flex-shrink-0">
-              <Store className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm font-bold text-[#EEEEEE]">
-                หน้าร้านมีสินค้าหมด {storefrontRestockNeeded.length} รายการ (ในคลังมีของพร้อมโอน)
-              </p>
-              <p className="text-[11px] text-[#A0ABB5]">
-                สามารถโอนย้ายจากคลังหลังร้านมาจัดวางหน้าร้านเพื่อเตรียมขายได้ทันที
-              </p>
-            </div>
-          </div>
           <button
             type="button"
             onClick={() => {
-              setLocationFilter('front');
-              setStockFilter('out_of_stock');
+              setStockFilter((prev) => (prev === 'out_of_stock' ? 'all' : 'out_of_stock'));
             }}
-            className="px-3 py-1.5 rounded-xl bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] text-xs font-bold flex-shrink-0 shadow-sm active:scale-95 transition-all cursor-pointer"
+            className={`text-left p-2.5 rounded-xl border transition-all cursor-pointer ${
+              stockFilter === 'out_of_stock'
+                ? 'bg-rose-500/10 border-rose-500/50 text-[#EEEEEE]'
+                : 'bg-[#1F252B] border-[#3A4750]/60 hover:border-[#4E5D6A]'
+            }`}
           >
-            ดูรายการเติม ({storefrontRestockNeeded.length})
+            <div className="flex items-center justify-between text-xs text-[#A0ABB5] mb-1">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-rose-400" />
+                สต็อกหมด
+              </span>
+              {stockFilter === 'out_of_stock' && (
+                <span className="text-[10px] text-rose-400 font-medium">กำลังกรอง</span>
+              )}
+            </div>
+            <div className="text-base sm:text-lg font-bold font-mono text-rose-400">
+              {outOfStockCount.toLocaleString()}{' '}
+              <span className="text-xs font-normal text-[#A0ABB5]">รายการ</span>
+            </div>
           </button>
         </div>
-      )}
+      </div>
 
-      {/* 2. Control Bar: Search, Filters, Location, Sorting (Clean & Unified) */}
-      <div className="bg-[#242C33] border border-[#3A4750] rounded-2xl p-3 sm:p-4 shadow-sm space-y-3">
-        {/* Row 1: Search + Barcode + Sort Dropdown */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+      {/* 2. Unified Search & Filtering Toolbar */}
+      <div className="bg-[#242C33] border border-[#3A4750] rounded-2xl p-3.5 space-y-3 shadow-sm">
+        {/* Row 1: Search bar + Scan & Sort */}
+        <div className={`flex items-center gap-2 ${isDesktopMode ? 'flex-nowrap' : 'flex-wrap'}`}>
           {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A0ABB5]" />
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="w-4 h-4 text-[#A0ABB5] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อสินค้า, รหัสบาร์โค้ด, เบอร์ยาง, ตำแหน่งชั้นวาง..."
-              className="w-full bg-[#1A1F26] border border-[#3A4750] rounded-xl pl-9 pr-8 py-2 text-xs sm:text-sm text-[#EEEEEE] placeholder-[#A0ABB5] focus:outline-none focus:border-[#F6C90E] transition-colors"
+              placeholder="ค้นหาชื่อสินค้า, รหัสบาร์โค้ด, เบอร์ยาง, ตำแหน่งจัดเก็บ..."
+              className="w-full bg-[#1A1F26] text-[#EEEEEE] placeholder-[#A0ABB5]/70 pl-10 pr-9 py-2 rounded-xl border border-[#3A4750] focus:border-[#F6C90E] focus:outline-none text-xs transition-colors"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#A0ABB5] hover:text-[#EEEEEE] p-0.5 rounded"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#A0ABB5] hover:text-[#EEEEEE] p-0.5 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Barcode Scan Button */}
-            <button
-              type="button"
-              onClick={onOpenScanner}
-              title="สแกนบาร์โค้ด"
-              className="p-2 sm:px-3 sm:py-2 rounded-xl bg-[#1A1F26] border border-[#3A4750] text-[#F6C90E] hover:bg-[#202730] hover:border-[#F6C90E]/50 transition-all active:scale-95 flex items-center gap-1.5 text-xs font-medium cursor-pointer"
-            >
-              <ScanBarcode className="w-4 h-4" />
-              <span className="hidden sm:inline">สแกนโค้ด</span>
-            </button>
+          {/* Quick Barcode Scan Button */}
+          <button
+            type="button"
+            onClick={onOpenScanner}
+            className="flex items-center gap-1.5 px-3 py-2 bg-[#1A1F26] hover:bg-[#202730] text-[#F6C90E] border border-[#3A4750] hover:border-[#F6C90E]/60 rounded-xl text-xs font-semibold whitespace-nowrap active:scale-95 transition-all cursor-pointer"
+            title="เปิดกล้องสแกนบาร์โค้ดสินค้า"
+          >
+            <ScanBarcode className="w-4 h-4" />
+            <span>สแกนบาร์โค้ด</span>
+          </button>
 
-            {/* Sort Dropdown */}
-            <div className="relative flex-shrink-0">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortOption)}
-                className="bg-[#1A1F26] border border-[#3A4750] rounded-xl px-2.5 py-2 text-xs text-[#EEEEEE] focus:outline-none focus:border-[#F6C90E] transition-colors appearance-none pr-7 cursor-pointer"
-              >
-                <option value="updated">อัปเดตล่าสุด</option>
-                <option value="name">ชื่อสินค้า (ก-ฮ)</option>
-                <option value="stockDesc">สต็อกมาก → น้อย</option>
-                <option value="stockAsc">สต็อกน้อย → มาก</option>
-                <option value="priceDesc">ราคาสูง → ต่ำ</option>
-                <option value="priceAsc">ราคาต่ำ → สูง</option>
-              </select>
-              <ArrowUpDown className="w-3.5 h-3.5 text-[#A0ABB5] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+          {/* Sort Selector */}
+          <div className="relative flex items-center">
+            <ArrowUpDown className="w-3.5 h-3.5 text-[#A0ABB5] absolute left-3 pointer-events-none" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="bg-[#1A1F26] text-[#EEEEEE] border border-[#3A4750] hover:border-[#4E5D6A] pl-8 pr-7 py-2 rounded-xl text-xs focus:border-[#F6C90E] focus:outline-none transition-colors cursor-pointer appearance-none"
+            >
+              <option value="updated">อัปเดตล่าสุด</option>
+              <option value="name">ชื่อสินค้า ก-ฮ</option>
+              <option value="stockDesc">สต็อกมาก → น้อย</option>
+              <option value="stockAsc">สต็อกน้อย → มาก</option>
+              <option value="priceDesc">ราคาขายสูง → ต่ำ</option>
+              <option value="priceAsc">ราคาขายต่ำ → สูง</option>
+            </select>
           </div>
         </div>
 
-        {/* Row 2: Location Switcher & Stock Status Filter Tabs */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-1 border-t border-[#3A4750]/60">
-          {/* Location Switcher */}
-          <div className="flex items-center gap-1 p-1 bg-[#1A1F26] rounded-xl border border-[#3A4750]/60 text-xs self-start sm:self-auto">
+        {/* Row 2: Location and Stock Status Filter Pills */}
+        <div className="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-[#3A4750]/60">
+          {/* Location Filter Tabs */}
+          <div className="flex items-center gap-1 p-1 bg-[#1A1F26] rounded-xl border border-[#3A4750]/60 text-xs">
             <span className="text-[11px] text-[#A0ABB5] px-2 font-medium hidden sm:inline">คลัง:</span>
             <button
               type="button"
@@ -535,7 +679,6 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
 
           {/* Stock Filter Tabs */}
           <div className="flex items-center gap-1 p-1 bg-[#1A1F26] rounded-xl border border-[#3A4750]/60 text-xs overflow-x-auto no-scrollbar">
-            <span className="text-[11px] text-[#A0ABB5] px-2 font-medium hidden sm:inline">สถานะ:</span>
             <button
               type="button"
               onClick={() => setStockFilter('all')}
@@ -638,7 +781,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
         )}
       </div>
 
-      {/* 3. Products Content Area */}
+      {/* 3. Products Content Area with 4 View Modes (Icons, List, Columns, Gallery) */}
       {totalItems === 0 ? (
         <div className="bg-[#242C33] border border-dashed border-[#3A4750] rounded-2xl p-10 text-center space-y-3">
           <div className="w-14 h-14 rounded-2xl bg-[#1A1F26] border border-amber-400/30 text-[#F6C90E] flex items-center justify-center mx-auto">
@@ -691,17 +834,338 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
             ล้างตัวกรองทั้งหมด
           </button>
         </div>
-      ) : isDesktopMode && viewMode === 'table' ? (
-        /* ================= TABLE VIEW FOR DESKTOP ================= */
+      ) : viewMode === 'icons' ? (
+        /* ================= 1. ICONS VIEW (SHOW ITEMS AS ICONS) ================= */
+        <div
+          className={`grid ${
+            isDesktopMode
+              ? 'grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-3'
+              : 'grid-cols-3 gap-2'
+          }`}
+        >
+          {paginatedProducts.map((product) => {
+            const breakdown = getProductStockBreakdown(product);
+            const isZero = breakdown.totalQty === 0;
+            const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
+            const unitLabel = product.unit || 'ชิ้น';
+            const productImg = resolveProductImage(product);
+            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
+
+            return (
+              <div
+                key={product.id}
+                className="bg-[#242C33] hover:bg-[#2A333C] border border-[#3A4750] hover:border-[#F6C90E]/80 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all duration-200 group relative shadow-sm hover:shadow-md"
+              >
+                {/* Top Image Box */}
+                <div>
+                  <div className="aspect-square w-full rounded-lg bg-[#1A1F26] overflow-hidden relative flex items-center justify-center border border-[#3A4750]/60 mb-1.5 sm:mb-2">
+                    {productImg ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewProduct({ ...product, imageUrl: productImg })}
+                        className="w-full h-full relative cursor-zoom-in group/img"
+                        title="แตะเพื่อดูภาพขนาดใหญ่"
+                      >
+                        <img
+                          src={productImg}
+                          alt={product.name || 'สินค้า'}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Maximize2 className="w-3.5 h-3.5 text-[#F6C90E]" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full text-[#A0ABB5]/40">
+                        <Package className="w-6 h-6 sm:w-7 sm:h-7" />
+                      </div>
+                    )}
+
+                    {/* Category mini tag */}
+                    <span className="absolute top-1 left-1 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded bg-black/75 backdrop-blur-xs text-[8px] sm:text-[9px] font-medium text-[#EEEEEE] truncate max-w-[50px] sm:max-w-[65px] pointer-events-none">
+                      {catName}
+                    </span>
+
+                    {/* Status dot */}
+                    <div className="absolute top-1 right-1 pointer-events-none">
+                      {isZero ? (
+                        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-rose-500 block ring-2 ring-[#1A1F26]" title="สินค้าหมด" />
+                      ) : isLow ? (
+                        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-amber-400 block ring-2 ring-[#1A1F26]" title="สต็อกเหลือน้อย" />
+                      ) : (
+                        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-emerald-400 block ring-2 ring-[#1A1F26]" title="มีสต็อก" />
+                      )}
+                    </div>
+
+                    {/* Stock pill overlay */}
+                    <span className="absolute bottom-1 right-1 px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded bg-[#1A1F26]/90 backdrop-blur-xs text-[9px] sm:text-[10px] font-mono font-bold text-[#EEEEEE] border border-[#3A4750] shadow-sm pointer-events-none">
+                      {breakdown.totalQty}
+                    </span>
+                  </div>
+
+                  {/* Title & Price */}
+                  <h4
+                    className="text-[11px] sm:text-xs font-semibold text-[#EEEEEE] line-clamp-2 leading-tight group-hover:text-[#F6C90E] transition-colors min-h-[1.8rem] sm:min-h-[2rem]"
+                    title={product.name || product.size}
+                  >
+                    {product.name || product.size}
+                  </h4>
+
+                  <div className="mt-0.5 sm:mt-1 font-mono font-bold text-xs sm:text-sm text-[#F6C90E]">
+                    ฿{(product.sellingPrice || product.price || 0).toLocaleString()}
+                  </div>
+
+                  {/* Stock split micro-line */}
+                  <div className="text-[9px] sm:text-[10px] text-[#A0ABB5] font-mono flex items-center justify-between pt-1 border-t border-[#3A4750]/50 mt-1">
+                    <span>หน้า: <strong className="text-amber-300 font-bold">{breakdown.frontQty}</strong></span>
+                    <span>คลัง: <strong className="text-sky-300 font-bold">{breakdown.warehouseQty}</strong></span>
+                  </div>
+                </div>
+
+                {/* Quick actions strip */}
+                <div className="pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 border-t border-[#3A4750]/60 flex items-center justify-between gap-1 text-xs">
+                  {onOpenTransferModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTransferModal(product)}
+                      title="โอนย้ายสต็อก"
+                      className="p-1 rounded bg-[#1A1F26] hover:bg-[#202730] text-[#F6C90E] border border-[#3A4750] transition-colors cursor-pointer flex-1 flex items-center justify-center"
+                    >
+                      <ArrowRightLeft className="w-3 h-3" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onJumpToAudit(product)}
+                    title="นับสต็อก"
+                    className="p-1 rounded bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#3A4750] transition-colors cursor-pointer flex-1 flex items-center justify-center"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onEditTire(product)}
+                    title="แก้ไขสินค้า"
+                    className="p-1 rounded bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#3A4750] transition-colors cursor-pointer flex-1 flex items-center justify-center"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  {isDesktopMode && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenPO(product)}
+                      title="สั่งซื้อเพิ่ม (PO)"
+                      className="p-1 rounded bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#F6C90E] border border-[#3A4750] transition-colors cursor-pointer flex-1 flex items-center justify-center"
+                    >
+                      <TrendingUp className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : viewMode === 'list' ? (
+        /* ================= 2. LIST VIEW (SHOW ITEMS IN A LIST) ================= */
+        <div className="space-y-2">
+          {paginatedProducts.map((product) => {
+            const breakdown = getProductStockBreakdown(product);
+            const isZero = breakdown.totalQty === 0;
+            const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
+            const unitLabel = product.unit || 'ชิ้น';
+            const productImg = resolveProductImage(product);
+            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
+
+            return (
+              <div
+                key={product.id}
+                className={`bg-[#242C33] hover:bg-[#2A333C] border border-[#3A4750] hover:border-[#4E5D6A] rounded-xl p-3 flex ${
+                  isDesktopMode ? 'flex-row items-center justify-between' : 'flex-col'
+                } gap-3 transition-all duration-150 group shadow-sm`}
+              >
+                {/* Left side: Photo + Product Info */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Photo Thumbnail */}
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden bg-[#1A1F26] border border-[#3A4750] flex items-center justify-center flex-shrink-0 relative group/thumb">
+                    {productImg ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewProduct({ ...product, imageUrl: productImg })}
+                        className="w-full h-full relative cursor-zoom-in"
+                        title="แตะเพื่อดูภาพขนาดใหญ่"
+                      >
+                        <img
+                          src={productImg}
+                          alt={product.name || 'สินค้า'}
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-200"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity">
+                          <Maximize2 className="w-3.5 h-3.5 text-[#F6C90E]" />
+                        </div>
+                      </button>
+                    ) : (
+                      <Package className="w-6 h-6 text-[#A0ABB5]/40" />
+                    )}
+
+                    {/* Status dot overlay */}
+                    <div className="absolute top-1 right-1 pointer-events-none">
+                      {isZero ? (
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500 block ring-2 ring-[#1A1F26]" title="สินค้าหมด" />
+                      ) : isLow ? (
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 block ring-2 ring-[#1A1F26]" title="สต็อกเหลือน้อย" />
+                      ) : (
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 block ring-2 ring-[#1A1F26]" title="มีสต็อก" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                      <span className="px-2 py-0.5 rounded-md bg-[#1A1F26] border border-[#3A4750] text-[#EEEEEE] font-medium">
+                        {catName}
+                      </span>
+                      {product.barcode && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[#F6C90E]">
+                          <ScanBarcode className="w-3 h-3" />
+                          <span>{product.barcode}</span>
+                        </span>
+                      )}
+                      {product.brand && (
+                        <span className="text-[#A0ABB5] hidden sm:inline">แบรนด์: {product.brand}</span>
+                      )}
+                    </div>
+
+                    <h4
+                      className="text-sm sm:text-base font-bold text-[#EEEEEE] group-hover:text-[#F6C90E] transition-colors truncate"
+                      title={product.name || product.size}
+                    >
+                      {product.name || product.size}
+                    </h4>
+
+                    {/* Locations */}
+                    <div className="flex items-center gap-3 text-xs text-[#A0ABB5]">
+                      <span>
+                        หน้าร้าน:{' '}
+                        <span className="text-[#EEEEEE] font-medium">
+                          {breakdown.frontLocation || '-'}
+                        </span>
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        คลังหลัง:{' '}
+                        <span className="text-[#EEEEEE] font-medium">
+                          {breakdown.warehouseLocation || '-'}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right side: Stock Breakdown + Price + Action Buttons */}
+                <div
+                  className={`flex items-center justify-between ${
+                    isDesktopMode ? 'justify-end' : 'pt-2 border-t border-[#3A4750]/50'
+                  } gap-3 sm:gap-4 flex-wrap`}
+                >
+                  {/* Stock chips */}
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <div className="px-2.5 py-1 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 whitespace-nowrap">
+                      <span className="text-[10px] text-amber-400/70 mr-1 font-sans">หน้าร้าน</span>
+                      <span className="font-bold">{breakdown.frontQty}</span>
+                    </div>
+                    <div className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-400/30 text-sky-300 whitespace-nowrap">
+                      <span className="text-[10px] text-sky-400/70 mr-1 font-sans">คลัง</span>
+                      <span className="font-bold">{breakdown.warehouseQty}</span>
+                    </div>
+                    <div
+                      className={`px-2.5 py-1 rounded-lg border font-bold whitespace-nowrap ${
+                        isZero
+                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                          : isLow
+                          ? 'bg-amber-400/10 border-amber-400/30 text-amber-300'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      }`}
+                    >
+                      <span className="text-[10px] mr-1 font-sans">รวม</span>
+                      <span>{breakdown.totalQty}</span> {unitLabel}
+                    </div>
+                  </div>
+
+                  {/* Price */}
+                  <div className="text-right min-w-[80px]">
+                    <div className="font-mono font-extrabold text-base sm:text-lg text-[#F6C90E]">
+                      ฿{(product.sellingPrice || product.price || 0).toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-[#A0ABB5]">/ {unitLabel}</div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-1">
+                    {onOpenTransferModal && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenTransferModal(product)}
+                        title="โอนย้ายสต็อก"
+                        className="p-2 rounded-lg bg-[#1A1F26] hover:bg-[#202730] text-[#F6C90E] border border-[#3A4750] transition-colors cursor-pointer"
+                      >
+                        <ArrowRightLeft className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onJumpToAudit(product)}
+                      title="นับสต็อก"
+                      className="p-2 rounded-lg bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#3A4750] transition-colors cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenPO(product)}
+                      title="สั่งซื้อเพิ่ม (PO)"
+                      className="p-2 rounded-lg bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#F6C90E] border border-[#3A4750] transition-colors cursor-pointer"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onEditTire(product)}
+                      title="แก้ไขสินค้า"
+                      className="p-2 rounded-lg bg-[#1A1F26] hover:bg-[#202730] text-[#A0ABB5] hover:text-[#EEEEEE] border border-[#3A4750] transition-colors cursor-pointer"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProductToDelete(product)}
+                      title="ลบรายการ"
+                      className="p-2 rounded-lg bg-[#1A1F26] hover:bg-rose-500/20 text-[#A0ABB5] hover:text-rose-400 border border-[#3A4750] transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : viewMode === 'columns' ? (
+        /* ================= 3. COLUMNS VIEW (SHOW ITEMS IN COLUMNS) ================= */
         <div className="bg-[#242C33] border border-[#3A4750] rounded-2xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-[#1A1F26] text-[#A0ABB5] border-b border-[#3A4750] uppercase text-[11px] tracking-wider">
+                <tr className="bg-[#1A1F26] text-[#A0ABB5] border-b border-[#3A4750] uppercase text-[11px] tracking-wider whitespace-nowrap">
                   <th className="py-3 px-3 w-14">รูป</th>
                   <th className="py-3 px-3">รหัส / บาร์โค้ด</th>
-                  <th className="py-3 px-3 min-w-[200px]">ชื่อสินค้า / สเปก</th>
+                  <th className="py-3 px-3 min-w-[180px]">ชื่อสินค้า / สเปก</th>
                   <th className="py-3 px-3">หมวดหมู่</th>
+                  <th className="py-3 px-3">ตำแหน่งจัดเก็บ</th>
                   <th className="py-3 px-3 text-right">ราคาขาย</th>
                   <th className="py-3 px-3 text-center">หน้าร้าน</th>
                   <th className="py-3 px-3 text-center">คลังหลัง</th>
@@ -717,6 +1181,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                   const unitLabel = product.unit || 'ชิ้น';
                   const isZero = breakdown.totalQty === 0;
                   const isLow = breakdown.totalQty > 0 && breakdown.totalQty <= (product.minStock || 2);
+                  const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || '-';
 
                   return (
                     <tr
@@ -747,9 +1212,9 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                       </td>
 
                       {/* Barcode / SKU */}
-                      <td className="py-2 px-3 font-mono text-[11px] text-[#A0ABB5]">
+                      <td className="py-2 px-3 font-mono text-[11px] text-[#A0ABB5] whitespace-nowrap">
                         {product.barcode ? (
-                          <span className="text-[#F6C90E]">{product.barcode}</span>
+                          <span className="text-[#F6C90E] font-medium">{product.barcode}</span>
                         ) : (
                           <span className="text-slate-500">-</span>
                         )}
@@ -768,41 +1233,41 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                       </td>
 
                       {/* Category */}
-                      <td className="py-2 px-3 text-[#A0ABB5] text-[11px]">
-                        {product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || '-'}
+                      <td className="py-2 px-3 text-[#A0ABB5] text-[11px] whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-[#1A1F26] border border-[#3A4750] text-[#EEEEEE] font-medium">
+                          {catName}
+                        </span>
+                      </td>
+
+                      {/* Locations */}
+                      <td className="py-2 px-3 text-[#A0ABB5] text-[11px] whitespace-nowrap">
+                        <div className="space-y-0.5">
+                          <span className="block text-amber-300">หน้าร้าน: {breakdown.frontLocation || '-'}</span>
+                          <span className="block text-sky-300">คลัง: {breakdown.warehouseLocation || '-'}</span>
+                        </div>
                       </td>
 
                       {/* Selling Price */}
-                      <td className="py-2 px-3 text-right font-mono font-bold text-sm text-[#F6C90E]">
+                      <td className="py-2 px-3 text-right font-mono font-bold text-sm text-[#F6C90E] whitespace-nowrap">
                         ฿{(product.sellingPrice || product.price || 0).toLocaleString()}
                       </td>
 
-                      {/* Front Qty & Location */}
-                      <td className="py-2 px-3 text-center">
+                      {/* Front Qty */}
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
                         <span className="font-mono font-bold text-amber-300">
                           {breakdown.frontQty}
                         </span>
-                        {breakdown.frontLocation && (
-                          <span className="block text-[10px] text-[#A0ABB5] font-sans">
-                            {breakdown.frontLocation}
-                          </span>
-                        )}
                       </td>
 
-                      {/* Warehouse Qty & Location */}
-                      <td className="py-2 px-3 text-center">
+                      {/* Warehouse Qty */}
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
                         <span className="font-mono font-bold text-sky-300">
                           {breakdown.warehouseQty}
                         </span>
-                        {breakdown.warehouseLocation && (
-                          <span className="block text-[10px] text-[#A0ABB5] font-sans">
-                            {breakdown.warehouseLocation}
-                          </span>
-                        )}
                       </td>
 
                       {/* Total Qty */}
-                      <td className="py-2 px-3 text-center">
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
                         <span className="font-mono font-bold text-[#EEEEEE]">
                           {breakdown.totalQty}
                         </span>{' '}
@@ -810,7 +1275,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                       </td>
 
                       {/* Status */}
-                      <td className="py-2 px-3 text-center">
+                      <td className="py-2 px-3 text-center whitespace-nowrap">
                         {isZero ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
@@ -830,7 +1295,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                       </td>
 
                       {/* Actions */}
-                      <td className="py-2 px-3 text-right">
+                      <td className="py-2 px-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {onOpenTransferModal && (
                             <button
@@ -884,11 +1349,11 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
           </div>
         </div>
       ) : (
-        /* ================= GRID VIEW (DESKTOP & MOBILE) ================= */
+        /* ================= 4. GALLERY VIEW (SHOW ITEMS IN A GALLERY) ================= */
         <div
           className={`grid ${
             isDesktopMode
-              ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-4'
+              ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-4 gap-4'
               : 'grid-cols-1 gap-3'
           }`}
         >
@@ -910,6 +1375,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
 
             const unitLabel = product.unit || 'ชิ้น';
             const productImg = resolveProductImage(product);
+            const catName = product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่';
 
             return (
               <div
@@ -947,7 +1413,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                   {/* Top-left: Category Chip */}
                   <div className="absolute top-2.5 left-2.5 pointer-events-none">
                     <span className="px-2 py-0.5 rounded-lg bg-[#1A1F26]/85 backdrop-blur-md text-[10px] font-semibold text-[#EEEEEE] border border-white/10 shadow-sm">
-                      {product.category === 'ยางมอเตอร์ไซค์' ? 'ยางนอก' : product.category || product.brand || 'อะไหล่'}
+                      {catName}
                     </span>
                   </div>
 
