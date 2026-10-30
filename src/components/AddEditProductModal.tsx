@@ -250,15 +250,29 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     }
   };
 
-  // Calculate profit preview and 35% minimum threshold
+  // Calculate profit preview and thresholds
   const costNum = Number(costPrice) || 0;
   const sellNum = Number(sellingPrice) || 0;
   const profit = sellNum - costNum;
+  const isLowCost = costNum > 0 && costNum < 100;
   const min35Sell = costNum > 0 ? Math.ceil(costNum * 1.35) : 0;
+  const recommended100Sell =
+    costNum > 0
+      ? costNum * 2.0 >= 20
+        ? Math.ceil((costNum * 2.0) / 5) * 5
+        : Math.ceil(costNum * 2.0)
+      : 0;
+  const recommendedSell = isLowCost
+    ? recommended100Sell
+    : min35Sell >= 100
+    ? Math.ceil(min35Sell / 5) * 5
+    : min35Sell;
   const isBelow35 = costNum > 0 && sellNum > 0 && sellNum < min35Sell;
   const markupPct = costNum > 0 && sellNum > 0 ? Math.round(((sellNum - costNum) / costNum) * 100) : null;
 
-  // Auto-calculate selling price when cost price changes (must be >= 35% markup)
+  // Auto-calculate selling price when cost price changes:
+  // - If cost < 100: markup 100% to 300% (default 100% markup, rounded nicely)
+  // - If cost >= 100: markup 35% (rounded nicely)
   const handleCostPriceChange = (val: string) => {
     if (val === '') {
       setCostPrice('');
@@ -269,11 +283,18 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
     setCostPrice(num);
 
     if (num > 0) {
-      const minRequired = Math.ceil(num * 1.35);
-      const cleanRounded = minRequired >= 100 ? Math.ceil(minRequired / 5) * 5 : minRequired;
-      // Auto-set selling price if empty or lower than 35% threshold
-      if (!currentItem || sellingPrice === '' || Number(sellingPrice) <= 0 || Number(sellingPrice) < minRequired) {
-        setSellingPrice(cleanRounded);
+      const rec =
+        num < 100
+          ? num * 2.0 >= 20
+            ? Math.ceil((num * 2.0) / 5) * 5
+            : Math.ceil(num * 2.0)
+          : Math.ceil(num * 1.35) >= 100
+          ? Math.ceil(Math.ceil(num * 1.35) / 5) * 5
+          : Math.ceil(num * 1.35);
+
+      // Auto-set selling price if empty or 0 or if adding a new product
+      if (!currentItem || sellingPrice === '' || Number(sellingPrice) <= 0) {
+        setSellingPrice(rec);
       }
     }
   };
@@ -281,7 +302,7 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
   const applyMarkupPercent = (pct: number) => {
     if (costNum > 0) {
       const raw = Math.ceil(costNum * (1 + pct / 100));
-      const cleanRounded = raw >= 100 ? Math.ceil(raw / 5) * 5 : raw;
+      const cleanRounded = raw >= 100 ? Math.ceil(raw / 5) * 5 : raw >= 20 ? Math.ceil(raw / 5) * 5 : raw;
       setSellingPrice(cleanRounded);
       setValidationError(null);
     }
@@ -299,15 +320,14 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
 
     const numericCost = Number(costPrice) || 0;
     const numericSell = Number(sellingPrice) || 0;
-    const minRequiredSell = Math.ceil(numericCost * 1.35);
 
-    // Rule: Retail selling price must not be lower than 35% of cost price
-    if (numericCost > 0 && numericSell < minRequiredSell) {
-      setValidationError(
-        `ราคาขายปลีก (฿${numericSell.toLocaleString()}) ต้องไม่ต่ำกว่า 35% ของราคาทุน (ขั้นต่ำ ฿${minRequiredSell.toLocaleString()})`
-      );
+    if (numericSell < 0) {
+      setValidationError('ราคาขายปลีกต้องไม่ติดลบ');
       return;
     }
+
+    // Notice: We allow saving products even if selling price is lower than 35%
+    // (per user request: "ให้คงสามารถบันทึกรายการสินค้าได้ แม้ สินค้าบางอย่างราคาขายอาจจะต่ำกว่า 35%")
 
     setIsSubmitting(true);
     try {
@@ -650,7 +670,9 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   </label>
                   {costNum > 0 && (
                     <span className="text-[10px] text-[#F6C90E]">
-                      (ขั้นต่ำ ฿{min35Sell.toLocaleString()})
+                      {isLowCost
+                        ? `(แนะนำ 100%-300%: ฿${recommended100Sell.toLocaleString()})`
+                        : `(แนะนำ +35%: ฿${min35Sell.toLocaleString()})`}
                     </span>
                   )}
                 </div>
@@ -668,7 +690,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     }}
                     placeholder="0.00"
                     className={`w-full bg-[#252C33] border rounded-xl pl-7 pr-3 py-2 text-[#F6C90E] font-bold font-mono text-sm focus:outline-none ${
-                      isBelow35 ? 'border-rose-500 focus:border-rose-400' : 'border-[#475662] focus:border-[#F6C90E]'
+                      sellNum > 0 && sellNum < costNum
+                        ? 'border-rose-500 focus:border-rose-400'
+                        : isBelow35
+                        ? 'border-amber-400/60 focus:border-[#F6C90E]'
+                        : 'border-[#475662] focus:border-[#F6C90E]'
                     }`}
                   />
                 </div>
@@ -683,7 +709,11 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                     <span className="text-[#A0ABB5] text-[11px]">กำไรต่อหน่วย:</span>
                     <span
                       className={`font-mono font-bold text-xs ${
-                        sellNum >= min35Sell ? 'text-emerald-400' : sellNum > costNum ? 'text-amber-400' : 'text-rose-400'
+                        markupPct !== null && markupPct >= (isLowCost ? 100 : 35)
+                          ? 'text-emerald-400'
+                          : sellNum > costNum
+                          ? 'text-amber-400'
+                          : 'text-rose-400'
                       }`}
                     >
                       {profit >= 0 ? `+฿${profit.toLocaleString()}` : `-฿${Math.abs(profit).toLocaleString()}`}
@@ -692,49 +722,109 @@ export const AddEditProductModal: React.FC<AddEditProductModalProps> = ({
                   </div>
 
                   <div className="text-[11px] text-[#A0ABB5]">
-                    เกณฑ์ขั้นต่ำ +35%: <span className="font-mono font-bold text-[#F6C90E]">฿{min35Sell.toLocaleString()}</span>
+                    {isLowCost ? (
+                      <span>แนะนำ <strong className="text-amber-400 font-mono font-bold">+100% ถึง +300%</strong></span>
+                    ) : (
+                      <span>เกณฑ์แนะนำ <strong className="text-[#F6C90E] font-mono font-bold">+35% ขึ้นไป</strong></span>
+                    )}
                   </div>
                 </div>
 
                 {/* Preset Margin Buttons */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-[#A0ABB5]">คำนวณราคาขาย:</span>
-                  <button
-                    type="button"
-                    onClick={() => applyMarkupPercent(35)}
-                    className="px-2.5 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#F6C90E]/60 text-[#F6C90E] text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
-                  >
-                    +35% (ขั้นต่ำ ฿{min35Sell.toLocaleString()})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyMarkupPercent(40)}
-                    className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
-                  >
-                    +40% (฿{Math.ceil(costNum * 1.4).toLocaleString()})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyMarkupPercent(50)}
-                    className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
-                  >
-                    +50% (฿{Math.ceil(costNum * 1.5).toLocaleString()})
-                  </button>
+                  <span className="text-[10px] text-[#A0ABB5]">
+                    {isLowCost ? 'คำนวณราคาขาย (ทุน <100บ.):' : 'คำนวณราคาขาย:'}
+                  </span>
+
+                  {isLowCost ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(100)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/60 text-[#F6C90E] text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
+                        title="กำไร 100% (เท่าตัว)"
+                      >
+                        +100% (฿{recommended100Sell.toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(150)}
+                        className="px-2.5 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +150% (฿{Math.ceil(costNum * 2.5).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(200)}
+                        className="px-2.5 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +200% (฿{Math.ceil(costNum * 3.0).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(300)}
+                        className="px-2.5 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +300% (฿{Math.ceil(costNum * 4.0).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(35)}
+                        className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662]/70 text-[#A0ABB5] text-[10px] transition-all active:scale-95 cursor-pointer"
+                        title="บวก 35% พื้นฐาน"
+                      >
+                        +35% (฿{min35Sell.toLocaleString()})
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(35)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/60 text-[#F6C90E] text-[10px] font-bold transition-all active:scale-95 cursor-pointer"
+                      >
+                        +35% (฿{min35Sell.toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(40)}
+                        className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +40% (฿{Math.ceil(costNum * 1.4).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(50)}
+                        className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +50% (฿{Math.ceil(costNum * 1.5).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyMarkupPercent(100)}
+                        className="px-2 py-1 rounded-lg bg-[#252C33] hover:bg-[#2F3842] border border-[#475662] text-[#EEEEEE] text-[10px] font-medium transition-all active:scale-95 cursor-pointer"
+                      >
+                        +100% (฿{Math.ceil(costNum * 2.0).toLocaleString()})
+                      </button>
+                    </>
+                  )}
                 </div>
 
-                {/* Warning if lower than 35% */}
+                {/* Soft notice if lower than 35% (Can still save!) */}
                 {isBelow35 && (
-                  <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/40 flex items-center justify-between gap-2 text-[11px] text-rose-300">
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2 text-[11px] text-amber-300">
                     <div className="flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
-                      <span>ราคาขายต่ำกว่าเกณฑ์ 35% ของทุน (ขาดอีก ฿{(min35Sell - sellNum).toLocaleString()})</span>
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                      <span>
+                        ราคาขายต่ำกว่าเกณฑ์ 35% <strong className="text-[#EEEEEE]">(สามารถกดบันทึกได้ตามปกติ)</strong>
+                      </span>
                     </div>
                     <button
                       type="button"
-                      onClick={() => applyMarkupPercent(35)}
-                      className="px-2.5 py-0.5 rounded bg-rose-500 hover:bg-rose-600 text-white font-bold text-[10px] whitespace-nowrap active:scale-95 transition-all cursor-pointer"
+                      onClick={() => applyMarkupPercent(isLowCost ? 100 : 35)}
+                      className="px-2.5 py-0.5 rounded bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold text-[10px] whitespace-nowrap active:scale-95 transition-all cursor-pointer"
                     >
-                      ปรับเป็น 35%
+                      {isLowCost ? 'ปรับเป็น 100%' : 'ปรับเป็น 35%'}
                     </button>
                   </div>
                 )}

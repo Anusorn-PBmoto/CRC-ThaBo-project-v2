@@ -461,7 +461,7 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
    - quantity: จำนวนที่ซื้อ (ตัวเลขจำนวนเต็ม เช่น 1, 6, 10, 60)
    - unit: หน่วยนับตามบิล (เช่น ลัง, ลูก, แพค, อัน, ตัว, ชุด, หลอด, เส้น, ชิ้น)
    - costPrice: ราคาต่อหน่วย (ต้นทุน) ตัดเครื่องหมายจุลภาคออก เช่น 1,595.00 -> 1595
-   - sellingPrice: ราคาขายปลีกแนะนำ โดยบวกกำไรมาตรฐานไม่ต่ำกว่า 35% จากราคาต้นทุน (costPrice * 1.35 ขึ้นไป เช่น ต้นทุน 100บ. -> 135-140บ.)
+   - sellingPrice: ราคาขายปลีกแนะนำ: ถ้าต้นทุนต่ำกว่า 100 บาท ให้คำนวณราคาขายเป็น 100% ถึง 300% (เช่น ทุน 20บ. -> 40-80บ., ทุน 50บ. -> 100-150บ.), ถ้าต้นทุน 100 บาทขึ้นไป ให้บวกกำไรไม่ต่ำกว่า 35%
    - lineTotal: ราคารวมของแถวนี้ (quantity * costPrice)
 3. สรุปภาพรวม summary สั้นๆ เป็นภาษาไทย 1 ประโยค เช่น "พบ 14 รายการ ยอดรวม 23,450 บาท จาก ร้าน เจริญชัย"`;
 
@@ -588,11 +588,12 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
           ? parseFloat(item.sellingPrice.replace(/,/g, '')) || 0
           : Number(item.sellingPrice) || 0;
 
-        const minSell35 = cost > 0 ? Math.ceil(cost * 1.35) : 0;
-        if ((sellPrice < minSell35 || sellPrice <= cost) && cost > 0) {
-          // Rule: selling price must not be lower than 35% of cost price
-          const rawSell = cost * 1.35;
-          sellPrice = rawSell >= 100 ? Math.ceil(rawSell / 10) * 10 : Math.ceil(rawSell);
+        const isLowCost = cost > 0 && cost < 100;
+        const targetMin = isLowCost ? cost * 2.0 : (cost > 0 ? Math.ceil(cost * 1.35) : 0);
+        if ((sellPrice < targetMin || sellPrice <= cost) && cost > 0) {
+          // Rule: if cost < 100 THB, markup 100%-300% (default 100% = cost * 2); otherwise at least 35%
+          const rawSell = isLowCost ? cost * 2.0 : cost * 1.35;
+          sellPrice = rawSell >= 100 ? Math.ceil(rawSell / 10) * 10 : rawSell >= 20 ? Math.ceil(rawSell / 5) * 5 : Math.ceil(rawSell);
         }
 
         return {
@@ -636,6 +637,137 @@ app.post('/api/gemini/analyze-invoice', async (req: Request, res: Response): Pro
     });
   }
 });
+
+// Endpoint: AI Stock Adjustment Document / PDF Analysis (ปรับสต็อกด้วยเอกสาร PDF / รูปภาพ)
+app.post('/api/gemini/analyze-stock-file', async (req: Request, res: Response): Promise<void> => {
+  const startTime = Date.now();
+  try {
+    const {
+      fileBase64,
+      imageBase64,
+      mimeType = 'application/pdf',
+      catalog = [],
+      preferredModel = 'auto',
+    } = req.body;
+
+    const rawBase64 = fileBase64 || imageBase64;
+    if (!rawBase64) {
+      res.status(400).json({ error: 'ไม่พบข้อมูลไฟล์เอกสาร (fileBase64 is required)' });
+      return;
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      res.status(500).json({
+        error: 'ยังไม่ได้ตั้งค่า GEMINI_API_KEY ในสภาพแวดล้อมระบบ',
+      });
+      return;
+    }
+
+    const cleanBase64 = rawBase64.replace(/^data:[^;]+;base64,/, '');
+    const detectedMime = rawBase64.startsWith('data:')
+      ? rawBase64.substring(5, rawBase64.indexOf(';'))
+      : mimeType;
+
+    const catalogMiniList =
+      Array.isArray(catalog) && catalog.length > 0
+        ? `ตัวอย่างแคตตาล็อกสินค้าในระบบ CRC THABO (${catalog.length} รายการ):\n` +
+          catalog
+            .slice(0, 40)
+            .map((c: any) => `- ID: ${c.id} | Barcode: ${c.barcode || '-'} | Name: ${c.name || ''}`)
+            .join('\n')
+        : 'ยังไม่มีแคตตาล็อกสินค้า';
+
+    const systemPrompt = `คุณคือผู้ช่วยจัดการสต็อกสินค้าอัจฉริยะ (AI Inventory & Stock Audit Assistant) สำหรับร้านอะไหล่จักรยานยนต์และยานยนต์ CRC THABO
+หน้าที่ของคุณคืออ่านเอกสาร "รายงานตรวจนับสต็อก / สรุปสินค้าคงเหลือ / ใบตรวจนับคลัง / บิลส่งของ (Stock Audit / Inventory Count / Delivery Sheet)"
+ที่แนบมาในรูปแบบ PDF หรือรูปภาพ และสกัดข้อมูลสินค้าทุกรายการเพื่อนำไปปรับปรุงยอดสต็อกจริงในระบบ:
+
+1. สกัดรายการสินค้า (items) แต่ละรายการ:
+   - barcode: รหัสสินค้า หรือรหัสบาร์โค้ด
+   - name: ชื่อสินค้าภาษาไทยที่ถูกต้องและอ่านง่าย
+   - brand: ยี่ห้อสินค้า (ถ้ามี)
+   - quantity: จำนวนสต็อกที่ตรวจนับได้ หรือจำนวนคงเหลือในเอกสาร (ตัวเลขจำนวนเต็ม)
+   - frontQty: จำนวนหน้าร้าน (ถ้ามีระบุแยก)
+   - warehouseQty: จำนวนคลังหลัง (ถ้ามีระบุแยก)
+   - unit: หน่วยนับ (เช่น ชิ้น, เส้น, ลัง, ขวด, อัน, ตัว, กล่อง, ชุด)
+   - costPrice: ราคาทุน (ถ้ามี)
+   - sellingPrice: ราคาขาย (ถ้ามี)
+   - location: ตำแหน่งจัดเก็บหรือชั้นวาง (ถ้ามี)
+   - note: หมายเหตุเพิ่มเติม
+2. documentTitle: ชื่อเอกสาร (เช่น รายงานตรวจนับสินค้าปลายงวด, สรุปสต็อกคลัง)
+3. summary: สรุปภาพรวมสั้นๆ เป็นภาษาไทย เช่น "พบ 28 รายการตรวจนับ ยอดรวม 240 ชิ้น"`;
+
+    const response = await generateWithGemini({
+      contents: [
+        {
+          inlineData: {
+            mimeType: detectedMime || 'application/pdf',
+            data: cleanBase64,
+          },
+        },
+        {
+          text: systemPrompt + '\n\n' + catalogMiniList,
+        },
+      ],
+      preferredModel,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            documentTitle: { type: Type.STRING },
+            date: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            items: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  barcode: { type: Type.STRING },
+                  name: { type: Type.STRING },
+                  brand: { type: Type.STRING },
+                  quantity: { type: Type.NUMBER },
+                  frontQty: { type: Type.NUMBER },
+                  warehouseQty: { type: Type.NUMBER },
+                  unit: { type: Type.STRING },
+                  costPrice: { type: Type.NUMBER },
+                  sellingPrice: { type: Type.NUMBER },
+                  location: { type: Type.STRING },
+                  note: { type: Type.STRING },
+                },
+                required: ['name', 'quantity'],
+              },
+            },
+          },
+          required: ['items'],
+        },
+      },
+    });
+
+    const rawText = response.text || '{}';
+    let cleanJson = rawText.trim();
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    }
+
+    const parsedData = JSON.parse(cleanJson);
+    const durationMs = Date.now() - startTime;
+
+    res.json({
+      success: true,
+      model: (response as any)?._usedModel || GEMINI_FLASH_MODEL,
+      durationMs,
+      data: parsedData,
+    });
+  } catch (error: any) {
+    console.error('Error analyzing stock file with Gemini:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'เกิดข้อผิดพลาดในการวิเคราะห์เอกสารสต็อกด้วย Gemini',
+      durationMs: Date.now() - startTime,
+    });
+  }
+});
+
 
 // Endpoint: AI Voice Search & Natural Language Query for Inventory
 app.post('/api/gemini/voice-search', async (req: Request, res: Response): Promise<void> => {

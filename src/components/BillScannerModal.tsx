@@ -511,10 +511,11 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
       const formattedItems: ExtractedBillItem[] = rawItems.map((item, idx) => {
         const cost = Number(item.costPrice) || 0;
         let sell = Number(item.sellingPrice) || 0;
-        const min35 = cost > 0 ? Math.ceil(cost * 1.35) : 0;
-        if (cost > 0 && (sell < min35 || sell <= cost)) {
-          const raw = cost * 1.35;
-          sell = raw >= 100 ? Math.ceil(raw / 10) * 10 : Math.ceil(raw);
+        const isLowCost = cost > 0 && cost < 100;
+        const targetMin = isLowCost ? cost * 2.0 : (cost > 0 ? Math.ceil(cost * 1.35) : 0);
+        if (cost > 0 && (sell < targetMin || sell <= cost)) {
+          const raw = isLowCost ? cost * 2.0 : cost * 1.35;
+          sell = raw >= 100 ? Math.ceil(raw / 10) * 10 : raw >= 20 ? Math.ceil(raw / 5) * 5 : Math.ceil(raw);
         }
 
         // Check if matched in catalog
@@ -1414,14 +1415,28 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                                 className={`font-bold font-mono ${
                                   profit <= 0
                                     ? 'text-rose-400'
-                                    : marginPct < 35
+                                    : (item.costPrice < 100 ? marginPct < 100 : marginPct < 35)
                                     ? 'text-amber-400'
                                     : 'text-emerald-400'
                                 }`}
                               >
                                 ฿{profit.toLocaleString()} ({marginPct}%)
                               </span>
-                              {item.costPrice > 0 && marginPct < 35 && (
+                              {item.costPrice > 0 && item.costPrice < 100 && marginPct < 100 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const p = item.costPrice * 2.0;
+                                    const rounded = p >= 100 ? Math.ceil(p / 10) * 10 : p >= 20 ? Math.ceil(p / 5) * 5 : Math.ceil(p);
+                                    handleUpdateItem(item.id, { sellingPrice: rounded });
+                                  }}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-[#F6C90E] border border-amber-400/40 hover:bg-amber-400/30 transition-all cursor-pointer"
+                                  title="ปรับราคาขายเป็น +100% สำหรับสินค้าราคาต่ำกว่า 100บ."
+                                >
+                                  +100%
+                                </button>
+                              )}
+                              {item.costPrice >= 100 && marginPct < 35 && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1429,7 +1444,7 @@ export const BillScannerModal: React.FC<BillScannerModalProps> = ({
                                     const rounded = min35 >= 100 ? Math.ceil(min35 / 10) * 10 : min35;
                                     handleUpdateItem(item.id, { sellingPrice: rounded });
                                   }}
-                                  className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-400/20 text-[#F6C90E] border border-amber-400/40 hover:bg-amber-400/30 transition-all cursor-pointer"
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-400/20 text-[#F6C90E] border border-amber-400/40 hover:bg-amber-400/30 transition-all cursor-pointer"
                                   title="ปรับราคาขายให้ได้กำไรอย่างน้อย 35%"
                                 >
                                   +35%

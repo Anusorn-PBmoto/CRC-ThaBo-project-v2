@@ -68,6 +68,7 @@ import { BatchStockTransferModal } from './components/BatchStockTransferModal';
 import { ScrollToTopButton } from './components/ScrollToTopButton';
 import { StaffPosView } from './components/StaffPosView';
 import { CustomerManagementModal } from './components/CustomerManagementModal';
+import { StockAdjustmentFileModal } from './components/StockAdjustmentFileModal';
 import {
   generateAppSheetCsv,
   downloadAppSheetCsv,
@@ -289,6 +290,7 @@ export default function App() {
   const [editingTire, setEditingTire] = useState<TireItem | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isBillScannerOpen, setIsBillScannerOpen] = useState(false);
+  const [isStockAdjustmentOpen, setIsStockAdjustmentOpen] = useState(false);
   const [isPOOpen, setIsPOOpen] = useState(false);
   const [poItems, setPoItems] = useState<TireItem[]>([]);
   const [isAuditConfirmOpen, setIsAuditConfirmOpen] = useState(false);
@@ -1167,6 +1169,110 @@ export default function App() {
     );
   };
 
+  // Apply Stock Adjustments from File (.CSV / .PDF)
+  const handleApplyStockAdjustments = async (
+    adjustments: Array<{
+      productId: string;
+      newFrontQty: number;
+      newWarehouseQty: number;
+      diff: number;
+      note?: string;
+    }>,
+    summaryText: string
+  ) => {
+    if (!adjustments || adjustments.length === 0) return;
+
+    const adjustmentsMap = new Map<
+      string,
+      { newFrontQty: number; newWarehouseQty: number; diff: number; note?: string }
+    >();
+    adjustments.forEach((adj) => adjustmentsMap.set(adj.productId, adj));
+
+    const newLogs: AuditLog[] = [];
+    const updatedList = tires.map((tire) => {
+      const adj = adjustmentsMap.get(tire.id);
+      if (!adj) return tire;
+
+      const newTotal = adj.newFrontQty + adj.newWarehouseQty;
+      const prevTotal =
+        (tire.frontQty || 0) + (tire.warehouseQty || 0) || tire.actualQty || 0;
+      const logId = `log-adj-${Date.now()}-${tire.id}`;
+
+      const log: AuditLog = {
+        id: logId,
+        productId: tire.id,
+        tireId: tire.id,
+        productName: tire.name || tire.size || 'สินค้า',
+        tireName: tire.name || tire.size || 'สินค้า',
+        brand: tire.brand || '',
+        diff: adj.diff,
+        previousQty: prevTotal,
+        newQty: newTotal,
+        action: '📊 ปรับสต็อกด้วยไฟล์ (.pdf/.csv)',
+        timestamp: new Date().toISOString(),
+        note:
+          adj.note ||
+          `ปรับยอดสต็อกหน้าร้าน: ${adj.newFrontQty}, คลังหลัง: ${adj.newWarehouseQty}`,
+      };
+      newLogs.push(log);
+
+      if (!isFirestoreQuotaExhausted() && !isSandboxMode) {
+        addAuditLog(log, logId).catch(() => {});
+      }
+
+      return {
+        ...tire,
+        frontQty: adj.newFrontQty,
+        warehouseQty: adj.newWarehouseQty,
+        actualQty: newTotal,
+        systemQty: newTotal,
+        status: 'checked' as StockStatus,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    persistTires(updatedList);
+    if (newLogs.length > 0) {
+      persistLogs((prev) => [...newLogs, ...prev].slice(0, 100));
+    }
+
+    // Write to Firestore if connected
+    if (!isFirestoreQuotaExhausted() && !isSandboxMode) {
+      try {
+        const batch = writeBatch(db);
+        adjustments.forEach((adj) => {
+          const prodRef = doc(db, 'products', adj.productId);
+          const newTotal = adj.newFrontQty + adj.newWarehouseQty;
+          batch.set(
+            prodRef,
+            {
+              frontQty: adj.newFrontQty,
+              warehouseQty: adj.newWarehouseQty,
+              actualQty: newTotal,
+              systemQty: newTotal,
+              status: 'checked',
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        });
+        await batch.commit();
+      } catch (err) {
+        console.warn('Batch update for stock adjustments warning:', err);
+      }
+    }
+
+    confetti({
+      particleCount: 85,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#10B981', '#F6C90E', '#38BDF8'],
+    });
+
+    setAppSheetToast(`✅ ปรับปรุงสต็อกสำเร็จ ${adjustments.length} รายการ เรียบร้อยแล้ว`);
+    setTimeout(() => setAppSheetToast(null), 4000);
+  };
+
   // Quick navigation helpers
   const handleJumpToAudit = (tire: TireItem) => {
     setCurrentTab('inventory');
@@ -1478,6 +1584,7 @@ export default function App() {
         onToggleStaffPos={() => setIsStaffPosMode(true)}
         onOpenCustomers={() => setIsCustomerManagementOpen(true)}
         onOpenBillScanner={() => setIsBillScannerOpen(true)}
+        onOpenStockAdjustment={() => setIsStockAdjustmentOpen(true)}
         isDesktopMode={isDesktopMode}
         onToggleDesktopMode={toggleDesktopMode}
         isOnline={isOnline && !isQuotaExceeded}
@@ -1581,6 +1688,7 @@ export default function App() {
                 onOpenTransferModal={handleOpenTransferModal}
                 onOpenBatchTransfer={handleOpenBatchTransfer}
                 onOpenBillScanner={() => setIsBillScannerOpen(true)}
+                onOpenStockAdjustment={() => setIsStockAdjustmentOpen(true)}
               />
             )}
 
@@ -1606,6 +1714,7 @@ export default function App() {
                 onOpenPO={handleOpenSinglePO}
                 onSyncAllSystemStock={() => setIsAuditConfirmOpen(true)}
                 onJumpToAudit={handleJumpToAudit}
+                onOpenStockAdjustment={() => setIsStockAdjustmentOpen(true)}
               />
             )}
 
@@ -1744,6 +1853,14 @@ export default function App() {
         onSaveCustomer={handleSaveCustomer}
         onDeleteCustomer={handleDeleteCustomer}
         onSaveTiers={handleSaveTiers}
+      />
+
+      {/* Stock Adjustment via .PDF / .CSV Modal */}
+      <StockAdjustmentFileModal
+        isOpen={isStockAdjustmentOpen}
+        onClose={() => setIsStockAdjustmentOpen(false)}
+        products={tires}
+        onApplyAdjustments={handleApplyStockAdjustments}
       />
     </div>
   );

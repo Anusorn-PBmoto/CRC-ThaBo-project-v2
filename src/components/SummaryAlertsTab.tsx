@@ -10,6 +10,7 @@ import {
   FileText,
   Boxes,
   Send,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { TireItem } from '../types';
 
@@ -18,6 +19,7 @@ interface SummaryAlertsTabProps {
   onOpenPO: (tire: TireItem) => void;
   onSyncAllSystemStock: () => void;
   onJumpToAudit: (tire: TireItem) => void;
+  onOpenStockAdjustment?: () => void;
 }
 
 export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
@@ -25,6 +27,7 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
   onOpenPO,
   onSyncAllSystemStock,
   onJumpToAudit,
+  onOpenStockAdjustment,
 }) => {
   const [copiedText, setCopiedText] = useState(false);
 
@@ -102,6 +105,19 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
             </div>
           </div>
         </div>
+
+        {onOpenStockAdjustment && (
+          <div className="mt-3 pt-3 border-t border-[#475662]">
+            <button
+              type="button"
+              onClick={onOpenStockAdjustment}
+              className="w-full py-2 px-3 rounded-xl bg-[#252C33] hover:bg-[#2A343D] border border-emerald-500/40 text-emerald-400 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" />
+              <span>ปรับสต็อกด้วยไฟล์เอกสาร (.PDF / .CSV)</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 2. Audit Discrepancies Section */}

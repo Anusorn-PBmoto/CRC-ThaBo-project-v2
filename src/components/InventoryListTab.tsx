@@ -21,6 +21,7 @@ import {
   Image as ImageIcon,
   ArrowUpDown,
   Filter,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { ProductItem } from '../types';
 import { resolveProductImage } from '../utils/productImages';
@@ -41,6 +42,7 @@ interface InventoryListTabProps {
   onOpenTransferModal?: (product: ProductItem) => void;
   onOpenBatchTransfer?: (selectedProducts: ProductItem[]) => void;
   onOpenBillScanner?: () => void;
+  onOpenStockAdjustment?: () => void;
   incomingSearchQuery?: string;
 }
 
@@ -104,6 +106,7 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
   onOpenTransferModal,
   onOpenBatchTransfer,
   onOpenBillScanner,
+  onOpenStockAdjustment,
   incomingSearchQuery,
 }) => {
   const [searchQuery, setSearchQuery] = useState(incomingSearchQuery || '');
@@ -379,6 +382,18 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
                 </button>
               )}
 
+              {onOpenStockAdjustment && (
+                <button
+                  type="button"
+                  onClick={onOpenStockAdjustment}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[#1A1F26] hover:bg-[#252C33] text-emerald-400 hover:text-emerald-300 border border-emerald-500/40 hover:border-emerald-500/60 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                  title="ปรับปรุงสต็อกด้วยไฟล์ .PDF หรือ .CSV / Excel"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>ปรับสต็อก (PDF/CSV)</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={onOpenAddModal}
@@ -442,29 +457,41 @@ export const InventoryListTab: React.FC<InventoryListTabProps> = ({
               })}
             </div>
 
-            {/* Mobile Actions: 2-column Full Width */}
-            <div className="grid grid-cols-2 gap-2">
+            {/* Mobile Actions: Clean 3-button or 2-button layout */}
+            <div className={`grid ${onOpenStockAdjustment ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5`}>
               {onOpenBillScanner && (
                 <button
                   type="button"
                   onClick={onOpenBillScanner}
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer"
+                  className="flex items-center justify-center gap-1 px-1.5 py-2 bg-gradient-to-r from-amber-400 to-[#F6C90E] hover:from-amber-500 hover:to-[#E5B800] text-slate-950 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer min-w-0"
                   title="ใช้ AI สแกนภาพถ่ายบิล/ใบเสร็จ"
                 >
                   <Sparkles className="w-3.5 h-3.5 fill-slate-950 text-slate-950 flex-shrink-0" />
-                  <span className="truncate">ถ่ายบิลเพิ่มสินค้า (AI)</span>
+                  <span className="truncate">ถ่ายบิล (AI)</span>
+                </button>
+              )}
+
+              {onOpenStockAdjustment && (
+                <button
+                  type="button"
+                  onClick={onOpenStockAdjustment}
+                  className="flex items-center justify-center gap-1 px-1.5 py-2 bg-[#1A1F26] hover:bg-[#252C33] text-emerald-400 border border-emerald-500/40 font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer min-w-0"
+                  title="ปรับสต็อกด้วยไฟล์ .PDF หรือ .CSV"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">ปรับสต็อกไฟล์</span>
                 </button>
               )}
 
               <button
                 type="button"
                 onClick={onOpenAddModal}
-                className={`flex items-center justify-center gap-1.5 px-3 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer ${
-                  !onOpenBillScanner ? 'col-span-2' : ''
+                className={`flex items-center justify-center gap-1 px-1.5 py-2 bg-[#F6C90E] hover:bg-[#E5B800] text-[#252C33] font-bold rounded-xl text-xs shadow-md active:scale-95 transition-all cursor-pointer min-w-0 ${
+                  !onOpenBillScanner && !onOpenStockAdjustment ? 'col-span-2' : ''
                 }`}
               >
                 <Plus className="w-4 h-4 text-[#252C33] stroke-[2.5] flex-shrink-0" />
-                <span>เพิ่มสินค้า</span>
+                <span className="truncate">เพิ่มสินค้า</span>
               </button>
             </div>
           </div>

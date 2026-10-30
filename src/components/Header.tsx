@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { QrCode, User, FileSpreadsheet, ShoppingCart, Users, Laptop, Menu, Sparkles } from 'lucide-react';
+import { QrCode, User, FileSpreadsheet, ShoppingCart, Users, Laptop, Menu, Sparkles, SlidersHorizontal } from 'lucide-react';
 
 interface HeaderProps {
   onOpenScanner: () => void;
@@ -9,6 +9,7 @@ interface HeaderProps {
   onToggleStaffPos?: () => void;
   onOpenCustomers?: () => void;
   onOpenBillScanner?: () => void;
+  onOpenStockAdjustment?: () => void;
   isDesktopMode?: boolean;
   onToggleDesktopMode?: () => void;
   isOnline: boolean;
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleStaffPos,
   onOpenCustomers,
   onOpenBillScanner,
+  onOpenStockAdjustment,
   isDesktopMode = false,
   onToggleDesktopMode,
   isOnline,
@@ -101,6 +103,19 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Sparkles className="w-4 h-4 text-amber-400" />
                   <span className="font-semibold">AI สแกนบิลเพิ่มสินค้าใหม่</span>
+                </button>
+              )}
+
+              {onOpenStockAdjustment && (
+                <button
+                  onClick={() => {
+                    setIsLogoMenuOpen(false);
+                    onOpenStockAdjustment();
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2.5 text-xs text-[#EEEEEE] hover:bg-emerald-500/20 hover:text-emerald-300 transition-colors cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold">ปรับสต็อกด้วยไฟล์ (.pdf/.csv)</span>
                 </button>
               )}
 
