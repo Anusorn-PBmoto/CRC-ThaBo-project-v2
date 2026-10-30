@@ -724,7 +724,18 @@ export const StockAdjustmentFileModal: React.FC<StockAdjustmentFileModalProps> =
       );
     } catch (err: any) {
       console.error('PDF AI parse error:', err);
-      setErrorMessage(err?.message || 'เกิดข้อผิดพลาดในการวิเคราะห์เอกสาร PDF ด้วย AI');
+      let errMsg = err?.message || 'เกิดข้อผิดพลาดในการวิเคราะห์เอกสาร PDF ด้วย AI';
+      try {
+        const parsed = JSON.parse(errMsg);
+        if (parsed?.error?.message) {
+          errMsg = parsed.error.message;
+        } else if (parsed?.message) {
+          errMsg = parsed.message;
+        }
+      } catch {
+        // Not JSON
+      }
+      setErrorMessage(errMsg);
     } finally {
       setIsProcessing(false);
       setProcessingStatus('');

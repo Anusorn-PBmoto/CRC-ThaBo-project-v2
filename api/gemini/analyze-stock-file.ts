@@ -1,7 +1,17 @@
 import type { Request, Response } from 'express';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+
+const VALID_MODELS = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
 
 export default async function handler(req: Request, res: Response) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
@@ -83,16 +93,59 @@ export default async function handler(req: Request, res: Response) {
       },
     });
 
-    const candidateModels =
-      preferredModel && preferredModel !== 'auto'
-        ? [preferredModel, 'gemini-2.5-flash', 'gemini-2.0-flash']
-        : ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const candidateModels: string[] = [];
+    if (preferredModel && preferredModel !== 'auto' && VALID_MODELS.includes(preferredModel)) {
+      candidateModels.push(preferredModel);
+    }
+    for (const m of VALID_MODELS) {
+      if (!candidateModels.includes(m)) {
+        candidateModels.push(m);
+      }
+    }
 
     let lastError: any = null;
     let responseText = '';
     let usedModel = candidateModels[0];
 
     for (const modelName of candidateModels) {
+      const isLite = modelName.includes('lite');
+      const callConfig: any = {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            documentTitle: { type: Type.STRING },
+            date: { type: Type.STRING },
+            summary: { type: Type.STRING },
+            items: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  barcode: { type: Type.STRING },
+                  name: { type: Type.STRING },
+                  brand: { type: Type.STRING },
+                  quantity: { type: Type.NUMBER },
+                  frontQty: { type: Type.NUMBER },
+                  warehouseQty: { type: Type.NUMBER },
+                  unit: { type: Type.STRING },
+                  costPrice: { type: Type.NUMBER },
+                  sellingPrice: { type: Type.NUMBER },
+                  location: { type: Type.STRING },
+                  note: { type: Type.STRING },
+                },
+                required: ['name', 'quantity'],
+              },
+            },
+          },
+          required: ['items'],
+        },
+      };
+
+      if (!isLite) {
+        callConfig.thinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
+      }
+
       try {
         const resp = await ai.models.generateContent({
           model: modelName,
@@ -107,38 +160,7 @@ export default async function handler(req: Request, res: Response) {
               text: systemPrompt + '\n\n' + catalogMiniList,
             },
           ],
-          config: {
-            responseMimeType: 'application/json',
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                documentTitle: { type: Type.STRING },
-                date: { type: Type.STRING },
-                summary: { type: Type.STRING },
-                items: {
-                  type: Type.ARRAY,
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      barcode: { type: Type.STRING },
-                      name: { type: Type.STRING },
-                      brand: { type: Type.STRING },
-                      quantity: { type: Type.NUMBER },
-                      frontQty: { type: Type.NUMBER },
-                      warehouseQty: { type: Type.NUMBER },
-                      unit: { type: Type.STRING },
-                      costPrice: { type: Type.NUMBER },
-                      sellingPrice: { type: Type.NUMBER },
-                      location: { type: Type.STRING },
-                      note: { type: Type.STRING },
-                    },
-                    required: ['name', 'quantity'],
-                  },
-                },
-              },
-              required: ['items'],
-            },
-          },
+          config: callConfig,
         });
 
         if (resp && resp.text) {
@@ -170,9 +192,27 @@ export default async function handler(req: Request, res: Response) {
     });
   } catch (error: any) {
     console.error('Error analyzing stock file with Gemini:', error);
+    let friendlyMessage = 'เกิดข้อผิดพลาดในการวิเคราะห์เอกสารสต็อกด้วย AI กรุณาลองใหม่อีกครั้ง';
+    const rawMsg = error?.message || '';
+    if (rawMsg) {
+      try {
+        const parsed = JSON.parse(rawMsg);
+        if (parsed?.error?.message) {
+          friendlyMessage = `Gemini API: ${parsed.error.message}`;
+        }
+      } catch {
+        if (rawMsg.includes('404') || rawMsg.includes('not found')) {
+          friendlyMessage = 'โมเดล AI ได้รับการอัปเดตแล้ว กรุณากดลองวิเคราะห์ใหม่อีกครั้ง';
+        } else if (rawMsg.includes('503') || rawMsg.includes('high demand') || rawMsg.includes('overloaded')) {
+          friendlyMessage = 'ระบบ AI มีการใช้งานหนาแน่นชั่วคราว กรุณากดลองวิเคราะห์ใหม่อีกครั้ง';
+        } else {
+          friendlyMessage = rawMsg;
+        }
+      }
+    }
     return res.status(500).json({
       success: false,
-      error: error?.message || 'เกิดข้อผิดพลาดในการวิเคราะห์เอกสารสต็อกด้วย Gemini',
+      error: friendlyMessage,
       durationMs: Date.now() - startTime,
     });
   }
