@@ -141,14 +141,26 @@ export const SummaryAlertsTab: React.FC<SummaryAlertsTabProps> = ({
         </div>
 
         {discrepancyItems.length === 0 ? (
-          <div className="bg-[#3A4750] border border-emerald-500/30 rounded-2xl p-4 text-center">
-            <CheckCheck className="w-8 h-8 text-emerald-400 mx-auto mb-1.5" />
-            <p className="text-xs font-semibold text-emerald-300">
-              ยอดนับตรงกับระบบ 100%
-            </p>
-            <p className="text-[11px] text-[#A0ABB5] mt-0.5">
-              ไม่มีสินค้าที่คลาดเคลื่อนในการตรวจนับรอบปัจจุบัน
-            </p>
+          <div className="bg-[#3A4750] border border-emerald-500/30 rounded-2xl p-4 text-center space-y-2.5">
+            <CheckCheck className="w-8 h-8 text-emerald-400 mx-auto" />
+            <div>
+              <p className="text-xs font-semibold text-emerald-300">
+                ยอดนับตรงกับระบบ 100%
+              </p>
+              <p className="text-[11px] text-[#A0ABB5] mt-0.5">
+                ไม่มีสินค้าที่คลาดเคลื่อนในการตรวจนับรอบปัจจุบัน ({tires.length} รายการในคลัง)
+              </p>
+            </div>
+            {onOpenStockAdjustment && (
+              <button
+                type="button"
+                onClick={onOpenStockAdjustment}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#252C33] hover:bg-[#2A343D] text-[#F6C90E] border border-amber-400/40 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>เปิดระบบปรับสต็อกสินค้าทั้งหมด ({tires.length} รายการ)</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
